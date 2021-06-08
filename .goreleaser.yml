@@ -1,0 +1,95 @@
+---
+before:
+  hooks:
+    - go mod download
+
+builds:
+  - id: nvidia-gpu-exporter
+    main: ./cmd/nvidia-gpu-exporter
+    binary: nvidia-gpu-exporter
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm
+      - arm64
+    goarm:
+     - 7
+    ignore:
+      - goos: windows
+        goarch: arm
+      - goos: windows
+        goarch: arm64
+      - goos: darwin
+        goarch: arm
+      - goos: darwin
+        goarch: arm64
+
+archives:
+  - id: nvidia-gpu-exporter-archive
+    builds:
+      - nvidia-gpu-exporter
+    replacements:
+      386: i386
+      amd64: x86_64
+    format_overrides:
+      - goos: windows
+        format: zip
+    files: 
+      - LICENSE
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^cicd:'
+      - '^refactor:'
+      - '^docker:'
+      - Merge pull request
+      - Merge branch
+      - go mod tidy
+
+dockers:
+  - image_templates:
+      - docker.io/utkuozdemir/nvidia-gpu-exporter:{{ .Version }}-amd64
+    use_buildx: true
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - --platform=linux/amd64
+  - image_templates:
+      - docker.io/utkuozdemir/nvidia-gpu-exporter:{{ .Version }}-arm64
+    use_buildx: true
+    goarch: arm64
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - --platform=linux/arm64
+  - image_templates:
+      - docker.io/utkuozdemir/nvidia-gpu-exporter:{{ .Version }}-armv7
+    use_buildx: true
+    goarch: arm
+    goarm: 7
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - --platform=linux/arm/v7
+
+docker_manifests:
+  - name_template: docker.io/utkuozdemir/nvidia-gpu-exporter:{{ .Version }}
+    image_templates:
+      - docker.io/utkuozdemir/nvidia-gpu-exporter:{{ .Version }}-amd64
+      - docker.io/utkuozdemir/nvidia-gpu-exporter:{{ .Version }}-arm64
+      - docker.io/utkuozdemir/nvidia-gpu-exporter:{{ .Version }}-armv7
+
+# To test docker image push, uncomment the following and run
+# goreleaser release --skip-validate --rm-dist --debug
+#release:
+#  disable: true
