@@ -1,4 +1,4 @@
-FROM alpine:3
+FROM alpine:3.12
 
 RUN apk add --no-cache tini
 COPY nvidia-gpu-exporter /usr/local/bin/nvidia-gpu-exporter
