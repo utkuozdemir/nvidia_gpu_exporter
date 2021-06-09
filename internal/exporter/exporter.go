@@ -1,6 +1,7 @@
 package exporter
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -119,16 +120,21 @@ func (e *gpuExporter) Collect(ch chan<- prometheus.Metric) {
 	cmdAndArgs = append(cmdAndArgs, fmt.Sprintf("--query-gpu=%s", queryFields))
 	cmdAndArgs = append(cmdAndArgs, "--format=csv")
 
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
 	cmd := exec.Command(cmdAndArgs[0], cmdAndArgs[1:]...)
-	output, err := cmd.CombinedOutput()
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
 	if err != nil {
-		_ = level.Error(e.logger).Log("error", err)
+		_ = level.Error(e.logger).Log("error", err, "stderr", stderr.String())
 		ch <- e.failedScrapesTotal
 		e.failedScrapesTotal.Inc()
 		return
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
 	valuesLine := lines[len(lines)-1]
 	values := strings.Split(valuesLine, ",")
 
