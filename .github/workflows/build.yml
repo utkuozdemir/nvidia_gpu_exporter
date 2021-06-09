@@ -7,12 +7,14 @@ on:
     paths-ignore:
       - "**.md"
       - ".gitignore"
+      - "samples/**"
   pull_request:
     branches:
       - master
     paths-ignore:
       - "**.md"
       - ".gitignore"
+      - "samples/**"
 jobs:
   build:
     runs-on: ubuntu-20.04
