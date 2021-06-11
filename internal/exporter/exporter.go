@@ -59,6 +59,9 @@ var (
 		"clocks.max.graphics", "clocks.max.sm", "clocks.max.memory", "mig.mode.current", "mig.mode.pending",
 	}
 	numericRegex = regexp.MustCompile("[+-]?([0-9]*[.])?[0-9]+")
+
+	matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
+	matchAllCap   = regexp.MustCompile("([a-z0-9])([A-Z])")
 )
 
 // Exporter collects HAProxy stats from the given URI and exports them using
@@ -135,8 +138,11 @@ func (e *gpuExporter) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	titlesLine := lines[0]
 	valuesLine := lines[len(lines)-1]
-	values := strings.Split(valuesLine, ",")
+	titles := parseCsvLine(titlesLine)
+	values := parseCsvLine(valuesLine)
+	fmt.Println(titles)
 
 	for i, m := range e.metricKeys {
 		value := values[i]
@@ -159,12 +165,12 @@ type MetricInfo struct {
 }
 
 func descForMetricKey(prefix string, key string, help string) *prometheus.Desc {
-	name := strings.ReplaceAll(key, ".", "_")
+	name := toSnakeCase(strings.ReplaceAll(key, ".", "_"))
 	fqName := prometheus.BuildFQName(prefix, "", name)
 	return prometheus.NewDesc(fqName, help, nil, nil)
 }
 
-func bestEffortTransformer(value string) (float64, error) {
+func bestEffortValueTransformer(value string) (float64, error) {
 	val := strings.ToLower(strings.TrimSpace(value))
 	if strings.HasPrefix(val, "0x") {
 		return hexToDecimal(val)
@@ -175,8 +181,21 @@ func bestEffortTransformer(value string) (float64, error) {
 		return 1, nil
 	case "disabled", "no", "not active":
 		return 0, nil
+	case "default":
+		return 0, nil
+	case "exclusive_thread":
+		return 1, nil
+	case "prohibited":
+		return 2, nil
+	case "exclusive_process":
+		return 3, nil
 	default:
-		return strconv.ParseFloat(numericRegex.FindString(value), 64)
+		allNums := numericRegex.FindAllString(val, 2)
+		if len(allNums) != 1 {
+			return -1, fmt.Errorf("couldn't parse number from: %s", val)
+		}
+
+		return strconv.ParseFloat(allNums[0], 64)
 	}
 }
 
@@ -195,9 +214,24 @@ func buildMetricMap(prefix string, metrics []string) map[string]MetricInfo {
 			// todo: provide help
 			desc:             descForMetricKey(prefix, key, ""),
 			mType:            prometheus.GaugeValue,
-			valueTransformer: bestEffortTransformer,
+			valueTransformer: bestEffortValueTransformer,
 		}
 	}
 
 	return result
+}
+
+func parseCsvLine(line string) []string {
+	values := strings.Split(line, ",")
+	result := make([]string, len(values))
+	for i, field := range values {
+		result[i] = strings.TrimSpace(field)
+	}
+	return result
+}
+
+func toSnakeCase(str string) string {
+	snake := matchFirstCap.ReplaceAllString(str, "${1}_${2}")
+	snake = matchAllCap.ReplaceAllString(snake, "${1}_${2}")
+	return strings.ToLower(snake)
 }
