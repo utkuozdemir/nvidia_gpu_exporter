@@ -52,9 +52,7 @@ func main() {
 	kingpin.HelpFlag.Short('h')
 	kingpin.Parse()
 
-	logConfig := promlog.Config{}
-	logger := promlog.New(&logConfig)
-
+	logger := promlog.New(promlogConfig)
 	e, err := exporter.New(exporter.DefaultPrefix, *nvidiaSmiCommand, *queryFieldNames, logger)
 	if err != nil {
 		_ = level.Error(logger).Log("msg", "Error on creating exporter", "err", err)
