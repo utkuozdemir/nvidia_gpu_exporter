@@ -15,8 +15,31 @@ This approach has the following advantages:
 - No need for a Kubernetes environment or even a container, unlike DCGM
 - It can even be customized to run nvidia-smi over SSH using command-line arguments
 
-This project is basically a reimplementation 
-of the great project [a0s/nvidia-smi-exporter](https://github.com/a0s/nvidia-smi-exporter).
+This project is based on the project [a0s/nvidia-smi-exporter](https://github.com/a0s/nvidia-smi-exporter).
 However, this one is written in Go to produce a single, static binary.  
 
 This makes it possible to run it on Windows and get GPU metrics while gaming - no Docker or Linux required.
+
+## Usage
+
+The usage of the binary is the following:
+
+```
+usage: nvidia_gpu_exporter [<flags>]
+
+Flags:
+  -h, --help                Show context-sensitive help (also try --help-long and --help-man).
+      --web.config.file=""  [EXPERIMENTAL] Path to configuration file that can enable TLS or authentication.
+      --web.listen-address=":9835"
+                            Address to listen on for web interface and telemetry.
+      --web.telemetry-path="/metrics"
+                            Path under which to expose metrics.
+      --nvidia-smi-command="nvidia-smi"
+                            Path or command to be used for the nvidia-smi executable
+      --query-field-names="AUTO"
+                            Comma-separated list of the query fields. You can find out possible fields by running `nvidia-smi --help-query-gpus`. The value `AUTO` will
+                            automatically detect the fields to query.
+      --log.level=info      Only log messages with the given severity or above. One of: [debug, info, warn, error]
+      --log.format=logfmt   Output format of log messages. One of: [logfmt, json]
+      --version             Show application version.
+```
