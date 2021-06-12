@@ -13,7 +13,7 @@ import (
 	webflag "github.com/prometheus/exporter-toolkit/web/kingpinflag"
 	"gopkg.in/alecthomas/kingpin.v2"
 	"net/http"
-	"nvidia-smi-exporter/internal/exporter"
+	"nvidia_gpu_exporter/internal/exporter"
 	"os"
 )
 
@@ -40,10 +40,10 @@ func main() {
 			"Path or command to be used for the nvidia-smi executable").
 			Default(exporter.DefaultNvidiaSmiCommand).String()
 		queryFieldNames = kingpin.Flag("query-field-names",
-			"Comma-separated list of the query fields. " +
-			"You can find out possible fields by running `nvidia-smi --help-query-gpus`." +
-			"A single field called AUTO has a special meaning: " +
-			"when used, the program will automatically detect the fields to query.").
+			"Comma-separated list of the query fields. "+
+				"You can find out possible fields by running `nvidia-smi --help-query-gpus`."+
+				"A single field called AUTO has a special meaning: "+
+				"when used, the program will automatically detect the fields to query.").
 			Default(exporter.DefaultQueryFieldNames).String()
 	)
 

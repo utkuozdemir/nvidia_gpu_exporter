@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"gopkg.in/alecthomas/kingpin.v2"
-	"nvidia-smi-exporter/internal/exporter"
+	"nvidia_gpu_exporter/internal/exporter"
 	"os"
 	"strings"
 )

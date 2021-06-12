@@ -14,11 +14,11 @@ import (
 )
 
 const (
-	DefaultPrefix                   = "nvidia_smi"
-	DefaultNvidiaSmiCommand         = "nvidia-smi"
-	queryFieldNamesAuto             = "AUTO"
-	DefaultQueryFieldNames = queryFieldNamesAuto
-	uuidQueryFieldName              = "uuid"
+	DefaultPrefix           = "nvidia_smi"
+	DefaultNvidiaSmiCommand = "nvidia-smi"
+	queryFieldNamesAuto     = "AUTO"
+	DefaultQueryFieldNames  = queryFieldNamesAuto
+	uuidQueryFieldName      = "uuid"
 )
 
 var (

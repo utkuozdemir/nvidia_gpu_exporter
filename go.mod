@@ -1,4 +1,4 @@
-module nvidia-smi-exporter
+module nvidia_gpu_exporter
 
 go 1.16
 
