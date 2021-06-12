@@ -17,6 +17,7 @@ builds:
       - amd64
       - arm
       - arm64
+      - 386
     goarm:
      - 7
     ignore:
@@ -28,6 +29,10 @@ builds:
         goarch: arm
       - goos: darwin
         goarch: arm64
+      - goos: darwin
+        goarch: 386
+      - goos: linux
+        goarch: 386
 
 archives:
   - id: nvidia_gpu_exporter-archive
