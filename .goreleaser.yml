@@ -99,3 +99,15 @@ docker_manifests:
 #release:
 #  disable: true
 
+scoop:
+  bucket:
+    owner: utkuozdemir
+    name: scoop_nvidia_gpu_exporter
+    token: "{{ .Env.PRIVATE_ACCESS_TOKEN }}"
+  commit_author:
+    name: Utku Ozdemir
+    email: uoz@protonmail.com
+  commit_msg_template: "Scoop update for {{ .ProjectName }} version {{ .Tag }}"
+  homepage: https://github.com/utkuozdemir/nvidia_gpu_exporter
+  description: Nvidia GPU exporter for prometheus using nvidia-smi binary
+  license: MIT
