@@ -1,12 +1,12 @@
 # nvidia-smi-exporter
 
-[![build](https://github.com/utkuozdemir/nvidia-gpu-exporter/actions/workflows/build.yml/badge.svg)](https://github.com/utkuozdemir/nvidia-gpu-exporter/actions/workflows/build.yml)
-[![Coverage Status](https://coveralls.io/repos/github/utkuozdemir/nvidia-gpu-exporter/badge.svg?branch=master)](https://coveralls.io/github/utkuozdemir/nvidia-gpu-exporter?branch=master)
-[![Go Report Card](https://goreportcard.com/badge/github.com/utkuozdemir/nvidia-gpu-exporter)](https://goreportcard.com/report/github.com/utkuozdemir/nvidia-gpu-exporter)
-![Latest GitHub release](https://img.shields.io/github/release/utkuozdemir/nvidia-gpu-exporter.svg)
-[![GitHub license](https://img.shields.io/github/license/utkuozdemir/nvidia-gpu-exporter)](https://github.com/utkuozdemir/nvidia-gpu-exporter/blob/master/LICENSE)
-![GitHub all releases](https://img.shields.io/github/downloads/utkuozdemir/nvidia-gpu-exporter/total)
-![Docker Pulls](https://img.shields.io/docker/pulls/utkuozdemir/nvidia-gpu-exporter)
+[![build](https://github.com/utkuozdemir/nvidia_gpu_exporter/actions/workflows/build.yml/badge.svg)](https://github.com/utkuozdemir/nvidia_gpu_exporter/actions/workflows/build.yml)
+[![Coverage Status](https://coveralls.io/repos/github/utkuozdemir/nvidia_gpu_exporter/badge.svg?branch=master)](https://coveralls.io/github/utkuozdemir/nvidia_gpu_exporter?branch=master)
+[![Go Report Card](https://goreportcard.com/badge/github.com/utkuozdemir/nvidia_gpu_exporter)](https://goreportcard.com/report/github.com/utkuozdemir/nvidia_gpu_exporter)
+![Latest GitHub release](https://img.shields.io/github/release/utkuozdemir/nvidia_gpu_exporter.svg)
+[![GitHub license](https://img.shields.io/github/license/utkuozdemir/nvidia_gpu_exporter)](https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/master/LICENSE)
+![GitHub all releases](https://img.shields.io/github/downloads/utkuozdemir/nvidia_gpu_exporter/total)
+![Docker Pulls](https://img.shields.io/docker/pulls/utkuozdemir/nvidia_gpu_exporter)
 
 This is yet another an Nvidia GPU exporter for prometheus, using `nvidia-smi` binary to gather metrics.
 
