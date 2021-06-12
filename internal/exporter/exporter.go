@@ -16,11 +16,13 @@ import (
 const (
 	DefaultPrefix           = "nvidia_smi"
 	DefaultNvidiaSmiCommand = "nvidia-smi"
+
+	uuidQueryFieldName = "uuid"
 )
 
 var (
 	DefaultMetrics = []string{
-		"timestamp", "driver_version", "count", "name", "serial", "uuid", "pci.bus_id", "pci.domain", "pci.bus",
+		"timestamp", "driver_version", "count", "name", "serial", uuidQueryFieldName, "pci.bus_id", "pci.domain", "pci.bus",
 		"pci.device", "pci.device_id", "pci.sub_device_id", "pcie.link.gen.current", "pcie.link.gen.max",
 		"pcie.link.width.current", "pcie.link.width.max", "index", "display_mode", "display_active",
 		"persistence_mode", "accounting.mode", "accounting.buffer_size", "driver_model.current",
@@ -58,33 +60,52 @@ var (
 		"clocks.applications.memory", "clocks.default_applications.graphics", "clocks.default_applications.memory",
 		"clocks.max.graphics", "clocks.max.sm", "clocks.max.memory", "mig.mode.current", "mig.mode.pending",
 	}
+
+	variableLabels = []string{uuidQueryFieldName}
+
 	numericRegex = regexp.MustCompile("[+-]?([0-9]*[.])?[0-9]+")
 
 	matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
 	matchAllCap   = regexp.MustCompile("([a-z0-9])([A-Z])")
 )
 
+type table struct {
+	rows                  []row
+	queryFieldNameToCells map[string][]cell
+}
+
+type row struct {
+	queryFieldNameToCells map[string]cell
+	cells                 []cell
+}
+
+type cell struct {
+	queryFieldName    string
+	returnedFieldName string
+	value             string
+}
+
 // Exporter collects HAProxy stats from the given URI and exports them using
 // the prometheus metrics package.
 type gpuExporter struct {
-	mutex              sync.RWMutex
-	prefix             string
-	metricKeys         []string
-	metricMap          map[string]MetricInfo
-	nvidiaSmiCommand   string
-	scrapesTotal       prometheus.Counter
-	failedScrapesTotal prometheus.Counter
-	logger             log.Logger
+	mutex                      sync.RWMutex
+	prefix                     string
+	queryFieldNames            []string
+	queryFieldNameToMetricInfo map[string]MetricInfo
+	nvidiaSmiCommand           string
+	scrapesTotal               prometheus.Counter
+	failedScrapesTotal         prometheus.Counter
+	logger                     log.Logger
 }
 
 func New(prefix string, nvidiaSmiCommand string, metrics []string, logger log.Logger) prometheus.Collector {
 	metricMap := buildMetricMap(prefix, metrics)
 	return &gpuExporter{
-		prefix:           prefix,
-		nvidiaSmiCommand: nvidiaSmiCommand,
-		metricKeys:       metrics,
-		metricMap:        metricMap,
-		logger:           logger,
+		prefix:                     prefix,
+		nvidiaSmiCommand:           nvidiaSmiCommand,
+		queryFieldNames:            metrics,
+		queryFieldNameToMetricInfo: metricMap,
+		logger:                     logger,
 		scrapesTotal: prometheus.NewCounter(prometheus.CounterOpts{
 			Namespace: prefix,
 			Name:      "scrapes_total",
@@ -101,7 +122,7 @@ func New(prefix string, nvidiaSmiCommand string, metrics []string, logger log.Lo
 // Describe describes all the metrics ever exported by the HAProxy exporter. It
 // implements prometheus.Collector.
 func (e *gpuExporter) Describe(ch chan<- *prometheus.Desc) {
-	for _, m := range e.metricMap {
+	for _, m := range e.queryFieldNameToMetricInfo {
 		ch <- m.desc
 	}
 	ch <- e.scrapesTotal.Desc()
@@ -117,7 +138,7 @@ func (e *gpuExporter) Collect(ch chan<- prometheus.Metric) {
 	ch <- e.scrapesTotal
 	e.scrapesTotal.Inc()
 
-	queryFields := strings.Join(e.metricKeys, ",")
+	queryFields := strings.Join(e.queryFieldNames, ",")
 
 	cmdAndArgs := strings.Fields(e.nvidiaSmiCommand)
 	cmdAndArgs = append(cmdAndArgs, fmt.Sprintf("--query-gpu=%s", queryFields))
@@ -137,24 +158,21 @@ func (e *gpuExporter) Collect(ch chan<- prometheus.Metric) {
 		return
 	}
 
-	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
-	titlesLine := lines[0]
-	valuesLine := lines[len(lines)-1]
-	titles := parseCsvLine(titlesLine)
-	values := parseCsvLine(valuesLine)
-	fmt.Println(titles)
+	q := parseGpuQueryResult(strings.TrimSpace(stdout.String()), e.queryFieldNames)
+	for _, r := range q.rows {
+		uuid := strings.TrimPrefix(strings.ToLower(r.queryFieldNameToCells[uuidQueryFieldName].value), "gpu-")
+		for _, c := range r.cells {
+			mi := e.queryFieldNameToMetricInfo[c.queryFieldName]
+			num, err := mi.valueTransformer(c.value)
+			if err != nil {
+				_ = level.Debug(e.logger).Log("transform_error",
+					err, "query_field_name",
+					c.queryFieldName, "value", c.value)
+				continue
+			}
 
-	for i, m := range e.metricKeys {
-		value := values[i]
-		gpuMetric := e.metricMap[m]
-
-		num, err := gpuMetric.valueTransformer(value)
-		if err != nil {
-			_ = level.Warn(e.logger).Log("transform_error", err, "key", m, "value", value)
-			continue
+			ch <- prometheus.MustNewConstMetric(mi.desc, mi.mType, num, uuid)
 		}
-
-		ch <- prometheus.MustNewConstMetric(gpuMetric.desc, gpuMetric.mType, num)
 	}
 }
 
@@ -167,7 +185,7 @@ type MetricInfo struct {
 func descForMetricKey(prefix string, key string, help string) *prometheus.Desc {
 	name := toSnakeCase(strings.ReplaceAll(key, ".", "_"))
 	fqName := prometheus.BuildFQName(prefix, "", name)
-	return prometheus.NewDesc(fqName, help, nil, nil)
+	return prometheus.NewDesc(fqName, help, variableLabels, nil)
 }
 
 func bestEffortValueTransformer(value string) (float64, error) {
@@ -234,4 +252,51 @@ func toSnakeCase(str string) string {
 	snake := matchFirstCap.ReplaceAllString(str, "${1}_${2}")
 	snake = matchAllCap.ReplaceAllString(snake, "${1}_${2}")
 	return strings.ToLower(snake)
+}
+
+func parseGpuQueryResult(result string, queryFieldNames []string) table {
+	lines := strings.Split(strings.TrimSpace(result), "\n")
+	titlesLine := lines[0]
+	valuesLines := lines[1:]
+	returnedFieldNames := parseCsvLine(titlesLine)
+
+	numCols := len(queryFieldNames)
+	numRows := len(valuesLines)
+
+	rows := make([]row, numRows)
+
+	queryFieldNameToCells := make(map[string][]cell)
+	for _, queryFieldName := range queryFieldNames {
+		queryFieldNameToCells[queryFieldName] = make([]cell, numRows)
+	}
+
+	for rowIndex, valuesLine := range valuesLines {
+		queryFieldNameToCell := make(map[string]cell, numCols)
+		cells := make([]cell, numCols)
+		values := parseCsvLine(valuesLine)
+		for colIndex, value := range values {
+			queryFieldName := queryFieldNames[colIndex]
+			gm := cell{
+				queryFieldName:    queryFieldName,
+				returnedFieldName: returnedFieldNames[colIndex],
+				value:             value,
+			}
+			queryFieldNameToCell[queryFieldName] = gm
+			cells[colIndex] = gm
+			queryFieldNameToCells[queryFieldName][rowIndex] = gm
+		}
+
+		gmc := row{
+			queryFieldNameToCells: queryFieldNameToCell,
+			cells:                 cells,
+		}
+
+		rows[rowIndex] = gmc
+
+	}
+
+	return table{
+		rows:                  rows,
+		queryFieldNameToCells: queryFieldNameToCells,
+	}
 }
