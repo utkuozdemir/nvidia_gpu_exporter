@@ -24,12 +24,16 @@ func ParseQueryFields(nvidiaSmiCommand string) ([]string, error) {
 	}
 
 	out := stdout.String()
-	found := fieldRegex.FindAllStringSubmatch(out, -1)
+	fields := extractQueryFields(out)
+	return fields, nil
+}
+
+func extractQueryFields(text string) []string {
+	found := fieldRegex.FindAllStringSubmatch(text, -1)
 
 	var fields []string
 	for _, ss := range found {
 		fields = append(fields, ss[1])
 	}
-
-	return fields, nil
+	return fields
 }
