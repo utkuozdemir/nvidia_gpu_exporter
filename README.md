@@ -20,6 +20,32 @@ However, this one is written in Go to produce a single, static binary.
 
 This makes it possible to run it on Windows and get GPU metrics while gaming - no Docker or Linux required.
 
+## Installation
+
+### Using Scoop (Windows)
+If you use [Scoop package manager](https://scoop.sh) on Windows,
+run the following commands in a command prompt (CMD/Powershell):
+```powershell
+scoop bucket add utkuozdemir https://github.com/utkuozdemir/scoop_nvidia_gpu_exporter.git
+scoop install utkuozdemir/nvidia_gpu_exporter
+```
+
+### By downloading the binaries (MacOS/Linux/Windows)
+
+1. Go to the [releases](https://github.com/utkuozdemir/nvidia_gpu_exporter/releases) and download
+   the latest release archive for your platform.
+2. Extract the archive.
+3. Move the binary to somewhere in your `PATH`.
+
+Sample steps for Linux 64-bit:
+```bash
+$ VERSION=0.1.1
+$ wget https://github.com/utkuozdemir/nvidia_gpu_exporter/releases/download/v${VERSION}/nvidia_gpu_exporter_${VERSION}_linux_x86_64.tar.gz
+$ tar -xvzf nvidia_gpu_exporter_${VERSION}_linux_x86_64.tar.gz
+$ mv nvidia_gpu_exporter /usr/local/bin
+$ nvidia_gpu_exporter --help
+```
+
 ## Usage
 
 The usage of the binary is the following:
