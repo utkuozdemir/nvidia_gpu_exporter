@@ -33,7 +33,13 @@ func main() {
 
 	logConfig := promlog.Config{}
 	logger := promlog.New(&logConfig)
-	e := exporter.New(exporter.DefaultPrefix, nvidiaSmiCommand, exporter.DefaultMetrics, logger)
+
+	e, err := exporter.New(exporter.DefaultPrefix, nvidiaSmiCommand, exporter.DefaultQueryFieldNames, logger)
+	if err != nil {
+		_ = level.Error(logger).Log("msg", "Error on creating exporter", "err", err)
+		os.Exit(1)
+	}
+
 	prometheus.MustRegister(e)
 
 	metricsPath := "/metrics"
