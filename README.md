@@ -20,4 +20,3 @@ of the great project [a0s/nvidia-smi-exporter](https://github.com/a0s/nvidia-smi
 However, this one is written in Go to produce a single, static binary.  
 
 This makes it possible to run it on Windows and get GPU metrics while gaming - no Docker or Linux required.
-
