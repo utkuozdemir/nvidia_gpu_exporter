@@ -33,7 +33,7 @@ func main() {
 		webConfig     = webflag.AddFlags(kingpin.CommandLine)
 		listenAddress = kingpin.Flag("web.listen-address",
 			"Address to listen on for web interface and telemetry.").
-			Default(":9000").String()
+			Default(":9835").String()
 		metricsPath = kingpin.Flag("web.telemetry-path", "Path under which to expose metrics.").
 				Default("/metrics").String()
 		nvidiaSmiCommand = kingpin.Flag("nvidia-smi-command",
