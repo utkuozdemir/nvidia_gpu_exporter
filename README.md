@@ -22,12 +22,22 @@ This makes it possible to run it on Windows and get GPU metrics while gaming - n
 
 ## Installation
 
-### Using Scoop (Windows)
-If you use [Scoop package manager](https://scoop.sh) on Windows,
-run the following commands in a command prompt (CMD/Powershell):
+### Installing as a Windows Service
+
+Requirements:
+- [Scoop package manager](https://scoop.sh)
+- [NSSM](https://nssm.cc/download) (get the latest pre-release version)
+
+Installation steps:
+1. Open a privileged powershell prompt (right click - Run as administrator)
+2. Run the following commands:
+
 ```powershell
-scoop bucket add utkuozdemir https://github.com/utkuozdemir/scoop_nvidia_gpu_exporter.git
-scoop install utkuozdemir/nvidia_gpu_exporter
+scoop bucket add nvidia_gpu_exporter https://github.com/utkuozdemir/scoop_nvidia_gpu_exporter.git
+scoop install nvidia_gpu_exporter/nvidia_gpu_exporter --global
+New-NetFirewallRule -DisplayName "Nvidia GPU Exporter" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 9835
+nssm install nvidia_gpu_exporter nvidia_gpu_exporter "C:\ProgramData\scoop\apps\nvidia_gpu_exporter\current\nvidia_gpu_exporter.exe"
+Start-Service nvidia_gpu_exporter
 ```
 
 ### By downloading the binaries (MacOS/Linux/Windows)
@@ -39,7 +49,7 @@ scoop install utkuozdemir/nvidia_gpu_exporter
 
 Sample steps for Linux 64-bit:
 ```bash
-$ VERSION=0.1.1
+$ VERSION=0.1.2
 $ wget https://github.com/utkuozdemir/nvidia_gpu_exporter/releases/download/v${VERSION}/nvidia_gpu_exporter_${VERSION}_linux_x86_64.tar.gz
 $ tar -xvzf nvidia_gpu_exporter_${VERSION}_linux_x86_64.tar.gz
 $ mv nvidia_gpu_exporter /usr/local/bin
