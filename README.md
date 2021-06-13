@@ -8,17 +8,29 @@
 ![GitHub all releases](https://img.shields.io/github/downloads/utkuozdemir/nvidia_gpu_exporter/total)
 ![Docker Pulls](https://img.shields.io/docker/pulls/utkuozdemir/nvidia_gpu_exporter)
 
-This is yet another an Nvidia GPU exporter for prometheus, using `nvidia-smi` binary to gather metrics.
+Nvidia GPU exporter for prometheus, using `nvidia-smi` binary to gather metrics.
 
-This approach has the following advantages:
-- It will work on any system that has `nvidia-smi(.exe)?` binary - be it Windows or Linux. No C bindings required
-- No need for a Kubernetes environment or even a container, unlike DCGM
-- It can even be customized to run nvidia-smi over SSH using command-line arguments
+## Introduction
 
-This project is based on the project [a0s/nvidia-smi-exporter](https://github.com/a0s/nvidia-smi-exporter).
-However, this one is written in Go to produce a single, static binary.  
+There are many Nvidia GPU exporters out there however they have problems such as not being maintained, 
+not providing pre-built binaries, having a dependency to Linux and/or Docker, 
+targeting enterprise setups (DCGM) and so on.
 
+This is a simple exporter that uses `nvidia-smi(.exe)` binary to collect, parse and export metrics.
 This makes it possible to run it on Windows and get GPU metrics while gaming - no Docker or Linux required.
+
+This project is based on [a0s/nvidia-smi-exporter](https://github.com/a0s/nvidia-smi-exporter).
+However, this one is written in Go to produce a single, static binary.
+
+**If you are a gamer who's into monitoring, you are in for a treat.**
+
+## Highlights
+
+- Will work on any system that has `nvidia-smi(.exe)?` binary - Windows, Linux, MacOS... No C bindings required
+- Doesn't even need to run the monitored machine: can be configured to execute `nvidia-smi` command remotely
+- No need for a Docker or Kubernetes environment
+- Auto-discovery of the metric fields `nvidia-smi` can expose (future-compatible)
+- Comes with its own [Grafana dashboard](https://grafana.com/grafana/dashboards/14574)
 
 ## Visualization
 
@@ -88,3 +100,23 @@ Flags:
       --log.format=logfmt   Output format of log messages. One of: [logfmt, json]
       --version             Show application version.
 ```
+
+## Remote scraping configuration
+
+The exporter can be configured to scrape metrics from a remote machine.
+
+An example use case is running the exporter in a **Raspberry Pi** in 
+your home network while scraping the metrics from your PC over SSH.
+
+The exporter supports arbitrary commands with arguments to produce `nvidia-smi`-like output. 
+Therefore, configuration is pretty straightforward.
+
+Simply override the `--nvidia-smi-command` command-line argument (replace `SSH_USER` and `SSH_HOST` with SSH credentials):
+
+```bash
+nvidia_gpu_exporter --nvidia-smi-command "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null SSH_USER@SSH_HOST nvidia-smi"
+```
+
+# Contributing
+
+See [CONTRIBUTING](CONTRIBUTING.md) for details.
