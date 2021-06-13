@@ -1,0 +1,46 @@
+package exporter
+
+import (
+	"github.com/stretchr/testify/assert"
+	"testing"
+)
+
+const (
+	testCsv = `
+name, power.draw [W]
+NVIDIA GeForce RTX 2080 SUPER, 30.14 W
+Some Dummy GPU, 12.34 W
+`
+)
+
+func TestParseCsvIntoTable(t *testing.T) {
+	parsed := parseCSVIntoTable(testCsv, []string{"name", "power.draw"})
+	assert.Len(t, parsed.rows, 2)
+	assert.Equal(t, []string{"name", "power.draw [W]"}, parsed.returnedFieldNames)
+
+	cell00 := cell{queryFieldName: "name", returnedFieldName: "name", rawValue: "NVIDIA GeForce RTX 2080 SUPER"}
+	cell01 := cell{queryFieldName: "power.draw", returnedFieldName: "power.draw [W]", rawValue: "30.14 W"}
+	cell10 := cell{queryFieldName: "name", returnedFieldName: "name", rawValue: "Some Dummy GPU"}
+	cell11 := cell{queryFieldName: "power.draw", returnedFieldName: "power.draw [W]", rawValue: "12.34 W"}
+
+	row0 := row{
+		queryFieldNameToCells: map[string]cell{"name": cell00, "power.draw": cell01},
+		cells:                 []cell{cell00, cell01},
+	}
+
+	row1 := row{
+		queryFieldNameToCells: map[string]cell{"name": cell10, "power.draw": cell11},
+		cells:                 []cell{cell10, cell11},
+	}
+
+	expected := table{
+		rows:               []row{row0, row1},
+		returnedFieldNames: []string{"name", "power.draw [W]"},
+		queryFieldNameToCells: map[string][]cell{
+			"name":       {cell00, cell10},
+			"power.draw": {cell01, cell11},
+		},
+	}
+
+	assert.Equal(t, expected, parsed)
+}
