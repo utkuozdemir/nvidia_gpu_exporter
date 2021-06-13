@@ -59,7 +59,7 @@
   "gnetId": null,
   "graphTooltip": 0,
   "id": null,
-  "iteration": 1623590152536,
+  "iteration": 1623590152539,
   "links": [],
   "panels": [
     {
@@ -373,10 +373,9 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": null,
-      "description": "",
       "fieldConfig": {
         "defaults": {
-          "unit": "hertz"
+          "unit": "percentunit"
         },
         "overrides": []
       },
@@ -389,13 +388,13 @@
         "y": 0
       },
       "hiddenSeries": false,
-      "id": 12,
+      "id": 11,
       "legend": {
         "avg": false,
         "current": false,
         "max": false,
         "min": false,
-        "show": true,
+        "show": false,
         "total": false,
         "values": false
       },
@@ -417,18 +416,36 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "nvidia_smi_clocks_current_graphics_clock_hz{uuid=\"$gpu\"}",
-          "format": "time_series",
+          "expr": "nvidia_smi_utilization_memory_ratio{uuid=\"$gpu\"}",
           "interval": "",
           "legendFormat": "{{uuid}}",
           "refId": "A"
         }
       ],
-      "thresholds": [],
+      "thresholds": [
+        {
+          "$$hashKey": "object:1370",
+          "colorMode": "warning",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 0.7,
+          "yaxis": "left"
+        },
+        {
+          "$$hashKey": "object:1376",
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 0.9,
+          "yaxis": "left"
+        }
+      ],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Clock Speed",
+      "title": "Memory Utilization %",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -444,16 +461,16 @@
       },
       "yaxes": [
         {
-          "$$hashKey": "object:1642",
-          "format": "hertz",
-          "label": null,
+          "$$hashKey": "object:1352",
+          "format": "percentunit",
+          "label": "",
           "logBase": 1,
-          "max": null,
-          "min": null,
+          "max": "1",
+          "min": "0",
           "show": true
         },
         {
-          "$$hashKey": "object:1643",
+          "$$hashKey": "object:1353",
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -725,9 +742,10 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": null,
+      "description": "",
       "fieldConfig": {
         "defaults": {
-          "unit": "percentunit"
+          "unit": "celsius"
         },
         "overrides": []
       },
@@ -740,13 +758,13 @@
         "y": 5
       },
       "hiddenSeries": false,
-      "id": 11,
+      "id": 15,
       "legend": {
         "avg": false,
         "current": false,
         "max": false,
         "min": false,
-        "show": true,
+        "show": false,
         "total": false,
         "values": false
       },
@@ -768,7 +786,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "nvidia_smi_utilization_memory_ratio{uuid=\"$gpu\"}",
+          "expr": "nvidia_smi_temperature_gpu{uuid=\"$gpu\"}",
           "interval": "",
           "legendFormat": "{{uuid}}",
           "refId": "A"
@@ -776,28 +794,28 @@
       ],
       "thresholds": [
         {
-          "$$hashKey": "object:1370",
+          "$$hashKey": "object:1805",
           "colorMode": "warning",
           "fill": true,
           "line": true,
           "op": "gt",
-          "value": 0.7,
+          "value": 70,
           "yaxis": "left"
         },
         {
-          "$$hashKey": "object:1376",
+          "$$hashKey": "object:1811",
           "colorMode": "critical",
           "fill": true,
           "line": true,
           "op": "gt",
-          "value": 0.9,
+          "value": 80,
           "yaxis": "left"
         }
       ],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Memory Utilization %",
+      "title": "Temperature",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -813,16 +831,16 @@
       },
       "yaxes": [
         {
-          "$$hashKey": "object:1352",
-          "format": "percentunit",
+          "$$hashKey": "object:1761",
+          "format": "celsius",
           "label": "",
           "logBase": 1,
-          "max": "1",
+          "max": "100",
           "min": "0",
           "show": true
         },
         {
-          "$$hashKey": "object:1353",
+          "$$hashKey": "object:1762",
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -864,7 +882,7 @@
         "current": false,
         "max": false,
         "min": false,
-        "show": true,
+        "show": false,
         "total": false,
         "values": false
       },
@@ -971,8 +989,8 @@
       "gridPos": {
         "h": 5,
         "w": 6,
-        "x": 0,
-        "y": 10
+        "x": 18,
+        "y": 5
       },
       "hiddenSeries": false,
       "id": 10,
@@ -981,7 +999,7 @@
         "current": false,
         "max": false,
         "min": false,
-        "show": true,
+        "show": false,
         "total": false,
         "values": false
       },
@@ -1080,7 +1098,7 @@
       "description": "",
       "fieldConfig": {
         "defaults": {
-          "unit": "celsius"
+          "unit": "hertz"
         },
         "overrides": []
       },
@@ -1089,17 +1107,17 @@
       "gridPos": {
         "h": 5,
         "w": 6,
-        "x": 6,
+        "x": 0,
         "y": 10
       },
       "hiddenSeries": false,
-      "id": 15,
+      "id": 12,
       "legend": {
         "avg": false,
         "current": false,
         "max": false,
         "min": false,
-        "show": true,
+        "show": false,
         "total": false,
         "values": false
       },
@@ -1121,36 +1139,18 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "nvidia_smi_temperature_gpu{uuid=\"$gpu\"}",
+          "expr": "nvidia_smi_clocks_current_graphics_clock_hz{uuid=\"$gpu\"}",
+          "format": "time_series",
           "interval": "",
           "legendFormat": "{{uuid}}",
           "refId": "A"
         }
       ],
-      "thresholds": [
-        {
-          "$$hashKey": "object:1805",
-          "colorMode": "warning",
-          "fill": true,
-          "line": true,
-          "op": "gt",
-          "value": 70,
-          "yaxis": "left"
-        },
-        {
-          "$$hashKey": "object:1811",
-          "colorMode": "critical",
-          "fill": true,
-          "line": true,
-          "op": "gt",
-          "value": 80,
-          "yaxis": "left"
-        }
-      ],
+      "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Temperature",
+      "title": "Graphics Clock Speed",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1166,16 +1166,16 @@
       },
       "yaxes": [
         {
-          "$$hashKey": "object:1761",
-          "format": "celsius",
-          "label": "",
+          "$$hashKey": "object:1642",
+          "format": "hertz",
+          "label": null,
           "logBase": 1,
-          "max": "100",
-          "min": "0",
+          "max": null,
+          "min": null,
           "show": true
         },
         {
-          "$$hashKey": "object:1762",
+          "$$hashKey": "object:1643",
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -1207,7 +1207,7 @@
       "gridPos": {
         "h": 5,
         "w": 6,
-        "x": 12,
+        "x": 6,
         "y": 10
       },
       "hiddenSeries": false,
@@ -1217,7 +1217,7 @@
         "current": false,
         "max": false,
         "min": false,
-        "show": true,
+        "show": false,
         "total": false,
         "values": false
       },
@@ -1298,103 +1298,6 @@
       "description": "",
       "fieldConfig": {
         "defaults": {
-          "unit": "watt"
-        },
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 5,
-        "w": 6,
-        "x": 0,
-        "y": 15
-      },
-      "hiddenSeries": false,
-      "id": 8,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "7.5.5",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "nvidia_smi_power_draw_watts{uuid=\"$gpu\"}",
-          "interval": "",
-          "legendFormat": "{{uuid}}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Power Draw",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "watt",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        },
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": null,
-      "description": "",
-      "fieldConfig": {
-        "defaults": {
           "unit": "hertz"
         },
         "overrides": []
@@ -1404,8 +1307,8 @@
       "gridPos": {
         "h": 5,
         "w": 6,
-        "x": 6,
-        "y": 15
+        "x": 12,
+        "y": 10
       },
       "hiddenSeries": false,
       "id": 18,
@@ -1414,7 +1317,7 @@
         "current": false,
         "max": false,
         "min": false,
-        "show": true,
+        "show": false,
         "total": false,
         "values": false
       },
@@ -1492,6 +1395,106 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": null,
+      "description": "Streaming Multiprocessor Clock Speed",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "hertz"
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 10
+      },
+      "hiddenSeries": false,
+      "id": 24,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": false,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.5",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "nvidia_smi_clocks_current_sm_clock_hz{uuid=\"$gpu\"}",
+          "format": "time_series",
+          "interval": "",
+          "legendFormat": "{{uuid}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "SM Clock Speed",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:1642",
+          "format": "hertz",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:1643",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": null,
       "fieldConfig": {
         "defaults": {
           "unit": "decbytes"
@@ -1503,7 +1506,7 @@
       "gridPos": {
         "h": 5,
         "w": 6,
-        "x": 12,
+        "x": 0,
         "y": 15
       },
       "hiddenSeries": false,
@@ -1513,7 +1516,7 @@
         "current": false,
         "max": false,
         "min": false,
-        "show": true,
+        "show": false,
         "total": false,
         "values": false
       },
@@ -1583,6 +1586,103 @@
         "align": false,
         "alignLevel": null
       }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": null,
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "watt"
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 15
+      },
+      "hiddenSeries": false,
+      "id": 8,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": false,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.5",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "nvidia_smi_power_draw_watts{uuid=\"$gpu\"}",
+          "interval": "",
+          "legendFormat": "{{uuid}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Power Draw",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "watt",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     }
   ],
   "refresh": "10s",
@@ -1626,12 +1726,12 @@
     ]
   },
   "time": {
-    "from": "now-1h",
+    "from": "now-30m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Nvidia GPU Metrics",
   "uid": "ZgV6Sngnk",
-  "version": 39
+  "version": 44
 }
