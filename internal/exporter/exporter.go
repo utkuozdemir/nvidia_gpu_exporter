@@ -19,11 +19,13 @@ const (
 	queryFieldNamesAuto     = "AUTO"
 	DefaultQueryFieldNames  = queryFieldNamesAuto
 	uuidQueryFieldName      = "uuid"
+	nameQueryFieldName      = "name"
 )
 
 var (
 	//DefaultQueryFieldNames = []string{
-	//	"timestamp", "driver_version", "count", "name", "serial", uuidQueryFieldName, "pci.bus_id", "pci.domain", "pci.bus",
+	//	"timestamp", "driver_version", "count", nameQueryFieldName, "serial", uuidQueryFieldName, "pci.bus_id",
+	//	"pci.domain", "pci.bus",
 	//	"pci.device", "pci.device_id", "pci.sub_device_id", "pcie.link.gen.current", "pcie.link.gen.max",
 	//	"pcie.link.width.current", "pcie.link.width.max", "index", "display_mode", "display_active",
 	//	"persistence_mode", "accounting.mode", "accounting.buffer_size", "driver_model.current",
@@ -62,7 +64,7 @@ var (
 	//	"clocks.max.graphics", "clocks.max.sm", "clocks.max.memory", "mig.mode.current", "mig.mode.pending",
 	//}
 
-	variableLabels = []string{uuidQueryFieldName}
+	variableLabels = []string{uuidQueryFieldName, nameQueryFieldName}
 	numericRegex   = regexp.MustCompile("[+-]?([0-9]*[.])?[0-9]+")
 )
 
@@ -139,6 +141,7 @@ func (e *gpuExporter) Collect(ch chan<- prometheus.Metric) {
 
 	for _, r := range t.rows {
 		uuid := strings.TrimPrefix(strings.ToLower(r.queryFieldNameToCells[uuidQueryFieldName].rawValue), "gpu-")
+		name := r.queryFieldNameToCells[nameQueryFieldName].rawValue
 		for _, c := range r.cells {
 			mi := e.queryFieldNameToMetricInfo[c.queryFieldName]
 			num, err := transformRawValue(c.rawValue, mi.valueMultiplier)
@@ -149,7 +152,7 @@ func (e *gpuExporter) Collect(ch chan<- prometheus.Metric) {
 				continue
 			}
 
-			ch <- prometheus.MustNewConstMetric(mi.desc, mi.mType, num, uuid)
+			ch <- prometheus.MustNewConstMetric(mi.desc, mi.mType, num, uuid, name)
 		}
 	}
 }
