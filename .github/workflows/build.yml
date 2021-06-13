@@ -8,6 +8,7 @@ on:
       - "**.md"
       - ".gitignore"
       - "samples/**"
+      - "grafana/**"
   pull_request:
     branches:
       - master
@@ -15,6 +16,7 @@ on:
       - "**.md"
       - ".gitignore"
       - "samples/**"
+      - "grafana/**"
 jobs:
   build:
     runs-on: ubuntu-20.04
