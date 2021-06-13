@@ -20,6 +20,15 @@ However, this one is written in Go to produce a single, static binary.
 
 This makes it possible to run it on Windows and get GPU metrics while gaming - no Docker or Linux required.
 
+## Visualization
+
+You can use the official [Grafana dashboard](https://grafana.com/grafana/dashboards/14574)
+to see your GPU metrics in a nicely visualized way.
+
+Here's how it looks like:
+![Grafana dashboard](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/master/grafana/dashboard.png)
+
+
 ## Installation
 
 ### Installing as a Windows Service
