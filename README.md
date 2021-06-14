@@ -70,7 +70,7 @@ Start-Service nvidia_gpu_exporter
 
 Sample steps for Linux 64-bit:
 ```bash
-$ VERSION=0.1.2
+$ VERSION=0.1.3
 $ wget https://github.com/utkuozdemir/nvidia_gpu_exporter/releases/download/v${VERSION}/nvidia_gpu_exporter_${VERSION}_linux_x86_64.tar.gz
 $ tar -xvzf nvidia_gpu_exporter_${VERSION}_linux_x86_64.tar.gz
 $ mv nvidia_gpu_exporter /usr/local/bin
