@@ -57,7 +57,7 @@ Installation steps:
 scoop bucket add nvidia_gpu_exporter https://github.com/utkuozdemir/scoop_nvidia_gpu_exporter.git
 scoop install nvidia_gpu_exporter/nvidia_gpu_exporter --global
 New-NetFirewallRule -DisplayName "Nvidia GPU Exporter" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 9835
-nssm install nvidia_gpu_exporter nvidia_gpu_exporter "C:\ProgramData\scoop\apps\nvidia_gpu_exporter\current\nvidia_gpu_exporter.exe"
+nssm install nvidia_gpu_exporter "C:\ProgramData\scoop\apps\nvidia_gpu_exporter\current\nvidia_gpu_exporter.exe"
 Start-Service nvidia_gpu_exporter
 ```
 
@@ -70,7 +70,7 @@ Start-Service nvidia_gpu_exporter
 
 Sample steps for Linux 64-bit:
 ```bash
-$ VERSION=0.1.2
+$ VERSION=0.1.3
 $ wget https://github.com/utkuozdemir/nvidia_gpu_exporter/releases/download/v${VERSION}/nvidia_gpu_exporter_${VERSION}_linux_x86_64.tar.gz
 $ tar -xvzf nvidia_gpu_exporter_${VERSION}_linux_x86_64.tar.gz
 $ mv nvidia_gpu_exporter /usr/local/bin
