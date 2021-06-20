@@ -77,6 +77,28 @@ $ mv nvidia_gpu_exporter /usr/local/bin
 $ nvidia_gpu_exporter --help
 ```
 
+## Running in Docker
+You can run the exporter in a Docker container. For it to work, you will need to ensure the following:
+- The `nvidia-smi` binary is bind-mounted from the host to the container under its `PATH`
+- The devices `/dev/nvidiaX` (depends on the number of GPUs you have) and `/dev/nvidiactl` are mounted into the container
+- The library files `libnvidia-ml.so` and `libnvidia-ml.so.1` are mounted inside the container.
+  They are typically found under `/usr/lib/x86_64-linux-gnu/` or `/usr/lib/i386-linux-gnu/`.
+  Locate them in your host to ensure you are mounting them from the correct path.
+
+A working example with all these combined (tested in `Ubuntu 20.04`):
+```bash
+docker run -d \
+--name nvidia_smi_exporter \
+--restart unless-stopped \
+--device /dev/nvidiactl:/dev/nvidiactl \
+--device /dev/nvidia0:/dev/nvidia0 \
+-v /usr/lib/x86_64-linux-gnu/libnvidia-ml.so:/usr/lib/x86_64-linux-gnu/libnvidia-ml.so \
+-v /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1 \
+-v /usr/bin/nvidia-smi:/usr/bin/nvidia-smi \
+-p 9835:9835 \
+utkuozdemir/nvidia_gpu_exporter:0.1.4
+```
+
 ## Usage
 
 The usage of the binary is the following:

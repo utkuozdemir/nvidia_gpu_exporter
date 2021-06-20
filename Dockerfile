@@ -1,9 +1,10 @@
-FROM alpine:3.12
+FROM ubuntu:20.04
+
+RUN apt-get update && \
+    apt-get install -y tini && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY nvidia_gpu_exporter /usr/local/bin/nvidia_gpu_exporter
 
-# Temporarily disabled, since "apk add" is broken on buildx atm
-#RUN apk add --no-cache tini
-#ENTRYPOINT ["/sbin/tini", "--"]
-
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["/usr/local/bin/nvidia_gpu_exporter"]
