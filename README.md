@@ -70,7 +70,7 @@ Start-Service nvidia_gpu_exporter
 
 Sample steps for Linux 64-bit:
 ```bash
-$ VERSION=0.1.3
+$ VERSION=0.1.5
 $ wget https://github.com/utkuozdemir/nvidia_gpu_exporter/releases/download/v${VERSION}/nvidia_gpu_exporter_${VERSION}_linux_x86_64.tar.gz
 $ tar -xvzf nvidia_gpu_exporter_${VERSION}_linux_x86_64.tar.gz
 $ mv nvidia_gpu_exporter /usr/local/bin
@@ -78,7 +78,9 @@ $ nvidia_gpu_exporter --help
 ```
 
 ## Running in Docker
-You can run the exporter in a Docker container. For it to work, you will need to ensure the following:
+You can run the exporter in a Docker container.
+
+For it to work, you will need to ensure the following:
 - The `nvidia-smi` binary is bind-mounted from the host to the container under its `PATH`
 - The devices `/dev/nvidiaX` (depends on the number of GPUs you have) and `/dev/nvidiactl` are mounted into the container
 - The library files `libnvidia-ml.so` and `libnvidia-ml.so.1` are mounted inside the container.
@@ -96,12 +98,26 @@ docker run -d \
 -v /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1 \
 -v /usr/bin/nvidia-smi:/usr/bin/nvidia-smi \
 -p 9835:9835 \
-utkuozdemir/nvidia_gpu_exporter:0.1.4
+utkuozdemir/nvidia_gpu_exporter:0.1.5
 ```
 
-## Usage
+## Running in Kubernetes
+Using the exporter in Kubernetes is pretty similar with running it in Docker.
 
-The usage of the binary is the following:
+You can use the [official helm chart](https://artifacthub.io/packages/helm/utkuozdemir/nvidia-gpu-exporter) to install the exporter.
+
+The chart was tested on the following configuration:
+- Ubuntu Desktop 20.04 with Kernel 5.8.0-55-generic
+- K3s v1.21.1+k3s1
+- Nvidia GeForce RTX 2080 Super
+- Nvidia Driver version `465.27`
+
+**Note:** I didn't have chance to test it on an enterprise cluster with GPU support.
+If you have access to one and give the exporter a try and share the results, I would appreciate it greatly.
+
+## Command Line Reference
+
+The exporter binary accepts the following arguments:
 
 ```
 usage: nvidia_gpu_exporter [<flags>]
