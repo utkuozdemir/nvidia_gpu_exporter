@@ -107,8 +107,8 @@ Using the exporter in Kubernetes is pretty similar with running it in Docker.
 You can use the [official helm chart](https://artifacthub.io/packages/helm/utkuozdemir/nvidia-gpu-exporter) to install the exporter.
 
 The chart was tested on the following configuration:
-- Ubuntu Desktop 20.04 with Kernel 5.8.0-55-generic
-- K3s v1.21.1+k3s1
+- Ubuntu Desktop 20.04 with Kernel `5.8.0-55-generic`
+- K3s `v1.21.1+k3s1`
 - Nvidia GeForce RTX 2080 Super
 - Nvidia Driver version `465.27`
 
