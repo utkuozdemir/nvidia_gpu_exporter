@@ -1,4 +1,4 @@
-module nvidia_gpu_exporter
+module github.com/utkuozdemir/nvidia_gpu_exporter
 
 go 1.16
 
