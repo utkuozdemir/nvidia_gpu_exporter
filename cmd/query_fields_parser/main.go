@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
 	"gopkg.in/alecthomas/kingpin.v2"
-	"nvidia_gpu_exporter/internal/exporter"
 	"os"
 	"strings"
 )
