@@ -9,6 +9,7 @@ on:
       - ".gitignore"
       - "samples/**"
       - "grafana/**"
+      - "systemd/**"
   pull_request:
     branches:
       - master
@@ -17,6 +18,7 @@ on:
       - ".gitignore"
       - "samples/**"
       - "grafana/**"
+      - "systemd/**"
 jobs:
   build:
     runs-on: ubuntu-20.04
