@@ -7,6 +7,13 @@ builds:
   - id: nvidia_gpu_exporter
     main: ./cmd/nvidia_gpu_exporter
     binary: nvidia_gpu_exporter
+    ldflags:
+      - -s -w
+      - -X github.com/prometheus/common/version.Version={{.Version}}
+      - -X github.com/prometheus/common/version.Revision={{.Commit}}
+      - -X github.com/prometheus/common/version.Branch={{.Branch}}
+      - -X github.com/prometheus/common/version.BuildUser=goreleaser
+      - -X github.com/prometheus/common/version.BuildDate={{.Date}}
     env:
       - CGO_ENABLED=0
     goos:
