@@ -18,7 +18,7 @@ func ParseQueryFields(nvidiaSmiCommand string) ([]string, error) {
 
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
-	err := cmd.Run()
+	err := runCmd(cmd)
 	if err != nil {
 		return nil, err
 	}

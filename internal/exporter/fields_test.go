@@ -3,6 +3,7 @@ package exporter
 import (
 	_ "embed"
 	"github.com/stretchr/testify/assert"
+	"os/exec"
 	"testing"
 )
 
@@ -52,5 +53,26 @@ var (
 
 func TestExtractQueryFields(t *testing.T) {
 	fields := extractQueryFields(fieldsTest)
+	assert.Equal(t, expectedFields, fields)
+}
+
+func TestParseQueryFields(t *testing.T) {
+	runCmdOriginal := runCmd
+	defer func() { runCmd = runCmdOriginal }()
+
+	var capturedCmd *exec.Cmd
+	runCmd = func(cmd *exec.Cmd) error {
+		capturedCmd = cmd
+		_, _ = cmd.Stdout.Write([]byte(fieldsTest))
+		return nil
+	}
+
+	fields, err := ParseQueryFields("nvidia-smi")
+
+	assert.Len(t, capturedCmd.Args, 2)
+	assert.Equal(t, capturedCmd.Args[0], "nvidia-smi")
+	assert.Equal(t, capturedCmd.Args[1], "--help-query-gpu")
+
+	assert.NoError(t, err)
 	assert.Equal(t, expectedFields, fields)
 }

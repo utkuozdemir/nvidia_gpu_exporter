@@ -66,6 +66,8 @@ var (
 
 	variableLabels = []string{uuidQueryFieldName, nameQueryFieldName}
 	numericRegex   = regexp.MustCompile("[+-]?([0-9]*[.])?[0-9]+")
+
+	runCmd = func(cmd *exec.Cmd) error { return cmd.Run() }
 )
 
 // Exporter collects stats and exports them using
@@ -186,10 +188,12 @@ type MetricInfo struct {
 }
 
 func transformRawValue(rawValue string, valueMultiplier float64) (float64, error) {
-	val := strings.ToLower(strings.TrimSpace(rawValue))
-	if strings.HasPrefix(val, "0x") {
-		return hexToDecimal(val)
+	trimmed := strings.TrimSpace(rawValue)
+	if strings.HasPrefix(trimmed, "0x") {
+		return hexToDecimal(trimmed)
 	}
+
+	val := strings.ToLower(trimmed)
 
 	switch val {
 	case "enabled", "yes", "active":
@@ -229,6 +233,16 @@ func buildQueryFieldNameToMetricInfoMap(prefix string, queryFieldNames []string,
 }
 
 func buildMetricInfo(prefix string, returnedFieldName string) MetricInfo {
+	fqName, multiplier := buildFQNameAndMultiplier(prefix, returnedFieldName)
+	desc := prometheus.NewDesc(fqName, "", variableLabels, nil) // todo: add help text
+	return MetricInfo{
+		desc:            desc,
+		mType:           prometheus.GaugeValue,
+		valueMultiplier: multiplier,
+	}
+}
+
+func buildFQNameAndMultiplier(prefix string, returnedFieldName string) (string, float64) {
 	suffixTransformed := returnedFieldName
 	multiplier := 1.0
 	split := strings.Split(returnedFieldName, " ")[0]
@@ -247,10 +261,6 @@ func buildMetricInfo(prefix string, returnedFieldName string) MetricInfo {
 
 	metricName := toSnakeCase(strings.ReplaceAll(suffixTransformed, ".", "_"))
 	fqName := prometheus.BuildFQName(prefix, "", metricName)
-	desc := prometheus.NewDesc(fqName, "", variableLabels, nil) // todo: add help text
-	return MetricInfo{
-		desc:            desc,
-		mType:           prometheus.GaugeValue,
-		valueMultiplier: multiplier,
-	}
+
+	return fqName, multiplier
 }
