@@ -43,6 +43,22 @@ Here's how it looks like:
 
 ## Installation
 
+### By downloading the binaries (MacOS/Linux/Windows)
+
+1. Go to the [releases](https://github.com/utkuozdemir/nvidia_gpu_exporter/releases) and download
+   the latest release archive for your platform.
+2. Extract the archive.
+3. Move the binary to somewhere in your `PATH`.
+
+Sample steps for Linux 64-bit:
+```bash
+$ VERSION=0.1.5
+$ wget https://github.com/utkuozdemir/nvidia_gpu_exporter/releases/download/v${VERSION}/nvidia_gpu_exporter_${VERSION}_linux_x86_64.tar.gz
+$ tar -xvzf nvidia_gpu_exporter_${VERSION}_linux_x86_64.tar.gz
+$ mv nvidia_gpu_exporter /usr/local/bin
+$ nvidia_gpu_exporter --help
+```
+
 ### Installing as a Windows Service
 
 Requirements:
@@ -61,21 +77,15 @@ nssm install nvidia_gpu_exporter "C:\ProgramData\scoop\apps\nvidia_gpu_exporter\
 Start-Service nvidia_gpu_exporter
 ```
 
-### By downloading the binaries (MacOS/Linux/Windows)
+### Installing as a Linux (Systemd) Service
 
-1. Go to the [releases](https://github.com/utkuozdemir/nvidia_gpu_exporter/releases) and download
-   the latest release archive for your platform.
-2. Extract the archive.
-3. Move the binary to somewhere in your `PATH`.
+If your Linux distro is using systemd, you can install the exporter as a service using the unit file provided.
 
-Sample steps for Linux 64-bit:
-```bash
-$ VERSION=0.1.5
-$ wget https://github.com/utkuozdemir/nvidia_gpu_exporter/releases/download/v${VERSION}/nvidia_gpu_exporter_${VERSION}_linux_x86_64.tar.gz
-$ tar -xvzf nvidia_gpu_exporter_${VERSION}_linux_x86_64.tar.gz
-$ mv nvidia_gpu_exporter /usr/local/bin
-$ nvidia_gpu_exporter --help
-```
+Follow these simple steps:
+1. Download the Linux binary matching your CPU architecture and put it under `/usr/local/bin` directory.
+2. Drop a copy of the file **[nvidia_gpu_exporter.service](systemd/nvidia_gpu_exporter.service)** under `/etc/systemd/system` directory.
+3. Run `sudo systemctl daemon-reload`
+4. Start and enable the service to run on boot: `sudo systemctl enable --now nvidia_gpu_exporter`
 
 ## Running in Docker
 You can run the exporter in a Docker container.
