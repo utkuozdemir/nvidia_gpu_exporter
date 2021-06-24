@@ -51,12 +51,12 @@ var (
 	}
 )
 
-func TestExtractQueryFields(t *testing.T) {
-	fields := extractQueryFields(fieldsTest)
+func TestExtractQFields(t *testing.T) {
+	fields := extractQFields(fieldsTest)
 	assert.Equal(t, expectedFields, fields)
 }
 
-func TestParseQueryFields(t *testing.T) {
+func TestParseAutoQFields(t *testing.T) {
 	runCmdOriginal := runCmd
 	defer func() { runCmd = runCmdOriginal }()
 
@@ -67,7 +67,7 @@ func TestParseQueryFields(t *testing.T) {
 		return nil
 	}
 
-	fields, err := ParseQueryFields("nvidia-smi")
+	fields, err := ParseAutoQFields("nvidia-smi")
 
 	assert.Len(t, capturedCmd.Args, 2)
 	assert.Equal(t, capturedCmd.Args[0], "nvidia-smi")

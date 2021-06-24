@@ -3,57 +3,57 @@ package exporter
 import "strings"
 
 type table struct {
-	rows                  []row
-	returnedFieldNames    []string
-	queryFieldNameToCells map[string][]cell
+	rows          []row
+	rFields       []string
+	qFieldToCells map[string][]cell
 }
 
 type row struct {
-	queryFieldNameToCells map[string]cell
-	cells                 []cell
+	qFieldToCells map[string]cell
+	cells         []cell
 }
 
 type cell struct {
-	queryFieldName    string
-	returnedFieldName string
-	rawValue          string
+	qField   string
+	rField   string
+	rawValue string
 }
 
-func parseCSVIntoTable(queryResult string, queryFieldNames []string) table {
+func parseCSVIntoTable(queryResult string, qFields []string) table {
 	lines := strings.Split(strings.TrimSpace(queryResult), "\n")
 	titlesLine := lines[0]
 	valuesLines := lines[1:]
 	returnedFieldNames := parseCSVLine(titlesLine)
 
-	numCols := len(queryFieldNames)
+	numCols := len(qFields)
 	numRows := len(valuesLines)
 
 	rows := make([]row, numRows)
 
-	queryFieldNameToCells := make(map[string][]cell)
-	for _, queryFieldName := range queryFieldNames {
-		queryFieldNameToCells[queryFieldName] = make([]cell, numRows)
+	qFieldToCells := make(map[string][]cell)
+	for _, qField := range qFields {
+		qFieldToCells[qField] = make([]cell, numRows)
 	}
 
 	for rowIndex, valuesLine := range valuesLines {
-		queryFieldNameToCell := make(map[string]cell, numCols)
+		qFieldToCell := make(map[string]cell, numCols)
 		cells := make([]cell, numCols)
 		rawValues := parseCSVLine(valuesLine)
 		for colIndex, rawValue := range rawValues {
-			queryFieldName := queryFieldNames[colIndex]
+			qField := qFields[colIndex]
 			gm := cell{
-				queryFieldName:    queryFieldName,
-				returnedFieldName: returnedFieldNames[colIndex],
-				rawValue:          rawValue,
+				qField:   qField,
+				rField:   returnedFieldNames[colIndex],
+				rawValue: rawValue,
 			}
-			queryFieldNameToCell[queryFieldName] = gm
+			qFieldToCell[qField] = gm
 			cells[colIndex] = gm
-			queryFieldNameToCells[queryFieldName][rowIndex] = gm
+			qFieldToCells[qField][rowIndex] = gm
 		}
 
 		gmc := row{
-			queryFieldNameToCells: queryFieldNameToCell,
-			cells:                 cells,
+			qFieldToCells: qFieldToCell,
+			cells:         cells,
 		}
 
 		rows[rowIndex] = gmc
@@ -61,9 +61,9 @@ func parseCSVIntoTable(queryResult string, queryFieldNames []string) table {
 	}
 
 	return table{
-		rows:                  rows,
-		returnedFieldNames:    returnedFieldNames,
-		queryFieldNameToCells: queryFieldNameToCells,
+		rows:          rows,
+		rFields:       returnedFieldNames,
+		qFieldToCells: qFieldToCells,
 	}
 }
 

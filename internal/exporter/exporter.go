@@ -16,55 +16,10 @@ import (
 const (
 	DefaultPrefix           = "nvidia_smi"
 	DefaultNvidiaSmiCommand = "nvidia-smi"
-	queryFieldNamesAuto     = "AUTO"
-	DefaultQueryFieldNames  = queryFieldNamesAuto
-	uuidQueryFieldName      = "uuid"
-	nameQueryFieldName      = "name"
 )
 
 var (
-	//DefaultQueryFieldNames = []string{
-	//	"timestamp", "driver_version", "count", nameQueryFieldName, "serial", uuidQueryFieldName, "pci.bus_id",
-	//	"pci.domain", "pci.bus",
-	//	"pci.device", "pci.device_id", "pci.sub_device_id", "pcie.link.gen.current", "pcie.link.gen.max",
-	//	"pcie.link.width.current", "pcie.link.width.max", "index", "display_mode", "display_active",
-	//	"persistence_mode", "accounting.mode", "accounting.buffer_size", "driver_model.current",
-	//	"driver_model.pending", "vbios_version", "inforom.img", "inforom.oem", "inforom.ecc", "inforom.pwr",
-	//	"gom.current", "gom.pending", "fan.speed", "pstate", "clocks_throttle_reasons.supported",
-	//	"clocks_throttle_reasons.active", "clocks_throttle_reasons.gpu_idle",
-	//	"clocks_throttle_reasons.applications_clocks_setting", "clocks_throttle_reasons.sw_power_cap",
-	//	"clocks_throttle_reasons.hw_slowdown", "clocks_throttle_reasons.hw_thermal_slowdown",
-	//	"clocks_throttle_reasons.hw_power_brake_slowdown", "clocks_throttle_reasons.sw_thermal_slowdown",
-	//	"clocks_throttle_reasons.sync_boost", "memory.total", "memory.used", "memory.free", "compute_mode",
-	//	"utilization.gpu", "utilization.memory", "encoder.stats.sessionCount", "encoder.stats.averageFps",
-	//	"encoder.stats.averageLatency", "ecc.mode.current", "ecc.mode.pending",
-	//	"ecc.errors.corrected.volatile.device_memory", "ecc.errors.corrected.volatile.dram",
-	//	"ecc.errors.corrected.volatile.register_file", "ecc.errors.corrected.volatile.l1_cache",
-	//	"ecc.errors.corrected.volatile.l2_cache", "ecc.errors.corrected.volatile.texture_memory",
-	//	"ecc.errors.corrected.volatile.cbu", "ecc.errors.corrected.volatile.sram",
-	//	"ecc.errors.corrected.volatile.total", "ecc.errors.corrected.aggregate.device_memory",
-	//	"ecc.errors.corrected.aggregate.dram", "ecc.errors.corrected.aggregate.register_file",
-	//	"ecc.errors.corrected.aggregate.l1_cache", "ecc.errors.corrected.aggregate.l2_cache",
-	//	"ecc.errors.corrected.aggregate.texture_memory", "ecc.errors.corrected.aggregate.cbu",
-	//	"ecc.errors.corrected.aggregate.sram", "ecc.errors.corrected.aggregate.total",
-	//	"ecc.errors.uncorrected.volatile.device_memory", "ecc.errors.uncorrected.volatile.dram",
-	//	"ecc.errors.uncorrected.volatile.register_file", "ecc.errors.uncorrected.volatile.l1_cache",
-	//	"ecc.errors.uncorrected.volatile.l2_cache", "ecc.errors.uncorrected.volatile.texture_memory",
-	//	"ecc.errors.uncorrected.volatile.cbu", "ecc.errors.uncorrected.volatile.sram",
-	//	"ecc.errors.uncorrected.volatile.total", "ecc.errors.uncorrected.aggregate.device_memory",
-	//	"ecc.errors.uncorrected.aggregate.dram", "ecc.errors.uncorrected.aggregate.register_file",
-	//	"ecc.errors.uncorrected.aggregate.l1_cache", "ecc.errors.uncorrected.aggregate.l2_cache",
-	//	"ecc.errors.uncorrected.aggregate.texture_memory", "ecc.errors.uncorrected.aggregate.cbu",
-	//	"ecc.errors.uncorrected.aggregate.sram", "ecc.errors.uncorrected.aggregate.total",
-	//	"retired_pages.single_bit_ecc.count", "retired_pages.double_bit.count", "retired_pages.pending",
-	//	"temperature.gpu", "temperature.memory", "power.management", "power.draw", "power.limit",
-	//	"enforced.power.limit", "power.default_limit", "power.min_limit", "power.max_limit", "clocks.current.graphics",
-	//	"clocks.current.sm", "clocks.current.memory", "clocks.current.video", "clocks.applications.graphics",
-	//	"clocks.applications.memory", "clocks.default_applications.graphics", "clocks.default_applications.memory",
-	//	"clocks.max.graphics", "clocks.max.sm", "clocks.max.memory", "mig.mode.current", "mig.mode.pending",
-	//}
-
-	variableLabels = []string{uuidQueryFieldName, nameQueryFieldName}
+	variableLabels = []string{uuidQField, nameQField}
 	numericRegex   = regexp.MustCompile("[+-]?([0-9]*[.])?[0-9]+")
 
 	runCmd = func(cmd *exec.Cmd) error { return cmd.Run() }
@@ -73,34 +28,30 @@ var (
 // Exporter collects stats and exports them using
 // the prometheus metrics package.
 type gpuExporter struct {
-	mutex                      sync.RWMutex
-	prefix                     string
-	queryFieldNames            []string
-	queryFieldNameToMetricInfo map[string]MetricInfo
-	nvidiaSmiCommand           string
-	failedScrapesTotal         prometheus.Counter
-	logger                     log.Logger
+	mutex                 sync.RWMutex
+	prefix                string
+	qFields               []string
+	qFieldToMetricInfoMap map[string]MetricInfo
+	nvidiaSmiCommand      string
+	failedScrapesTotal    prometheus.Counter
+	logger                log.Logger
 }
 
-func New(prefix string, nvidiaSmiCommand string, queryFieldNames string, logger log.Logger) (prometheus.Collector, error) {
-	queryFieldNamesParsed, err := parseQueryFieldNames(queryFieldNames, nvidiaSmiCommand)
+func New(prefix string, nvidiaSmiCommand string, qFieldsRaw string, logger log.Logger) (prometheus.Collector, error) {
+	qFieldToRFieldMap, err := buildQFieldToRFieldMap(logger, qFieldsRaw, nvidiaSmiCommand)
 	if err != nil {
 		return nil, err
 	}
 
-	t, err := scrape(queryFieldNamesParsed, nvidiaSmiCommand)
-	if err != nil {
-		return nil, err
-	}
-
-	queryFieldNameToMetricInfoMap := buildQueryFieldNameToMetricInfoMap(prefix, queryFieldNamesParsed, t.returnedFieldNames)
+	qFieldToMetricInfoMap := buildQFieldToMetricInfoMap(prefix, qFieldToRFieldMap)
+	qFields := getKeys(qFieldToRFieldMap)
 
 	e := gpuExporter{
-		prefix:                     prefix,
-		nvidiaSmiCommand:           nvidiaSmiCommand,
-		queryFieldNames:            queryFieldNamesParsed,
-		queryFieldNameToMetricInfo: queryFieldNameToMetricInfoMap,
-		logger:                     logger,
+		prefix:                prefix,
+		nvidiaSmiCommand:      nvidiaSmiCommand,
+		qFields:               qFields,
+		qFieldToMetricInfoMap: qFieldToMetricInfoMap,
+		logger:                logger,
 		failedScrapesTotal: prometheus.NewCounter(prometheus.CounterOpts{
 			Namespace: prefix,
 			Name:      "failed_scrapes_total",
@@ -111,18 +62,40 @@ func New(prefix string, nvidiaSmiCommand string, queryFieldNames string, logger 
 	return &e, nil
 }
 
-func parseQueryFieldNames(queryFieldNames string, nvidiaSmiCommand string) ([]string, error) {
-	queryFieldNamesSeparated := strings.Split(queryFieldNames, ",")
-	if len(queryFieldNamesSeparated) == 1 && queryFieldNamesSeparated[0] == queryFieldNamesAuto {
-		return ParseQueryFields(nvidiaSmiCommand)
+func buildQFieldToRFieldMap(logger log.Logger, qFieldsRaw string,
+	nvidiaSmiCommand string) (map[string]string, error) {
+	qFieldsSeparated := strings.Split(qFieldsRaw, ",")
+
+	var parsedQFields []string
+	if len(qFieldsSeparated) == 1 && qFieldsSeparated[0] == qFieldsAuto {
+		parsed, err := ParseAutoQFields(nvidiaSmiCommand)
+		if err != nil {
+			_ = level.Warn(logger).Log("msg",
+				"Failed to auto-determine query field names, "+
+					"falling back to the built-in list")
+			return fallbackQFieldToRFieldMap, nil
+		}
+
+		parsedQFields = parsed
 	}
-	return queryFieldNamesSeparated, nil
+
+	t, err := scrape(parsedQFields, nvidiaSmiCommand)
+	if err != nil {
+		return nil, err
+	}
+
+	r := make(map[string]string, len(parsedQFields))
+	for i, qField := range parsedQFields {
+		r[qField] = t.rFields[i]
+	}
+
+	return r, nil
 }
 
 // Describe describes all the metrics ever exported by the exporter. It
 // implements prometheus.Collector.
 func (e *gpuExporter) Describe(ch chan<- *prometheus.Desc) {
-	for _, m := range e.queryFieldNameToMetricInfo {
+	for _, m := range e.qFieldToMetricInfoMap {
 		ch <- m.desc
 	}
 	ch <- e.failedScrapesTotal.Desc()
@@ -133,7 +106,7 @@ func (e *gpuExporter) Collect(ch chan<- prometheus.Metric) {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
 
-	t, err := scrape(e.queryFieldNames, e.nvidiaSmiCommand)
+	t, err := scrape(e.qFields, e.nvidiaSmiCommand)
 	if err != nil {
 		_ = level.Error(e.logger).Log("error", err)
 		ch <- e.failedScrapesTotal
@@ -142,15 +115,14 @@ func (e *gpuExporter) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	for _, r := range t.rows {
-		uuid := strings.TrimPrefix(strings.ToLower(r.queryFieldNameToCells[uuidQueryFieldName].rawValue), "gpu-")
-		name := r.queryFieldNameToCells[nameQueryFieldName].rawValue
+		uuid := strings.TrimPrefix(strings.ToLower(r.qFieldToCells[uuidQField].rawValue), "gpu-")
+		name := r.qFieldToCells[nameQField].rawValue
 		for _, c := range r.cells {
-			mi := e.queryFieldNameToMetricInfo[c.queryFieldName]
+			mi := e.qFieldToMetricInfoMap[c.qField]
 			num, err := transformRawValue(c.rawValue, mi.valueMultiplier)
 			if err != nil {
-				_ = level.Debug(e.logger).Log("transform_error",
-					err, "query_field_name",
-					c.queryFieldName, "raw_value", c.rawValue)
+				_ = level.Debug(e.logger).Log("error", err, "query_field_name",
+					c.qField, "raw_value", c.rawValue)
 				continue
 			}
 
@@ -159,11 +131,11 @@ func (e *gpuExporter) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
-func scrape(queryFieldNames []string, nvidiaSmiCommand string) (*table, error) {
-	queryFields := strings.Join(queryFieldNames, ",")
+func scrape(qFields []string, nvidiaSmiCommand string) (*table, error) {
+	qFieldsJoined := strings.Join(qFields, ",")
 
 	cmdAndArgs := strings.Fields(nvidiaSmiCommand)
-	cmdAndArgs = append(cmdAndArgs, fmt.Sprintf("--query-gpu=%s", queryFields))
+	cmdAndArgs = append(cmdAndArgs, fmt.Sprintf("--query-gpu=%s", qFieldsJoined))
 	cmdAndArgs = append(cmdAndArgs, "--format=csv")
 
 	var stdout bytes.Buffer
@@ -177,7 +149,7 @@ func scrape(queryFieldNames []string, nvidiaSmiCommand string) (*table, error) {
 		return nil, fmt.Errorf("command failed. stderr: %s err: %w", stderr.String(), err)
 	}
 
-	t := parseCSVIntoTable(strings.TrimSpace(stdout.String()), queryFieldNames)
+	t := parseCSVIntoTable(strings.TrimSpace(stdout.String()), qFields)
 	return &t, nil
 }
 
@@ -223,17 +195,17 @@ func transformRawValue(rawValue string, valueMultiplier float64) (float64, error
 	}
 }
 
-func buildQueryFieldNameToMetricInfoMap(prefix string, queryFieldNames []string, returnedFieldNames []string) map[string]MetricInfo {
+func buildQFieldToMetricInfoMap(prefix string, qFieldtoRFieldMap map[string]string) map[string]MetricInfo {
 	result := make(map[string]MetricInfo)
-	for i, returnedFieldName := range returnedFieldNames {
-		result[queryFieldNames[i]] = buildMetricInfo(prefix, returnedFieldName)
+	for qField, rField := range qFieldtoRFieldMap {
+		result[qField] = buildMetricInfo(prefix, rField)
 	}
 
 	return result
 }
 
-func buildMetricInfo(prefix string, returnedFieldName string) MetricInfo {
-	fqName, multiplier := buildFQNameAndMultiplier(prefix, returnedFieldName)
+func buildMetricInfo(prefix string, rField string) MetricInfo {
+	fqName, multiplier := buildFQNameAndMultiplier(prefix, rField)
 	desc := prometheus.NewDesc(fqName, "", variableLabels, nil) // todo: add help text
 	return MetricInfo{
 		desc:            desc,
@@ -242,19 +214,19 @@ func buildMetricInfo(prefix string, returnedFieldName string) MetricInfo {
 	}
 }
 
-func buildFQNameAndMultiplier(prefix string, returnedFieldName string) (string, float64) {
-	suffixTransformed := returnedFieldName
+func buildFQNameAndMultiplier(prefix string, rField string) (string, float64) {
+	suffixTransformed := rField
 	multiplier := 1.0
-	split := strings.Split(returnedFieldName, " ")[0]
-	if strings.HasSuffix(returnedFieldName, " [W]") {
+	split := strings.Split(rField, " ")[0]
+	if strings.HasSuffix(rField, " [W]") {
 		suffixTransformed = split + "_watts"
-	} else if strings.HasSuffix(returnedFieldName, " [MHz]") {
+	} else if strings.HasSuffix(rField, " [MHz]") {
 		suffixTransformed = split + "_clock_hz"
 		multiplier = 1000000
-	} else if strings.HasSuffix(returnedFieldName, " [MiB]") {
+	} else if strings.HasSuffix(rField, " [MiB]") {
 		suffixTransformed = split + "_bytes"
 		multiplier = 1048576
-	} else if strings.HasSuffix(returnedFieldName, " [%]") {
+	} else if strings.HasSuffix(rField, " [%]") {
 		suffixTransformed = split + "_ratio"
 		multiplier = 0.01
 	}
@@ -263,4 +235,14 @@ func buildFQNameAndMultiplier(prefix string, returnedFieldName string) (string, 
 	fqName := prometheus.BuildFQName(prefix, "", metricName)
 
 	return fqName, multiplier
+}
+
+func getKeys(m map[string]string) []string {
+	r := make([]string, len(m))
+	i := 0
+	for key := range m {
+		r[i] = key
+		i++
+	}
+	return r
 }

@@ -16,7 +16,7 @@ func main() {
 	)
 
 	kingpin.Parse()
-	fields, err := exporter.ParseQueryFields(*nvidiaSmiCommand)
+	fields, err := exporter.ParseAutoQFields(*nvidiaSmiCommand)
 	if err != nil {
 		fmt.Printf("error: %v\n", err)
 		os.Exit(1)

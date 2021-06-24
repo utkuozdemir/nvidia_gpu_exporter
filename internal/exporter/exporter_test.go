@@ -104,8 +104,8 @@ func TestBuildMetricInfo(t *testing.T) {
 	assert.Equal(t, prometheus.GaugeValue, metricInfo.mType)
 }
 
-func TestBuildQueryFieldNameToMetricInfoMap(t *testing.T) {
-	m := buildQueryFieldNameToMetricInfoMap("prefix", []string{"aaa", "bbb"}, []string{"AAA", "BBB"})
+func TestBuildQFieldToMetricInfoMap(t *testing.T) {
+	m := buildQFieldToMetricInfoMap("prefix", map[string]string{"aaa": "AAA", "bbb": "BBB"})
 	assert.Len(t, m, 2)
 
 	metricInfo1 := m["aaa"]

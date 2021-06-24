@@ -39,11 +39,11 @@ func main() {
 		nvidiaSmiCommand = kingpin.Flag("nvidia-smi-command",
 			"Path or command to be used for the nvidia-smi executable").
 			Default(exporter.DefaultNvidiaSmiCommand).String()
-		queryFieldNames = kingpin.Flag("query-field-names",
+		qFields = kingpin.Flag("query-field-names",
 			fmt.Sprintf("Comma-separated list of the query fields. "+
 				"You can find out possible fields by running `nvidia-smi --help-query-gpus`. "+
-				"The value `%s` will automatically detect the fields to query.", exporter.DefaultQueryFieldNames)).
-			Default(exporter.DefaultQueryFieldNames).String()
+				"The value `%s` will automatically detect the fields to query.", exporter.DefaultQField)).
+			Default(exporter.DefaultQField).String()
 	)
 
 	promlogConfig := &promlog.Config{}
@@ -53,7 +53,7 @@ func main() {
 	kingpin.Parse()
 
 	logger := promlog.New(promlogConfig)
-	e, err := exporter.New(exporter.DefaultPrefix, *nvidiaSmiCommand, *queryFieldNames, logger)
+	e, err := exporter.New(exporter.DefaultPrefix, *nvidiaSmiCommand, *qFields, logger)
 	if err != nil {
 		_ = level.Error(logger).Log("msg", "Error on creating exporter", "err", err)
 		os.Exit(1)
@@ -90,6 +90,6 @@ func NewRootHandler(logger log.Logger, metricsPath string) *RootHandler {
 func (r *RootHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 	_, err := w.Write(r.response)
 	if err != nil {
-		_ = level.Error(r.logger).Log("Error writing redirect", "err", err)
+		_ = level.Error(r.logger).Log("msg", "Error writing redirect", "err", err)
 	}
 }
