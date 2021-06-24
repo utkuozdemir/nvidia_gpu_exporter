@@ -86,6 +86,12 @@ func TestBuildFQNameAndMultiplierMHZ(t *testing.T) {
 	assert.Equal(t, "prefix_clocks_current_graphics_clock_hz", fqName)
 }
 
+func TestBuildFQNameAndMultiplierRatio(t *testing.T) {
+	fqName, multiplier := buildFQNameAndMultiplier("prefix", "fan.speed [%]")
+	assertFloat(t, 0.01, multiplier)
+	assert.Equal(t, "prefix_fan_speed_ratio", fqName)
+}
+
 func TestBuildFQNameAndMultiplierNoPrefix(t *testing.T) {
 	fqName, multiplier := buildFQNameAndMultiplier("", "encoder.stats.sessionCount")
 	assertFloat(t, 1, multiplier)
