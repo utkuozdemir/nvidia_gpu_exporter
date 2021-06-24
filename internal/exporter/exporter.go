@@ -72,7 +72,7 @@ func buildQFieldToRFieldMap(logger log.Logger, qFieldsRaw string,
 	nvidiaSmiCommand string) (map[qField]rField, error) {
 	qFieldsSeparated := strings.Split(qFieldsRaw, ",")
 
-	var parsedQFields []qField
+	qFields := toQFieldSlice(qFieldsSeparated)
 	if len(qFieldsSeparated) == 1 && qFieldsSeparated[0] == qFieldsAuto {
 		parsed, err := ParseAutoQFields(nvidiaSmiCommand)
 		if err != nil {
@@ -82,17 +82,25 @@ func buildQFieldToRFieldMap(logger log.Logger, qFieldsRaw string,
 			return fallbackQFieldToRFieldMap, nil
 		}
 
-		parsedQFields = parsed
+		qFields = parsed
 	}
 
-	t, err := scrape(parsedQFields, nvidiaSmiCommand)
+	t, err := scrape(qFields, nvidiaSmiCommand)
+	var rFields []rField
 	if err != nil {
-		return nil, err
+		_ = level.Warn(logger).Log("msg",
+			"Failed to run an initial scrape, using the built-in list for field mapping")
+		rFields, err = getFallbackValues(qFields)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		rFields = t.rFields
 	}
 
-	r := make(map[qField]rField, len(parsedQFields))
-	for i, qField := range parsedQFields {
-		r[qField] = t.rFields[i]
+	r := make(map[qField]rField, len(qFields))
+	for i, qField := range qFields {
+		r[qField] = rFields[i]
 	}
 
 	return r, nil
@@ -252,4 +260,19 @@ func getKeys(m map[qField]rField) []qField {
 		i++
 	}
 	return r
+}
+
+func getFallbackValues(qFields []qField) ([]rField, error) {
+	r := make([]rField, len(qFields))
+	i := 0
+	for _, qField := range qFields {
+		val, contains := fallbackQFieldToRFieldMap[qField]
+		if !contains {
+			return nil, fmt.Errorf("unexpected query field: %s", qField)
+		}
+
+		r[i] = val
+		i++
+	}
+	return r, nil
 }

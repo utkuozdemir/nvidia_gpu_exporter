@@ -1,8 +1,10 @@
 package exporter
 
 import (
+	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
+	"strings"
 	"testing"
 )
 
@@ -115,4 +117,71 @@ func TestBuildQFieldToMetricInfoMap(t *testing.T) {
 	metricInfo2 := m["bbb"]
 	assertFloat(t, 1, metricInfo2.valueMultiplier)
 	assert.Equal(t, prometheus.GaugeValue, metricInfo2.mType)
+}
+
+func TestNewUnknownField(t *testing.T) {
+	logger := log.NewNopLogger()
+	_, err := New("aaa", "bbb", "a", logger)
+	assert.Error(t, err)
+}
+
+func TestDescribe(t *testing.T) {
+	logger := log.NewNopLogger()
+	exp, err := New("aaa", "bbb", "fan.speed,memory.used", logger)
+	assert.NoError(t, err)
+
+	doneCh := make(chan bool)
+	descCh := make(chan *prometheus.Desc)
+
+	go func() {
+		exp.Describe(descCh)
+		doneCh <- true
+	}()
+
+	var descStrs []string
+
+end:
+	for {
+		select {
+		case desc := <-descCh:
+			descStrs = append(descStrs, desc.String())
+		case <-doneCh:
+			break end
+		}
+	}
+
+	assert.Len(t, descStrs, 3)
+	descs := strings.Join(descStrs, "\n")
+	assert.Contains(t, descs, "aaa_fan_speed")
+	assert.Contains(t, descs, "aaa_memory_used")
+	assert.Contains(t, descs, "aaa_failed_scrapes_total")
+}
+
+func TestCollect(t *testing.T) {
+	logger := log.NewNopLogger()
+	exp, err := New("aaa", "bbb", "fan.speed,memory.used", logger)
+	assert.NoError(t, err)
+
+	doneCh := make(chan bool)
+	metricCh := make(chan prometheus.Metric)
+
+	go func() {
+		exp.Collect(metricCh)
+		doneCh <- true
+	}()
+
+	var metrics []string
+
+end:
+	for {
+		select {
+		case metric := <-metricCh:
+			metrics = append(metrics, metric.Desc().String())
+		case <-doneCh:
+			break end
+		}
+	}
+
+	assert.Len(t, metrics, 1)
+	assert.Contains(t, metrics[0], "aaa_failed_scrapes_total")
 }
