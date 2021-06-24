@@ -13,13 +13,19 @@ import (
 	"sync"
 )
 
+// qField stands for query field - the field name before the query
+type qField string
+
+// rField stands for returned field - the field name as returned by the nvidia-smi
+type rField string
+
 const (
 	DefaultPrefix           = "nvidia_smi"
 	DefaultNvidiaSmiCommand = "nvidia-smi"
 )
 
 var (
-	variableLabels = []string{uuidQField, nameQField}
+	variableLabels = []qField{uuidQField, nameQField}
 	numericRegex   = regexp.MustCompile("[+-]?([0-9]*[.])?[0-9]+")
 
 	runCmd = func(cmd *exec.Cmd) error { return cmd.Run() }
@@ -30,8 +36,8 @@ var (
 type gpuExporter struct {
 	mutex                 sync.RWMutex
 	prefix                string
-	qFields               []string
-	qFieldToMetricInfoMap map[string]MetricInfo
+	qFields               []qField
+	qFieldToMetricInfoMap map[qField]MetricInfo
 	nvidiaSmiCommand      string
 	failedScrapesTotal    prometheus.Counter
 	logger                log.Logger
@@ -63,10 +69,10 @@ func New(prefix string, nvidiaSmiCommand string, qFieldsRaw string, logger log.L
 }
 
 func buildQFieldToRFieldMap(logger log.Logger, qFieldsRaw string,
-	nvidiaSmiCommand string) (map[string]string, error) {
+	nvidiaSmiCommand string) (map[qField]rField, error) {
 	qFieldsSeparated := strings.Split(qFieldsRaw, ",")
 
-	var parsedQFields []string
+	var parsedQFields []qField
 	if len(qFieldsSeparated) == 1 && qFieldsSeparated[0] == qFieldsAuto {
 		parsed, err := ParseAutoQFields(nvidiaSmiCommand)
 		if err != nil {
@@ -84,7 +90,7 @@ func buildQFieldToRFieldMap(logger log.Logger, qFieldsRaw string,
 		return nil, err
 	}
 
-	r := make(map[string]string, len(parsedQFields))
+	r := make(map[qField]rField, len(parsedQFields))
 	for i, qField := range parsedQFields {
 		r[qField] = t.rFields[i]
 	}
@@ -131,8 +137,8 @@ func (e *gpuExporter) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
-func scrape(qFields []string, nvidiaSmiCommand string) (*table, error) {
-	qFieldsJoined := strings.Join(qFields, ",")
+func scrape(qFields []qField, nvidiaSmiCommand string) (*table, error) {
+	qFieldsJoined := strings.Join(QFieldSliceToStringSlice(qFields), ",")
 
 	cmdAndArgs := strings.Fields(nvidiaSmiCommand)
 	cmdAndArgs = append(cmdAndArgs, fmt.Sprintf("--query-gpu=%s", qFieldsJoined))
@@ -195,8 +201,8 @@ func transformRawValue(rawValue string, valueMultiplier float64) (float64, error
 	}
 }
 
-func buildQFieldToMetricInfoMap(prefix string, qFieldtoRFieldMap map[string]string) map[string]MetricInfo {
-	result := make(map[string]MetricInfo)
+func buildQFieldToMetricInfoMap(prefix string, qFieldtoRFieldMap map[qField]rField) map[qField]MetricInfo {
+	result := make(map[qField]MetricInfo)
 	for qField, rField := range qFieldtoRFieldMap {
 		result[qField] = buildMetricInfo(prefix, rField)
 	}
@@ -204,9 +210,9 @@ func buildQFieldToMetricInfoMap(prefix string, qFieldtoRFieldMap map[string]stri
 	return result
 }
 
-func buildMetricInfo(prefix string, rField string) MetricInfo {
+func buildMetricInfo(prefix string, rField rField) MetricInfo {
 	fqName, multiplier := buildFQNameAndMultiplier(prefix, rField)
-	desc := prometheus.NewDesc(fqName, "", variableLabels, nil) // todo: add help text
+	desc := prometheus.NewDesc(fqName, "", QFieldSliceToStringSlice(variableLabels), nil) // todo: add help text
 	return MetricInfo{
 		desc:            desc,
 		mType:           prometheus.GaugeValue,
@@ -214,19 +220,20 @@ func buildMetricInfo(prefix string, rField string) MetricInfo {
 	}
 }
 
-func buildFQNameAndMultiplier(prefix string, rField string) (string, float64) {
-	suffixTransformed := rField
+func buildFQNameAndMultiplier(prefix string, rField rField) (string, float64) {
+	rFieldStr := string(rField)
+	suffixTransformed := rFieldStr
 	multiplier := 1.0
-	split := strings.Split(rField, " ")[0]
-	if strings.HasSuffix(rField, " [W]") {
+	split := strings.Split(rFieldStr, " ")[0]
+	if strings.HasSuffix(rFieldStr, " [W]") {
 		suffixTransformed = split + "_watts"
-	} else if strings.HasSuffix(rField, " [MHz]") {
+	} else if strings.HasSuffix(rFieldStr, " [MHz]") {
 		suffixTransformed = split + "_clock_hz"
 		multiplier = 1000000
-	} else if strings.HasSuffix(rField, " [MiB]") {
+	} else if strings.HasSuffix(rFieldStr, " [MiB]") {
 		suffixTransformed = split + "_bytes"
 		multiplier = 1048576
-	} else if strings.HasSuffix(rField, " [%]") {
+	} else if strings.HasSuffix(rFieldStr, " [%]") {
 		suffixTransformed = split + "_ratio"
 		multiplier = 0.01
 	}
@@ -237,8 +244,8 @@ func buildFQNameAndMultiplier(prefix string, rField string) (string, float64) {
 	return fqName, multiplier
 }
 
-func getKeys(m map[string]string) []string {
-	r := make([]string, len(m))
+func getKeys(m map[qField]rField) []qField {
+	r := make([]qField, len(m))
 	i := 0
 	for key := range m {
 		r[i] = key

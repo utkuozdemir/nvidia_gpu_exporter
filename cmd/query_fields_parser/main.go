@@ -16,10 +16,11 @@ func main() {
 	)
 
 	kingpin.Parse()
-	fields, err := exporter.ParseAutoQFields(*nvidiaSmiCommand)
+	qFields, err := exporter.ParseAutoQFields(*nvidiaSmiCommand)
 	if err != nil {
 		fmt.Printf("error: %v\n", err)
 		os.Exit(1)
 	}
+	fields := exporter.QFieldSliceToStringSlice(qFields)
 	fmt.Printf("Fields:\n\n%s\n", strings.Join(fields, "\n"))
 }

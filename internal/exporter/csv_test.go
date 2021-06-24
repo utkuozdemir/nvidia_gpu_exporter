@@ -14,9 +14,9 @@ Some Dummy GPU, 12.34 W
 )
 
 func TestParseCsvIntoTable(t *testing.T) {
-	parsed := parseCSVIntoTable(testCsv, []string{"name", "power.draw"})
+	parsed := parseCSVIntoTable(testCsv, []qField{"name", "power.draw"})
 	assert.Len(t, parsed.rows, 2)
-	assert.Equal(t, []string{"name", "power.draw [W]"}, parsed.rFields)
+	assert.Equal(t, []rField{"name", "power.draw [W]"}, parsed.rFields)
 
 	cell00 := cell{qField: "name", rField: "name", rawValue: "NVIDIA GeForce RTX 2080 SUPER"}
 	cell01 := cell{qField: "power.draw", rField: "power.draw [W]", rawValue: "30.14 W"}
@@ -24,19 +24,19 @@ func TestParseCsvIntoTable(t *testing.T) {
 	cell11 := cell{qField: "power.draw", rField: "power.draw [W]", rawValue: "12.34 W"}
 
 	row0 := row{
-		qFieldToCells: map[string]cell{"name": cell00, "power.draw": cell01},
+		qFieldToCells: map[qField]cell{"name": cell00, "power.draw": cell01},
 		cells:         []cell{cell00, cell01},
 	}
 
 	row1 := row{
-		qFieldToCells: map[string]cell{"name": cell10, "power.draw": cell11},
+		qFieldToCells: map[qField]cell{"name": cell10, "power.draw": cell11},
 		cells:         []cell{cell10, cell11},
 	}
 
 	expected := table{
 		rows:    []row{row0, row1},
-		rFields: []string{"name", "power.draw [W]"},
-		qFieldToCells: map[string][]cell{
+		rFields: []rField{"name", "power.draw [W]"},
+		qFieldToCells: map[qField][]cell{
 			"name":       {cell00, cell10},
 			"power.draw": {cell01, cell11},
 		},

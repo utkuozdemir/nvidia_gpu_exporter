@@ -8,16 +8,16 @@ import (
 )
 
 const (
-	uuidQField    = "uuid"
-	nameQField    = "name"
-	qFieldsAuto   = "AUTO"
-	DefaultQField = qFieldsAuto
+	uuidQField    qField = "uuid"
+	nameQField    qField = "name"
+	qFieldsAuto          = "AUTO"
+	DefaultQField        = qFieldsAuto
 )
 
 var (
 	fieldRegex = regexp.MustCompile(`(?m)\n\s*\n^"([^"]+)"`)
 
-	fallbackQFieldToRFieldMap = map[string]string{
+	fallbackQFieldToRFieldMap = map[qField]rField{
 		"timestamp":                         "timestamp",
 		"driver_version":                    "driver_version",
 		"count":                             "count",
@@ -136,7 +136,7 @@ var (
 	}
 )
 
-func ParseAutoQFields(nvidiaSmiCommand string) ([]string, error) {
+func ParseAutoQFields(nvidiaSmiCommand string) ([]qField, error) {
 	cmdAndArgs := strings.Fields(nvidiaSmiCommand)
 	cmdAndArgs = append(cmdAndArgs, "--help-query-gpu")
 	cmd := exec.Command(cmdAndArgs[0], cmdAndArgs[1:]...)
@@ -153,12 +153,36 @@ func ParseAutoQFields(nvidiaSmiCommand string) ([]string, error) {
 	return fields, nil
 }
 
-func extractQFields(text string) []string {
+func extractQFields(text string) []qField {
 	found := fieldRegex.FindAllStringSubmatch(text, -1)
 
-	var fields []string
+	var fields []qField
 	for _, ss := range found {
-		fields = append(fields, ss[1])
+		fields = append(fields, qField(ss[1]))
 	}
 	return fields
+}
+
+func toQFieldSlice(ss []string) []qField {
+	r := make([]qField, len(ss))
+	for i, s := range ss {
+		r[i] = qField(s)
+	}
+	return r
+}
+
+func toRFieldSlice(ss []string) []rField {
+	r := make([]rField, len(ss))
+	for i, s := range ss {
+		r[i] = rField(s)
+	}
+	return r
+}
+
+func QFieldSliceToStringSlice(qs []qField) []string {
+	r := make([]string, len(qs))
+	for i, q := range qs {
+		r[i] = string(q)
+	}
+	return r
 }

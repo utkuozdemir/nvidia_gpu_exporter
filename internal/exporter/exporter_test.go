@@ -105,7 +105,7 @@ func TestBuildMetricInfo(t *testing.T) {
 }
 
 func TestBuildQFieldToMetricInfoMap(t *testing.T) {
-	m := buildQFieldToMetricInfoMap("prefix", map[string]string{"aaa": "AAA", "bbb": "BBB"})
+	m := buildQFieldToMetricInfoMap("prefix", map[qField]rField{"aaa": "AAA", "bbb": "BBB"})
 	assert.Len(t, m, 2)
 
 	metricInfo1 := m["aaa"]

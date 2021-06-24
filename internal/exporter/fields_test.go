@@ -9,8 +9,8 @@ import (
 
 var (
 	//go:embed _fields-test.txt
-	fieldsTest     string
-	expectedFields = []string{
+	fieldsTest      string
+	expectedQFields = []qField{
 		"timestamp", "driver_version", "count", "name", "serial", "uuid", "pci.bus_id",
 		"pci.domain", "pci.bus", "pci.device", "pci.device_id", "pci.sub_device_id", "pcie.link.gen.current",
 		"pcie.link.gen.max", "pcie.link.width.current", "pcie.link.width.max", "index", "display_mode", "display_active",
@@ -53,7 +53,7 @@ var (
 
 func TestExtractQFields(t *testing.T) {
 	fields := extractQFields(fieldsTest)
-	assert.Equal(t, expectedFields, fields)
+	assert.Equal(t, expectedQFields, fields)
 }
 
 func TestParseAutoQFields(t *testing.T) {
@@ -74,5 +74,5 @@ func TestParseAutoQFields(t *testing.T) {
 	assert.Equal(t, capturedCmd.Args[1], "--help-query-gpu")
 
 	assert.NoError(t, err)
-	assert.Equal(t, expectedFields, fields)
+	assert.Equal(t, expectedQFields, fields)
 }

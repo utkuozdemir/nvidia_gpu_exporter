@@ -4,46 +4,46 @@ import "strings"
 
 type table struct {
 	rows          []row
-	rFields       []string
-	qFieldToCells map[string][]cell
+	rFields       []rField
+	qFieldToCells map[qField][]cell
 }
 
 type row struct {
-	qFieldToCells map[string]cell
+	qFieldToCells map[qField]cell
 	cells         []cell
 }
 
 type cell struct {
-	qField   string
-	rField   string
+	qField   qField
+	rField   rField
 	rawValue string
 }
 
-func parseCSVIntoTable(queryResult string, qFields []string) table {
+func parseCSVIntoTable(queryResult string, qFields []qField) table {
 	lines := strings.Split(strings.TrimSpace(queryResult), "\n")
 	titlesLine := lines[0]
 	valuesLines := lines[1:]
-	returnedFieldNames := parseCSVLine(titlesLine)
+	rFields := toRFieldSlice(parseCSVLine(titlesLine))
 
 	numCols := len(qFields)
 	numRows := len(valuesLines)
 
 	rows := make([]row, numRows)
 
-	qFieldToCells := make(map[string][]cell)
+	qFieldToCells := make(map[qField][]cell)
 	for _, qField := range qFields {
 		qFieldToCells[qField] = make([]cell, numRows)
 	}
 
 	for rowIndex, valuesLine := range valuesLines {
-		qFieldToCell := make(map[string]cell, numCols)
+		qFieldToCell := make(map[qField]cell, numCols)
 		cells := make([]cell, numCols)
 		rawValues := parseCSVLine(valuesLine)
 		for colIndex, rawValue := range rawValues {
 			qField := qFields[colIndex]
 			gm := cell{
 				qField:   qField,
-				rField:   returnedFieldNames[colIndex],
+				rField:   rFields[colIndex],
 				rawValue: rawValue,
 			}
 			qFieldToCell[qField] = gm
@@ -62,7 +62,7 @@ func parseCSVIntoTable(queryResult string, qFields []string) table {
 
 	return table{
 		rows:          rows,
-		rFields:       returnedFieldNames,
+		rFields:       rFields,
 		qFieldToCells: qFieldToCells,
 	}
 }
