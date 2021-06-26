@@ -220,7 +220,7 @@ func buildQFieldToMetricInfoMap(prefix string, qFieldtoRFieldMap map[qField]rFie
 
 func buildMetricInfo(prefix string, rField rField) MetricInfo {
 	fqName, multiplier := buildFQNameAndMultiplier(prefix, rField)
-	desc := prometheus.NewDesc(fqName, "", QFieldSliceToStringSlice(variableLabels), nil) // todo: add help text
+	desc := prometheus.NewDesc(fqName, string(rField), QFieldSliceToStringSlice(variableLabels), nil)
 	return MetricInfo{
 		desc:            desc,
 		mType:           prometheus.GaugeValue,
