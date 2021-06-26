@@ -150,11 +150,17 @@ end:
 		}
 	}
 
-	assert.Len(t, descStrs, 3)
+	assert.Len(t, descStrs, 9)
 	descs := strings.Join(descStrs, "\n")
 	assert.Contains(t, descs, "aaa_fan_speed")
 	assert.Contains(t, descs, "aaa_memory_used")
 	assert.Contains(t, descs, "aaa_failed_scrapes_total")
+	assert.Contains(t, descs, "aaa_gpu_info")
+	assert.Contains(t, descs, "aaa_uuid")
+	assert.Contains(t, descs, "aaa_name")
+	assert.Contains(t, descs, "aaa_driver_model_current")
+	assert.Contains(t, descs, "aaa_driver_model_pending")
+	assert.Contains(t, descs, "aaa_vbios_version")
 }
 
 func TestCollect(t *testing.T) {

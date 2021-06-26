@@ -8,10 +8,13 @@ import (
 )
 
 const (
-	uuidQField    qField = "uuid"
-	nameQField    qField = "name"
-	qFieldsAuto          = "AUTO"
-	DefaultQField        = qFieldsAuto
+	uuidQField               qField = "uuid"
+	nameQField               qField = "name"
+	driverModelCurrentQField qField = "driver_model.current"
+	driverModelPendingQField qField = "driver_model.pending"
+	vBiosVersionQField       qField = "vbios_version"
+	qFieldsAuto                     = "AUTO"
+	DefaultQField                   = qFieldsAuto
 )
 
 var (

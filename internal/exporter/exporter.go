@@ -25,8 +25,15 @@ const (
 )
 
 var (
-	variableLabels = []qField{uuidQField, nameQField}
-	numericRegex   = regexp.MustCompile("[+-]?([0-9]*[.])?[0-9]+")
+	numericRegex = regexp.MustCompile("[+-]?([0-9]*[.])?[0-9]+")
+
+	requiredFields = []requiredField{
+		{qField: uuidQField, label: "uuid"},
+		{qField: nameQField, label: "name"},
+		{qField: driverModelCurrentQField, label: "driver_model_current"},
+		{qField: driverModelPendingQField, label: "driver_model_pending"},
+		{qField: vBiosVersionQField, label: "vbios_version"},
+	}
 
 	runCmd = func(cmd *exec.Cmd) error { return cmd.Run() }
 )
@@ -40,6 +47,7 @@ type gpuExporter struct {
 	qFieldToMetricInfoMap map[qField]MetricInfo
 	nvidiaSmiCommand      string
 	failedScrapesTotal    prometheus.Counter
+	gpuInfoDesc           *prometheus.Desc
 	logger                log.Logger
 }
 
@@ -52,6 +60,7 @@ func New(prefix string, nvidiaSmiCommand string, qFieldsRaw string, logger log.L
 	qFieldToMetricInfoMap := buildQFieldToMetricInfoMap(prefix, qFieldToRFieldMap)
 	qFields := getKeys(qFieldToRFieldMap)
 
+	infoLabels := getLabels(requiredFields)
 	e := gpuExporter{
 		prefix:                prefix,
 		nvidiaSmiCommand:      nvidiaSmiCommand,
@@ -63,6 +72,12 @@ func New(prefix string, nvidiaSmiCommand string, qFieldsRaw string, logger log.L
 			Name:      "failed_scrapes_total",
 			Help:      "Number of failed scrapes",
 		}),
+		gpuInfoDesc: prometheus.NewDesc(
+			prometheus.BuildFQName(prefix, "", "gpu_info"),
+			fmt.Sprintf("A metric with a constant '1' value labeled by gpu %s.",
+				strings.Join(infoLabels, ", ")),
+			infoLabels,
+			nil),
 	}
 
 	return &e, nil
@@ -73,6 +88,11 @@ func buildQFieldToRFieldMap(logger log.Logger, qFieldsRaw string,
 	qFieldsSeparated := strings.Split(qFieldsRaw, ",")
 
 	qFields := toQFieldSlice(qFieldsSeparated)
+
+	for _, reqField := range requiredFields {
+		qFields = append(qFields, reqField.qField)
+	}
+
 	if len(qFieldsSeparated) == 1 && qFieldsSeparated[0] == qFieldsAuto {
 		parsed, err := ParseAutoQFields(nvidiaSmiCommand)
 		if err != nil {
@@ -113,6 +133,7 @@ func (e *gpuExporter) Describe(ch chan<- *prometheus.Desc) {
 		ch <- m.desc
 	}
 	ch <- e.failedScrapesTotal.Desc()
+	ch <- e.gpuInfoDesc
 }
 
 // Collect fetches the stats and delivers them as Prometheus metrics. It implements prometheus.Collector.
@@ -131,6 +152,14 @@ func (e *gpuExporter) Collect(ch chan<- prometheus.Metric) {
 	for _, r := range t.rows {
 		uuid := strings.TrimPrefix(strings.ToLower(r.qFieldToCells[uuidQField].rawValue), "gpu-")
 		name := r.qFieldToCells[nameQField].rawValue
+		driverModelCurrent := r.qFieldToCells[driverModelCurrentQField].rawValue
+		driverModelPending := r.qFieldToCells[driverModelPendingQField].rawValue
+		vBiosVersion := r.qFieldToCells[vBiosVersionQField].rawValue
+
+		infoMetric := prometheus.MustNewConstMetric(e.gpuInfoDesc, prometheus.GaugeValue,
+			1, uuid, name, driverModelCurrent, driverModelPending, vBiosVersion)
+		ch <- infoMetric
+
 		for _, c := range r.cells {
 			mi := e.qFieldToMetricInfoMap[c.qField]
 			num, err := transformRawValue(c.rawValue, mi.valueMultiplier)
@@ -140,7 +169,7 @@ func (e *gpuExporter) Collect(ch chan<- prometheus.Metric) {
 				continue
 			}
 
-			ch <- prometheus.MustNewConstMetric(mi.desc, mi.mType, num, uuid, name)
+			ch <- prometheus.MustNewConstMetric(mi.desc, mi.mType, num, uuid)
 		}
 	}
 }
@@ -220,7 +249,7 @@ func buildQFieldToMetricInfoMap(prefix string, qFieldtoRFieldMap map[qField]rFie
 
 func buildMetricInfo(prefix string, rField rField) MetricInfo {
 	fqName, multiplier := buildFQNameAndMultiplier(prefix, rField)
-	desc := prometheus.NewDesc(fqName, string(rField), QFieldSliceToStringSlice(variableLabels), nil)
+	desc := prometheus.NewDesc(fqName, string(rField), []string{"uuid"}, nil)
 	return MetricInfo{
 		desc:            desc,
 		mType:           prometheus.GaugeValue,
@@ -275,4 +304,17 @@ func getFallbackValues(qFields []qField) ([]rField, error) {
 		i++
 	}
 	return r, nil
+}
+
+func getLabels(reqFields []requiredField) []string {
+	r := make([]string, len(reqFields))
+	for i, reqField := range reqFields {
+		r[i] = reqField.label
+	}
+	return r
+}
+
+type requiredField struct {
+	qField qField
+	label  string
 }
