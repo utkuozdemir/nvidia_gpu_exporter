@@ -1,8 +1,11 @@
 package exporter
 
 import (
+	"fmt"
 	"github.com/stretchr/testify/assert"
 	"math"
+	"os"
+	"strings"
 	"testing"
 )
 
@@ -24,4 +27,18 @@ func TestHexToDecimalError(t *testing.T) {
 
 func almostEqual(a, b float64) bool {
 	return math.Abs(a-b) <= 1e-9
+}
+
+// TestParseQueryFields is ran manually
+func TestParseQueryFields(t *testing.T) {
+	t.SkipNow()
+	nvidiaSmiCommand := "nvidia-smi"
+
+	qFields, err := ParseAutoQFields(nvidiaSmiCommand)
+	if err != nil {
+		fmt.Printf("error: %v\n", err)
+		os.Exit(1)
+	}
+	fields := QFieldSliceToStringSlice(qFields)
+	fmt.Printf("Fields:\n\n%s\n", strings.Join(fields, "\n"))
 }
