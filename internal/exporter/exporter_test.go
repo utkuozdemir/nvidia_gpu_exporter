@@ -1,15 +1,22 @@
 package exporter
 
 import (
+	_ "embed"
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
+	"os/exec"
 	"strings"
 	"testing"
 )
 
 const (
 	delta = 1e-9
+)
+
+var (
+	//go:embed _query-test.txt
+	queryTest string
 )
 
 func assertFloat(t *testing.T, expected, actual float64) bool {
@@ -164,6 +171,50 @@ end:
 }
 
 func TestCollect(t *testing.T) {
+	runCmdOriginal := runCmd
+	defer func() { runCmd = runCmdOriginal }()
+
+	runCmd = func(cmd *exec.Cmd) error {
+		_, _ = cmd.Stdout.Write([]byte(queryTest))
+		return nil
+	}
+
+	logger := log.NewNopLogger()
+	exp, err := New("aaa", "bbb",
+		"uuid,name,driver_model.current,driver_model.pending,"+
+			"vbios_version,fan.speed,memory.used", logger)
+	assert.NoError(t, err)
+
+	doneCh := make(chan bool)
+	metricCh := make(chan prometheus.Metric)
+
+	go func() {
+		exp.Collect(metricCh)
+		doneCh <- true
+	}()
+
+	var metrics []string
+
+end:
+	for {
+		select {
+		case metric := <-metricCh:
+			metrics = append(metrics, metric.Desc().String())
+		case <-doneCh:
+			break end
+		}
+	}
+
+	metricsJoined := strings.Join(metrics, "\n")
+
+	assert.Len(t, metrics, 7)
+	assert.Contains(t, metricsJoined, "aaa_gpu_info")
+	assert.Contains(t, metricsJoined, "aaa_name")
+	assert.Contains(t, metricsJoined, "aaa_fan_speed_ratio")
+	assert.Contains(t, metricsJoined, "aaa_memory_used_bytes")
+}
+
+func TestCollectError(t *testing.T) {
 	logger := log.NewNopLogger()
 	exp, err := New("aaa", "bbb", "fan.speed,memory.used", logger)
 	assert.NoError(t, err)

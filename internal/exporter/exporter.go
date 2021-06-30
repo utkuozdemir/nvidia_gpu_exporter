@@ -52,19 +52,19 @@ type gpuExporter struct {
 }
 
 func New(prefix string, nvidiaSmiCommand string, qFieldsRaw string, logger log.Logger) (prometheus.Collector, error) {
-	qFieldToRFieldMap, err := buildQFieldToRFieldMap(logger, qFieldsRaw, nvidiaSmiCommand)
+	qFieldsOrdered, qFieldToRFieldMap, err := buildQFieldToRFieldMap(logger, qFieldsRaw, nvidiaSmiCommand)
 	if err != nil {
 		return nil, err
 	}
 
 	qFieldToMetricInfoMap := buildQFieldToMetricInfoMap(prefix, qFieldToRFieldMap)
-	qFields := getKeys(qFieldToRFieldMap)
+	//qFields := getKeys(qFieldToRFieldMap)
 
 	infoLabels := getLabels(requiredFields)
 	e := gpuExporter{
 		prefix:                prefix,
 		nvidiaSmiCommand:      nvidiaSmiCommand,
-		qFields:               qFields,
+		qFields:               qFieldsOrdered,
 		qFieldToMetricInfoMap: qFieldToMetricInfoMap,
 		logger:                logger,
 		failedScrapesTotal: prometheus.NewCounter(prometheus.CounterOpts{
@@ -84,14 +84,15 @@ func New(prefix string, nvidiaSmiCommand string, qFieldsRaw string, logger log.L
 }
 
 func buildQFieldToRFieldMap(logger log.Logger, qFieldsRaw string,
-	nvidiaSmiCommand string) (map[qField]rField, error) {
+	nvidiaSmiCommand string) ([]qField, map[qField]rField, error) {
 	qFieldsSeparated := strings.Split(qFieldsRaw, ",")
 
 	qFields := toQFieldSlice(qFieldsSeparated)
-
 	for _, reqField := range requiredFields {
 		qFields = append(qFields, reqField.qField)
 	}
+
+	qFields = removeDuplicateQFields(qFields)
 
 	if len(qFieldsSeparated) == 1 && qFieldsSeparated[0] == qFieldsAuto {
 		parsed, err := ParseAutoQFields(nvidiaSmiCommand)
@@ -99,7 +100,7 @@ func buildQFieldToRFieldMap(logger log.Logger, qFieldsRaw string,
 			_ = level.Warn(logger).Log("msg",
 				"Failed to auto-determine query field names, "+
 					"falling back to the built-in list")
-			return fallbackQFieldToRFieldMap, nil
+			return getKeys(fallbackQFieldToRFieldMap), fallbackQFieldToRFieldMap, nil
 		}
 
 		qFields = parsed
@@ -112,18 +113,18 @@ func buildQFieldToRFieldMap(logger log.Logger, qFieldsRaw string,
 			"Failed to run an initial scrape, using the built-in list for field mapping")
 		rFields, err = getFallbackValues(qFields)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	} else {
 		rFields = t.rFields
 	}
 
 	r := make(map[qField]rField, len(qFields))
-	for i, qField := range qFields {
-		r[qField] = rFields[i]
+	for i, q := range qFields {
+		r[q] = rFields[i]
 	}
 
-	return r, nil
+	return qFields, r, nil
 }
 
 // Describe describes all the metrics ever exported by the exporter. It
@@ -187,7 +188,7 @@ func scrape(qFields []qField, nvidiaSmiCommand string) (*table, error) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	err := cmd.Run()
+	err := runCmd(cmd)
 	if err != nil {
 		return nil, fmt.Errorf("command failed. stderr: %s err: %w", stderr.String(), err)
 	}
@@ -294,10 +295,10 @@ func getKeys(m map[qField]rField) []qField {
 func getFallbackValues(qFields []qField) ([]rField, error) {
 	r := make([]rField, len(qFields))
 	i := 0
-	for _, qField := range qFields {
-		val, contains := fallbackQFieldToRFieldMap[qField]
+	for _, q := range qFields {
+		val, contains := fallbackQFieldToRFieldMap[q]
 		if !contains {
-			return nil, fmt.Errorf("unexpected query field: %s", qField)
+			return nil, fmt.Errorf("unexpected query field: %s", q)
 		}
 
 		r[i] = val
@@ -317,4 +318,18 @@ func getLabels(reqFields []requiredField) []string {
 type requiredField struct {
 	qField qField
 	label  string
+}
+
+func removeDuplicateQFields(qFields []qField) []qField {
+	m := make(map[qField]struct{})
+	var r []qField
+	for _, f := range qFields {
+		_, exists := m[f]
+		if !exists {
+			r = append(r, f)
+			m[f] = struct{}{}
+		}
+	}
+
+	return r
 }

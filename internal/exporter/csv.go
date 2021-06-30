@@ -31,8 +31,8 @@ func parseCSVIntoTable(queryResult string, qFields []qField) table {
 	rows := make([]row, numRows)
 
 	qFieldToCells := make(map[qField][]cell)
-	for _, qField := range qFields {
-		qFieldToCells[qField] = make([]cell, numRows)
+	for _, q := range qFields {
+		qFieldToCells[q] = make([]cell, numRows)
 	}
 
 	for rowIndex, valuesLine := range valuesLines {
@@ -40,15 +40,16 @@ func parseCSVIntoTable(queryResult string, qFields []qField) table {
 		cells := make([]cell, numCols)
 		rawValues := parseCSVLine(valuesLine)
 		for colIndex, rawValue := range rawValues {
-			qField := qFields[colIndex]
+			q := qFields[colIndex]
+			r := rFields[colIndex]
 			gm := cell{
-				qField:   qField,
-				rField:   rFields[colIndex],
+				qField:   q,
+				rField:   r,
 				rawValue: rawValue,
 			}
-			qFieldToCell[qField] = gm
+			qFieldToCell[q] = gm
 			cells[colIndex] = gm
-			qFieldToCells[qField][rowIndex] = gm
+			qFieldToCells[q][rowIndex] = gm
 		}
 
 		gmc := row{
