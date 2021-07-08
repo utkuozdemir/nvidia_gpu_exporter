@@ -65,7 +65,7 @@
   "gnetId": 14574,
   "graphTooltip": 0,
   "id": null,
-  "iteration": 1624735477876,
+  "iteration": 1625771691879,
   "links": [],
   "panels": [
     {
@@ -318,7 +318,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "nvidia_smi_power_draw_watts{uuid=\"$gpu\"} / nvidia_smi_power_limit_watts{uuid=\"$gpu\"}",
+          "expr": "nvidia_smi_power_draw_watts{uuid=\"$gpu\"} / nvidia_smi_power_default_limit_watts{uuid=\"$gpu\"}",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
@@ -2072,5 +2072,5 @@
   "timezone": "",
   "title": "Nvidia GPU Metrics",
   "uid": "vlvPlrgnk",
-  "version": 5
+  "version": 6
 }
