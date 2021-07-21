@@ -39,21 +39,28 @@ $ nvidia_gpu_exporter --help
 
 ### Installing as a Windows Service
 
-Requirements:
-- [Scoop package manager](https://scoop.sh)
-- [NSSM](https://nssm.cc/download) (get the latest pre-release version)
-
-Installation steps:
+To install the exporter as a Windows service, follow the steps below:
 1. Open a privileged powershell prompt (right click - Run as administrator)
 2. Run the following commands:
 
 ```powershell
+Invoke-Expression (New-Object System.Net.WebClient).DownloadString('https://get.scoop.sh')
+scoop install nssm --global
 scoop bucket add nvidia_gpu_exporter https://github.com/utkuozdemir/scoop_nvidia_gpu_exporter.git
 scoop install nvidia_gpu_exporter/nvidia_gpu_exporter --global
 New-NetFirewallRule -DisplayName "Nvidia GPU Exporter" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 9835
 nssm install nvidia_gpu_exporter "C:\ProgramData\scoop\apps\nvidia_gpu_exporter\current\nvidia_gpu_exporter.exe"
 Start-Service nvidia_gpu_exporter
 ```
+
+These steps do the following:
+- Installs [Scoop package manager](https://scoop.sh)
+- Installs [NSSM - a service manager](https://nssm.cc/download) using Scoop
+- Installs the exporter using Scoop
+- Exposes app's TCP port (`9835`) to be accessible from Windows Firewall
+- Installs the exporter as a Windows service using NSSM
+- Starts the installed service
+
 
 ### Installing as a Linux (Systemd) Service
 
