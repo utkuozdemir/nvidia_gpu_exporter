@@ -22,6 +22,28 @@
   "regexManagers": [
     {
       "fileMatch": [
+        "\\.github\\/workflows\\/.*"
+      ],
+      "matchStrings": [
+        "# renovate: golangci-lint\\s+version: (?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "golangci/golangci-lint",
+      "datasourceTemplate": "github-tags",
+      "versioningTemplate": "semver"
+    },
+    {
+      "fileMatch": [
+        "\\.github\\/workflows\\/.*"
+      ],
+      "matchStrings": [
+        "# renovate: goreleaser\\s+version: (?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "goreleaser/goreleaser",
+      "datasourceTemplate": "github-tags",
+      "versioningTemplate": "semver"
+    },
+    {
+      "fileMatch": [
         "go.mod",
         "\\.github\\/workflows\\/.*"
       ],
