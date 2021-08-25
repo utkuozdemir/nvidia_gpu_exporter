@@ -4,5 +4,19 @@
   ],
   "postUpdateOptions": [
     "gomodTidy"
+  ],
+  "regexManagers": [
+    {
+      "fileMatch": [
+        "go.mod"
+      ],
+      "matchStrings": [
+        "// renovate: go\\s+go (?<currentValue>\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "golang/go",
+      "datasourceTemplate": "github-tags",
+      "versioningTemplate": "semver",
+      "extractVersionTemplate": "go(?<version>\\d+\\.\\d+)"
+    }
   ]
 }
