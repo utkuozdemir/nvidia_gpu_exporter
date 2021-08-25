@@ -1,7 +1,7 @@
 module github.com/utkuozdemir/nvidia_gpu_exporter
 
 // renovate: go
-go 1.16
+go 1.17
 
 require (
 	github.com/go-kit/log v0.1.0
