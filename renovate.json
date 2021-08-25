@@ -9,7 +9,7 @@
     {
       "fileMatch": [
         "go.mod",
-        ".github/workflows/**"
+        "\\.github\\/workflows\\/.*"
       ],
       "matchStrings": [
         "// renovate: go\\s+go (?<currentValue>\\d+\\.\\d+)",
