@@ -15,7 +15,7 @@
       ],
       "depNameTemplate": "golang/go",
       "datasourceTemplate": "github-tags",
-      "versioningTemplate": "semver",
+      "versioningTemplate": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)$",
       "extractVersionTemplate": "go(?<version>\\d+\\.\\d+)"
     }
   ]
