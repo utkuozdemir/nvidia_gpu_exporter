@@ -8,10 +8,12 @@
   "regexManagers": [
     {
       "fileMatch": [
-        "go.mod"
+        "go.mod",
+        ".github/workflows/**"
       ],
       "matchStrings": [
-        "// renovate: go\\s+go (?<currentValue>\\d+\\.\\d+)"
+        "// renovate: go\\s+go (?<currentValue>\\d+\\.\\d+)",
+        "// renovate: go\\s+go-version: (?<currentValue>\\d+\\.\\d+)"
       ],
       "depNameTemplate": "golang/go",
       "datasourceTemplate": "github-tags",
