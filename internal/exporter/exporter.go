@@ -33,6 +33,7 @@ var (
 		{qField: driverModelCurrentQField, label: "driver_model_current"},
 		{qField: driverModelPendingQField, label: "driver_model_pending"},
 		{qField: vBiosVersionQField, label: "vbios_version"},
+		{qField: driverVersionQField, label: "driver_version"},
 	}
 
 	runCmd = func(cmd *exec.Cmd) error { return cmd.Run() }
@@ -156,9 +157,11 @@ func (e *gpuExporter) Collect(ch chan<- prometheus.Metric) {
 		driverModelCurrent := r.qFieldToCells[driverModelCurrentQField].rawValue
 		driverModelPending := r.qFieldToCells[driverModelPendingQField].rawValue
 		vBiosVersion := r.qFieldToCells[vBiosVersionQField].rawValue
+		driverVersion := r.qFieldToCells[driverVersionQField].rawValue
 
 		infoMetric := prometheus.MustNewConstMetric(e.gpuInfoDesc, prometheus.GaugeValue,
-			1, uuid, name, driverModelCurrent, driverModelPending, vBiosVersion)
+			1, uuid, name, driverModelCurrent,
+			driverModelPending, vBiosVersion, driverVersion)
 		ch <- infoMetric
 
 		for _, c := range r.cells {
@@ -193,7 +196,11 @@ func scrape(qFields []qField, nvidiaSmiCommand string) (*table, error) {
 		return nil, fmt.Errorf("command failed. stderr: %s err: %w", stderr.String(), err)
 	}
 
-	t := parseCSVIntoTable(strings.TrimSpace(stdout.String()), qFields)
+	t, err := parseCSVIntoTable(strings.TrimSpace(stdout.String()), qFields)
+	if err != nil {
+		return nil, err
+	}
+
 	return &t, nil
 }
 

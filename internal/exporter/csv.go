@@ -1,6 +1,9 @@
 package exporter
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 type table struct {
 	rows          []row
@@ -19,7 +22,7 @@ type cell struct {
 	rawValue string
 }
 
-func parseCSVIntoTable(queryResult string, qFields []qField) table {
+func parseCSVIntoTable(queryResult string, qFields []qField) (table, error) {
 	lines := strings.Split(strings.TrimSpace(queryResult), "\n")
 	titlesLine := lines[0]
 	valuesLines := lines[1:]
@@ -39,6 +42,10 @@ func parseCSVIntoTable(queryResult string, qFields []qField) table {
 		qFieldToCell := make(map[qField]cell, numCols)
 		cells := make([]cell, numCols)
 		rawValues := parseCSVLine(valuesLine)
+		if len(qFields) != len(rFields) {
+			return table{}, fmt.Errorf("query fields (%d) and returned fields (%d) have different sizes", len(qFields), len(rFields))
+		}
+
 		for colIndex, rawValue := range rawValues {
 			q := qFields[colIndex]
 			r := rFields[colIndex]
@@ -65,7 +72,7 @@ func parseCSVIntoTable(queryResult string, qFields []qField) table {
 		rows:          rows,
 		rFields:       rFields,
 		qFieldToCells: qFieldToCells,
-	}
+	}, nil
 }
 
 func parseCSVLine(line string) []string {

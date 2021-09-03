@@ -2,6 +2,7 @@ package exporter
 
 import (
 	"bytes"
+	"errors"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -13,6 +14,7 @@ const (
 	driverModelCurrentQField qField = "driver_model.current"
 	driverModelPendingQField qField = "driver_model.pending"
 	vBiosVersionQField       qField = "vbios_version"
+	driverVersionQField      qField = "driver_version"
 	qFieldsAuto                     = "AUTO"
 	DefaultQField                   = qFieldsAuto
 )
@@ -153,6 +155,9 @@ func ParseAutoQFields(nvidiaSmiCommand string) ([]qField, error) {
 
 	out := stdout.String()
 	fields := extractQFields(out)
+	if fields == nil {
+		return nil, errors.New("could not extract any query fields")
+	}
 	return fields, nil
 }
 

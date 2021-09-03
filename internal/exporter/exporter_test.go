@@ -157,7 +157,7 @@ end:
 		}
 	}
 
-	assert.Len(t, descStrs, 9)
+	assert.Len(t, descStrs, 10)
 	descs := strings.Join(descStrs, "\n")
 	assert.Contains(t, descs, "aaa_fan_speed")
 	assert.Contains(t, descs, "aaa_memory_used")
@@ -168,6 +168,7 @@ end:
 	assert.Contains(t, descs, "aaa_driver_model_current")
 	assert.Contains(t, descs, "aaa_driver_model_pending")
 	assert.Contains(t, descs, "aaa_vbios_version")
+	assert.Contains(t, descs, "aaa_driver_version")
 }
 
 func TestCollect(t *testing.T) {
@@ -182,7 +183,7 @@ func TestCollect(t *testing.T) {
 	logger := log.NewNopLogger()
 	exp, err := New("aaa", "bbb",
 		"uuid,name,driver_model.current,driver_model.pending,"+
-			"vbios_version,fan.speed,memory.used", logger)
+			"vbios_version,driver_version,fan.speed,memory.used", logger)
 	assert.NoError(t, err)
 
 	doneCh := make(chan bool)
@@ -207,7 +208,7 @@ end:
 
 	metricsJoined := strings.Join(metrics, "\n")
 
-	assert.Len(t, metrics, 7)
+	assert.Len(t, metrics, 9)
 	assert.Contains(t, metricsJoined, "aaa_gpu_info")
 	assert.Contains(t, metricsJoined, "aaa_name")
 	assert.Contains(t, metricsJoined, "aaa_fan_speed_ratio")
