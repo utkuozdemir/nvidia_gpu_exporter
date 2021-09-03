@@ -30,7 +30,7 @@ Follow the steps below:
 
 Sample steps for Linux 64-bit:
 ```bash
-$ VERSION=0.2.0
+$ VERSION=0.3.0
 $ wget https://github.com/utkuozdemir/nvidia_gpu_exporter/releases/download/v${VERSION}/nvidia_gpu_exporter_${VERSION}_linux_x86_64.tar.gz
 $ tar -xvzf nvidia_gpu_exporter_${VERSION}_linux_x86_64.tar.gz
 $ mv nvidia_gpu_exporter /usr/local/bin
@@ -93,7 +93,7 @@ docker run -d \
 -v /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1 \
 -v /usr/bin/nvidia-smi:/usr/bin/nvidia-smi \
 -p 9835:9835 \
-utkuozdemir/nvidia_gpu_exporter:0.2.0
+utkuozdemir/nvidia_gpu_exporter:0.3.0
 ```
 
 ### Running in Kubernetes
