@@ -618,15 +618,16 @@
           "values": false
         },
         "text": {},
-        "textMode": "value"
+        "textMode": "name"
       },
       "pluginVersion": "8.0.3",
       "targets": [
         {
           "exemplar": true,
-          "expr": "nvidia_smi_driver_version{uuid=\"$gpu\"}",
+          "expr": "nvidia_smi_gpu_info{uuid=\"$gpu\"}",
+          "instant": true,
           "interval": "",
-          "legendFormat": "",
+          "legendFormat": "{{driver_version}}",
           "refId": "A"
         }
       ],
