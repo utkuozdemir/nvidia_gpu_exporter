@@ -187,9 +187,9 @@ nvidia_smi_enforced_power_limit_watts{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa
 # HELP nvidia_smi_fan_speed_ratio fan.speed [%]
 # TYPE nvidia_smi_fan_speed_ratio gauge
 nvidia_smi_fan_speed_ratio{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 0.38
-# HELP nvidia_smi_gpu_info A metric with a constant '1' value labeled by gpu uuid, name, driver_model_current, driver_model_pending, vbios_version.
+# HELP nvidia_smi_gpu_info A metric with a constant '1' value labeled by gpu uuid, name, driver_model_current, driver_model_pending, vbios_version, driver_version.
 # TYPE nvidia_smi_gpu_info gauge
-nvidia_smi_gpu_info{driver_model_current="WDDM",driver_model_pending="WDDM",name="NVIDIA GeForce RTX 2080 SUPER",uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa",vbios_version="90.04.7a.40.73"} 1
+nvidia_smi_gpu_info{driver_model_current="WDDM",driver_model_pending="WDDM",driver_version="471.11",name="NVIDIA GeForce RTX 2080 SUPER",uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa",vbios_version="90.04.7a.40.73"} 1
 # HELP nvidia_smi_index index
 # TYPE nvidia_smi_index gauge
 nvidia_smi_index{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 0
