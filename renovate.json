@@ -1,7 +1,7 @@
 {
   "extends": [
     "config:base",
-    ":automergePatch",
+    ":automergeMinor",
     ":disableDependencyDashboard"
   ],
   "postUpdateOptions": [
@@ -18,7 +18,8 @@
       "matchPaths": [
         ".github/workflows/**"
       ],
-      "groupName": "github actions"
+      "groupName": "github actions",
+      "automerge": true
     }
   ],
   "regexManagers": [
