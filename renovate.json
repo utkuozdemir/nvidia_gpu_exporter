@@ -7,6 +7,9 @@
   "postUpdateOptions": [
     "gomodTidy"
   ],
+  "digest": {
+    "automerge": true
+  },
   "packageRules": [
     {
       "matchDatasources": [
