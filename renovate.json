@@ -1,15 +1,14 @@
 {
   "extends": [
     "config:base",
+    ":automergeBranch",
     ":automergeMinor",
+    ":automergeDigest",
     ":disableDependencyDashboard"
   ],
   "postUpdateOptions": [
     "gomodTidy"
   ],
-  "digest": {
-    "automerge": true
-  },
   "packageRules": [
     {
       "matchDatasources": [
@@ -18,11 +17,13 @@
       "groupName": "go packages"
     },
     {
+      "extends": [
+        ":automergeMajor"
+      ],
       "matchPaths": [
         ".github/workflows/**"
       ],
-      "groupName": "github actions",
-      "automerge": true
+      "groupName": "github actions"
     }
   ],
   "regexManagers": [
