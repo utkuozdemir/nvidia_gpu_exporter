@@ -46,10 +46,12 @@ jobs:
         with:
           # renovate: go
           go-version: 1.17.5
-      - name: Ensure gofmt
-        run: test -z "$(gofmt -s -d .)"
       - name: Ensure go.mod is already tidied
         run: go mod tidy && git diff --no-patch --exit-code
+      - name: Install gofumpt
+        run: go install mvdan.cc/gofumpt@v0.2.1
+      - name: Ensure code is properly formatted using gofumpt
+        run: test -z "$(gofumpt -s -d .)"
       - name: Run linters
         uses: golangci/golangci-lint-action@v2.5.2
         with:

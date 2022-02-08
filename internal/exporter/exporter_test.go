@@ -2,22 +2,21 @@ package exporter
 
 import (
 	_ "embed"
-	"github.com/go-kit/log"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/stretchr/testify/assert"
 	"os/exec"
 	"strings"
 	"testing"
+
+	"github.com/go-kit/log"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/stretchr/testify/assert"
 )
 
 const (
 	delta = 1e-9
 )
 
-var (
-	//go:embed _query-test.txt
-	queryTest string
-)
+//go:embed _query-test.txt
+var queryTest string
 
 func assertFloat(t *testing.T, expected, actual float64) bool {
 	return assert.InDelta(t, expected, actual, delta)
@@ -208,8 +207,9 @@ end:
 
 	metricsJoined := strings.Join(metrics, "\n")
 
-	assert.Len(t, metrics, 9)
+	assert.Len(t, metrics, 10)
 	assert.Contains(t, metricsJoined, "aaa_gpu_info")
+	assert.Contains(t, metricsJoined, "command_exit_code")
 	assert.Contains(t, metricsJoined, "aaa_name")
 	assert.Contains(t, metricsJoined, "aaa_fan_speed_ratio")
 	assert.Contains(t, metricsJoined, "aaa_memory_used_bytes")
@@ -240,6 +240,9 @@ end:
 		}
 	}
 
-	assert.Len(t, metrics, 1)
-	assert.Contains(t, metrics[0], "aaa_failed_scrapes_total")
+	assert.Len(t, metrics, 2)
+	metricsJoined := strings.Join(metrics, "\n")
+
+	assert.Contains(t, metricsJoined, "aaa_failed_scrapes_total")
+	assert.Contains(t, metricsJoined, "aaa_command_exit_code")
 }

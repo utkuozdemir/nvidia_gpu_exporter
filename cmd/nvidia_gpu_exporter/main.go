@@ -2,6 +2,9 @@ package main
 
 import (
 	"fmt"
+	"net/http"
+	"os"
+
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
@@ -13,8 +16,6 @@ import (
 	webflag "github.com/prometheus/exporter-toolkit/web/kingpinflag"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
 	"gopkg.in/alecthomas/kingpin.v2"
-	"net/http"
-	"os"
 )
 
 const (

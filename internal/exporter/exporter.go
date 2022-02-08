@@ -3,14 +3,15 @@ package exporter
 import (
 	"bytes"
 	"fmt"
-	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
-	"github.com/prometheus/client_golang/prometheus"
 	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // qField stands for query field - the field name before the query
@@ -48,6 +49,7 @@ type gpuExporter struct {
 	qFieldToMetricInfoMap map[qField]MetricInfo
 	nvidiaSmiCommand      string
 	failedScrapesTotal    prometheus.Counter
+	exitCode              prometheus.Gauge
 	gpuInfoDesc           *prometheus.Desc
 	logger                log.Logger
 }
@@ -59,7 +61,7 @@ func New(prefix string, nvidiaSmiCommand string, qFieldsRaw string, logger log.L
 	}
 
 	qFieldToMetricInfoMap := buildQFieldToMetricInfoMap(prefix, qFieldToRFieldMap)
-	//qFields := getKeys(qFieldToRFieldMap)
+	// qFields := getKeys(qFieldToRFieldMap)
 
 	infoLabels := getLabels(requiredFields)
 	e := gpuExporter{
@@ -72,6 +74,11 @@ func New(prefix string, nvidiaSmiCommand string, qFieldsRaw string, logger log.L
 			Namespace: prefix,
 			Name:      "failed_scrapes_total",
 			Help:      "Number of failed scrapes",
+		}),
+		exitCode: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: prefix,
+			Name:      "command_exit_code",
+			Help:      "Exit code of the last scrape command",
 		}),
 		gpuInfoDesc: prometheus.NewDesc(
 			prometheus.BuildFQName(prefix, "", "gpu_info"),
@@ -107,7 +114,7 @@ func buildQFieldToRFieldMap(logger log.Logger, qFieldsRaw string,
 		qFields = parsed
 	}
 
-	t, err := scrape(qFields, nvidiaSmiCommand)
+	_, t, err := scrape(qFields, nvidiaSmiCommand)
 	var rFields []rField
 	if err != nil {
 		_ = level.Warn(logger).Log("msg",
@@ -143,7 +150,9 @@ func (e *gpuExporter) Collect(ch chan<- prometheus.Metric) {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
 
-	t, err := scrape(e.qFields, e.nvidiaSmiCommand)
+	exitCode, t, err := scrape(e.qFields, e.nvidiaSmiCommand)
+	e.exitCode.Set(float64(exitCode))
+	ch <- e.exitCode
 	if err != nil {
 		_ = level.Error(e.logger).Log("error", err)
 		ch <- e.failedScrapesTotal
@@ -178,7 +187,7 @@ func (e *gpuExporter) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
-func scrape(qFields []qField, nvidiaSmiCommand string) (*table, error) {
+func scrape(qFields []qField, nvidiaSmiCommand string) (int, *table, error) {
 	qFieldsJoined := strings.Join(QFieldSliceToStringSlice(qFields), ",")
 
 	cmdAndArgs := strings.Fields(nvidiaSmiCommand)
@@ -193,15 +202,20 @@ func scrape(qFields []qField, nvidiaSmiCommand string) (*table, error) {
 
 	err := runCmd(cmd)
 	if err != nil {
-		return nil, fmt.Errorf("command failed. stderr: %s err: %w", stderr.String(), err)
+		exitCode := -1
+		if exitError, ok := err.(*exec.ExitError); ok {
+			exitCode = exitError.ExitCode()
+		}
+
+		return exitCode, nil, fmt.Errorf("command failed. stderr: %s err: %w", stderr.String(), err)
 	}
 
 	t, err := parseCSVIntoTable(strings.TrimSpace(stdout.String()), qFields)
 	if err != nil {
-		return nil, err
+		return -1, nil, err
 	}
 
-	return &t, nil
+	return 0, &t, nil
 }
 
 type MetricInfo struct {

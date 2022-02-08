@@ -2,9 +2,10 @@ package exporter
 
 import (
 	_ "embed"
-	"github.com/stretchr/testify/assert"
 	"os/exec"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 var (
