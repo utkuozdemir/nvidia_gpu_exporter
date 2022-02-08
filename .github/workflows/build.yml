@@ -51,7 +51,7 @@ jobs:
       - name: Install gofumpt
         run: go install mvdan.cc/gofumpt@v0.2.1
       - name: Ensure code is properly formatted using gofumpt
-        run: test -z "$(gofumpt -s -d .)"
+        run: test -z "$(gofumpt -d .)"
       - name: Run linters
         uses: golangci/golangci-lint-action@v2.5.2
         with:
