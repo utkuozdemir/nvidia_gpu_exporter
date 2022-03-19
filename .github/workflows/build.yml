@@ -65,7 +65,7 @@ jobs:
       - name: Run tests
         run: go-acc --output profile.cov ./... -- -v
       - name: Send coverage
-        uses: shogo82148/actions-goveralls@v1.5.1
+        uses: shogo82148/actions-goveralls@v1.6.0
         with:
           path-to-profile: profile.cov
           shallow: true
