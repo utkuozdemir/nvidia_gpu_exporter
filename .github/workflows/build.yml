@@ -61,7 +61,7 @@ jobs:
           args: --timeout=3m0s
       - name: Install go-acc
         # renovate: go-acc
-        run: go install github.com/ory/go-acc@v0.2.7
+        run: go install github.com/ory/go-acc@v0.2.8
       - name: Run tests
         run: go-acc --output profile.cov ./... -- -v
       - name: Send coverage
@@ -73,7 +73,7 @@ jobs:
         uses: goreleaser/goreleaser-action@v2.9.1
         with:
           # renovate: goreleaser
-          version: v1.6.3
+          version: v1.7.0
           args: release --snapshot --skip-publish --rm-dist
         env:
           PRIVATE_ACCESS_TOKEN: placeholder
