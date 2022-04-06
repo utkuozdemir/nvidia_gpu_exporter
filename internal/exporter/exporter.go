@@ -107,7 +107,7 @@ func buildQFieldToRFieldMap(logger log.Logger, qFieldsRaw string,
 		if err != nil {
 			_ = level.Warn(logger).Log("msg",
 				"Failed to auto-determine query field names, "+
-					"falling back to the built-in list")
+					"falling back to the built-in list", "error", err)
 			return getKeys(fallbackQFieldToRFieldMap), fallbackQFieldToRFieldMap, nil
 		}
 
@@ -207,7 +207,8 @@ func scrape(qFields []qField, nvidiaSmiCommand string) (int, *table, error) {
 			exitCode = exitError.ExitCode()
 		}
 
-		return exitCode, nil, fmt.Errorf("command failed. stderr: %s err: %w", stderr.String(), err)
+		return exitCode, nil, fmt.Errorf("%w: command failed. code: %d | command: %s | stdout: %s | stderr: %s",
+			err, exitCode, strings.Join(cmdAndArgs, " "), stdout.String(), stderr.String())
 	}
 
 	t, err := parseCSVIntoTable(strings.TrimSpace(stdout.String()), qFields)

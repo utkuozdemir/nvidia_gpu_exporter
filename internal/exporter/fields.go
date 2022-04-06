@@ -2,7 +2,7 @@ package exporter
 
 import (
 	"bytes"
-	"errors"
+	"fmt"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -147,17 +147,31 @@ func ParseAutoQFields(nvidiaSmiCommand string) ([]qField, error) {
 	cmd := exec.Command(cmdAndArgs[0], cmdAndArgs[1:]...)
 
 	var stdout bytes.Buffer
+	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
 	err := runCmd(cmd)
-	if err != nil {
-		return nil, err
+
+	outStr := stdout.String()
+	errStr := stdout.String()
+
+	exitCode := -1
+	if exitError, ok := err.(*exec.ExitError); ok {
+		exitCode = exitError.ExitCode()
 	}
 
-	out := stdout.String()
-	fields := extractQFields(out)
-	if fields == nil {
-		return nil, errors.New("could not extract any query fields")
+	if err != nil {
+		return nil, fmt.Errorf("%w: command failed. code: %d | command: %s | stdout: %s | stderr: %s", err,
+			exitCode, strings.Join(cmdAndArgs, " "), outStr, errStr)
 	}
+
+	fields := extractQFields(outStr)
+	if fields == nil {
+		return nil, fmt.Errorf("could not extract any query fields. code: %d | command: %s | stdout: %s | stderr: %s",
+			exitCode, strings.Join(cmdAndArgs, " "), outStr, errStr)
+	}
+
 	return fields, nil
 }
 
