@@ -54,13 +54,15 @@ func main() {
 	kingpin.Parse()
 
 	logger := promlog.New(promlogConfig)
-	e, err := exporter.New(exporter.DefaultPrefix, *nvidiaSmiCommand, *qFields, logger)
+
+	exp, err := exporter.New(exporter.DefaultPrefix, *nvidiaSmiCommand, *qFields, logger)
 	if err != nil {
 		_ = level.Error(logger).Log("msg", "Error on creating exporter", "err", err)
+
 		os.Exit(1)
 	}
 
-	prometheus.MustRegister(e)
+	prometheus.MustRegister(exp)
 	prometheus.MustRegister(version.NewCollector("nvidia_gpu_exporter"))
 
 	_ = level.Info(logger).Log("msg", "Listening on address", "address", listenAddress)
@@ -72,6 +74,7 @@ func main() {
 	srv := &http.Server{Addr: *listenAddress}
 	if err := web.ListenAndServe(srv, *webConfig, logger); err != nil {
 		_ = level.Error(logger).Log("msg", "Error starting HTTP server", "err", err)
+
 		os.Exit(1)
 	}
 }
@@ -89,8 +92,7 @@ func NewRootHandler(logger log.Logger, metricsPath string) *RootHandler {
 }
 
 func (r *RootHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
-	_, err := w.Write(r.response)
-	if err != nil {
+	if _, err := w.Write(r.response); err != nil {
 		_ = level.Error(r.logger).Log("msg", "Error writing redirect", "err", err)
 	}
 }

@@ -3,7 +3,7 @@ name: release
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
 jobs:
   release:
     runs-on: ubuntu-20.04
@@ -18,7 +18,7 @@ jobs:
         uses: actions/setup-go@v3.0.0
         with:
           # renovate: go
-          go-version: 1.17.5
+          go-version: 1.18
       - name: Login to DockerHub
         uses: docker/login-action@v1.14.1
         with:
