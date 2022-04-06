@@ -2,6 +2,7 @@ package exporter
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os/exec"
 	"regexp"
@@ -20,6 +21,8 @@ const (
 )
 
 var (
+	ErrNoQueryFields = errors.New("could not extract any query fields")
+
 	fieldRegex = regexp.MustCompile(`(?m)\n\s*\n^"([^"]+)"`)
 
 	fallbackQFieldToRFieldMap = map[qField]rField{
@@ -141,13 +144,15 @@ var (
 	}
 )
 
-func ParseAutoQFields(nvidiaSmiCommand string) ([]qField, error) {
+func parseAutoQFields(nvidiaSmiCommand string) ([]qField, error) {
 	cmdAndArgs := strings.Fields(nvidiaSmiCommand)
 	cmdAndArgs = append(cmdAndArgs, "--help-query-gpu")
-	cmd := exec.Command(cmdAndArgs[0], cmdAndArgs[1:]...)
+	cmd := exec.Command(cmdAndArgs[0], cmdAndArgs[1:]...) //nolint:gosec
 
 	var stdout bytes.Buffer
+
 	var stderr bytes.Buffer
+
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
@@ -157,7 +162,9 @@ func ParseAutoQFields(nvidiaSmiCommand string) ([]qField, error) {
 	errStr := stdout.String()
 
 	exitCode := -1
-	if exitError, ok := err.(*exec.ExitError); ok {
+
+	var exitError *exec.ExitError
+	if errors.As(err, &exitError) {
 		exitCode = exitError.ExitCode()
 	}
 
@@ -168,7 +175,7 @@ func ParseAutoQFields(nvidiaSmiCommand string) ([]qField, error) {
 
 	fields := extractQFields(outStr)
 	if fields == nil {
-		return nil, fmt.Errorf("could not extract any query fields. code: %d | command: %s | stdout: %s | stderr: %s",
+		return nil, fmt.Errorf("%w: code: %d | command: %s | stdout: %s | stderr: %s", ErrNoQueryFields,
 			exitCode, strings.Join(cmdAndArgs, " "), outStr, errStr)
 	}
 
@@ -178,10 +185,11 @@ func ParseAutoQFields(nvidiaSmiCommand string) ([]qField, error) {
 func extractQFields(text string) []qField {
 	found := fieldRegex.FindAllStringSubmatch(text, -1)
 
-	var fields []qField
-	for _, ss := range found {
-		fields = append(fields, qField(ss[1]))
+	fields := make([]qField, len(found))
+	for i, ss := range found {
+		fields[i] = qField(ss[1])
 	}
+
 	return fields
 }
 
@@ -190,6 +198,7 @@ func toQFieldSlice(ss []string) []qField {
 	for i, s := range ss {
 		r[i] = qField(s)
 	}
+
 	return r
 }
 
@@ -198,6 +207,7 @@ func toRFieldSlice(ss []string) []rField {
 	for i, s := range ss {
 		r[i] = rField(s)
 	}
+
 	return r
 }
 
@@ -206,5 +216,6 @@ func QFieldSliceToStringSlice(qs []qField) []string {
 	for i, q := range qs {
 		r[i] = string(q)
 	}
+
 	return r
 }

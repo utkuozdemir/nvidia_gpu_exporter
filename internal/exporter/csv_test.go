@@ -15,7 +15,10 @@ Some Dummy GPU, 12.34 W
 )
 
 func TestParseCsvIntoTable(t *testing.T) {
+	t.Parallel()
+
 	parsed, err := parseCSVIntoTable(testCsv, []qField{"name", "power.draw"})
+
 	assert.NoError(t, err)
 	assert.Len(t, parsed.rows, 2)
 	assert.Equal(t, []rField{"name", "power.draw [W]"}, parsed.rFields)

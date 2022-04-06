@@ -19,10 +19,14 @@ const (
 var queryTest string
 
 func assertFloat(t *testing.T, expected, actual float64) bool {
+	t.Helper()
+
 	return assert.InDelta(t, expected, actual, delta)
 }
 
 func TestTransformRawValueValidValues(t *testing.T) {
+	t.Parallel()
+
 	expectedConversions := map[string]float64{
 		"disabled":          0,
 		"enabled":           1,
@@ -46,6 +50,8 @@ func TestTransformRawValueValidValues(t *testing.T) {
 }
 
 func TestTransformRawValueInvalidValues(t *testing.T) {
+	t.Parallel()
+
 	rawValues := []string{
 		"aaaaa", "0X1234", "aa111aa111", "123.456.789",
 	}
@@ -57,7 +63,10 @@ func TestTransformRawValueInvalidValues(t *testing.T) {
 }
 
 func TestTransformRawMultiplier(t *testing.T) {
+	t.Parallel()
+
 	val, err := transformRawValue("11", 2)
+
 	assert.NoError(t, err)
 	assertFloat(t, 22, val)
 
@@ -71,69 +80,99 @@ func TestTransformRawMultiplier(t *testing.T) {
 }
 
 func TestBuildFQNameAndMultiplierRegular(t *testing.T) {
+	t.Parallel()
+
 	fqName, multiplier := buildFQNameAndMultiplier("prefix", "encoder.stats.sessionCount")
+
 	assertFloat(t, 1, multiplier)
 	assert.Equal(t, "prefix_encoder_stats_session_count", fqName)
 }
 
 func TestBuildFQNameAndMultiplierWatts(t *testing.T) {
+	t.Parallel()
+
 	fqName, multiplier := buildFQNameAndMultiplier("prefix", "power.draw [W]")
+
 	assertFloat(t, 1, multiplier)
 	assert.Equal(t, "prefix_power_draw_watts", fqName)
 }
 
 func TestBuildFQNameAndMultiplierMiB(t *testing.T) {
+	t.Parallel()
+
 	fqName, multiplier := buildFQNameAndMultiplier("prefix", "memory.total [MiB]")
+
 	assertFloat(t, 1048576, multiplier)
 	assert.Equal(t, "prefix_memory_total_bytes", fqName)
 }
 
 func TestBuildFQNameAndMultiplierMHZ(t *testing.T) {
+	t.Parallel()
+
 	fqName, multiplier := buildFQNameAndMultiplier("prefix", "clocks.current.graphics [MHz]")
+
 	assertFloat(t, 1000000, multiplier)
 	assert.Equal(t, "prefix_clocks_current_graphics_clock_hz", fqName)
 }
 
 func TestBuildFQNameAndMultiplierRatio(t *testing.T) {
+	t.Parallel()
+
 	fqName, multiplier := buildFQNameAndMultiplier("prefix", "fan.speed [%]")
+
 	assertFloat(t, 0.01, multiplier)
 	assert.Equal(t, "prefix_fan_speed_ratio", fqName)
 }
 
 func TestBuildFQNameAndMultiplierNoPrefix(t *testing.T) {
+	t.Parallel()
+
 	fqName, multiplier := buildFQNameAndMultiplier("", "encoder.stats.sessionCount")
+
 	assertFloat(t, 1, multiplier)
 	assert.Equal(t, "encoder_stats_session_count", fqName)
 }
 
 func TestBuildMetricInfo(t *testing.T) {
+	t.Parallel()
+
 	metricInfo := buildMetricInfo("prefix", "encoder.stats.sessionCount")
+
 	assertFloat(t, 1, metricInfo.valueMultiplier)
 	assert.Equal(t, prometheus.GaugeValue, metricInfo.mType)
 }
 
 func TestBuildQFieldToMetricInfoMap(t *testing.T) {
-	m := buildQFieldToMetricInfoMap("prefix", map[qField]rField{"aaa": "AAA", "bbb": "BBB"})
-	assert.Len(t, m, 2)
+	t.Parallel()
 
-	metricInfo1 := m["aaa"]
+	qFieldToMetricInfoMap := buildQFieldToMetricInfoMap("prefix", map[qField]rField{"aaa": "AAA", "bbb": "BBB"})
+
+	assert.Len(t, qFieldToMetricInfoMap, 2)
+
+	metricInfo1 := qFieldToMetricInfoMap["aaa"]
 	assertFloat(t, 1, metricInfo1.valueMultiplier)
 	assert.Equal(t, prometheus.GaugeValue, metricInfo1.mType)
 
-	metricInfo2 := m["bbb"]
+	metricInfo2 := qFieldToMetricInfoMap["bbb"]
 	assertFloat(t, 1, metricInfo2.valueMultiplier)
 	assert.Equal(t, prometheus.GaugeValue, metricInfo2.mType)
 }
 
 func TestNewUnknownField(t *testing.T) {
+	t.Parallel()
+
 	logger := log.NewNopLogger()
 	_, err := New("aaa", "bbb", "a", logger)
+
 	assert.Error(t, err)
 }
 
 func TestDescribe(t *testing.T) {
+	t.Parallel()
+
 	logger := log.NewNopLogger()
 	exp, err := New("aaa", "bbb", "fan.speed,memory.used", logger)
+
 	assert.NoError(t, err)
 
 	doneCh := make(chan bool)
@@ -171,11 +210,14 @@ end:
 }
 
 func TestCollect(t *testing.T) {
+	t.Parallel()
+
 	runCmdOriginal := runCmd
 	defer func() { runCmd = runCmdOriginal }()
 
 	runCmd = func(cmd *exec.Cmd) error {
 		_, _ = cmd.Stdout.Write([]byte(queryTest))
+
 		return nil
 	}
 
@@ -216,8 +258,11 @@ end:
 }
 
 func TestCollectError(t *testing.T) {
+	t.Parallel()
+
 	logger := log.NewNopLogger()
 	exp, err := New("aaa", "bbb", "fan.speed,memory.used", logger)
+
 	assert.NoError(t, err)
 
 	doneCh := make(chan bool)

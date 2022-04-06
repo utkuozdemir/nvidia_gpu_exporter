@@ -22,6 +22,8 @@ type cell struct {
 	rawValue string
 }
 
+var ErrFieldCountMismatch = fmt.Errorf("field count mismatch")
+
 func parseCSVIntoTable(queryResult string, qFields []qField) (table, error) {
 	lines := strings.Split(strings.TrimSpace(queryResult), "\n")
 	titlesLine := lines[0]
@@ -42,30 +44,31 @@ func parseCSVIntoTable(queryResult string, qFields []qField) (table, error) {
 		qFieldToCell := make(map[qField]cell, numCols)
 		cells := make([]cell, numCols)
 		rawValues := parseCSVLine(valuesLine)
+
 		if len(qFields) != len(rFields) {
-			return table{}, fmt.Errorf("query fields (%d) and returned fields (%d) have different sizes", len(qFields), len(rFields))
+			return table{}, fmt.Errorf("%w: query fields: %d, returned fields: %d",
+				ErrFieldCountMismatch, len(qFields), len(rFields))
 		}
 
 		for colIndex, rawValue := range rawValues {
-			q := qFields[colIndex]
-			r := rFields[colIndex]
-			gm := cell{
-				qField:   q,
-				rField:   r,
+			currentQField := qFields[colIndex]
+			currentRField := rFields[colIndex]
+			tableCell := cell{
+				qField:   currentQField,
+				rField:   currentRField,
 				rawValue: rawValue,
 			}
-			qFieldToCell[q] = gm
-			cells[colIndex] = gm
-			qFieldToCells[q][rowIndex] = gm
+			qFieldToCell[currentQField] = tableCell
+			cells[colIndex] = tableCell
+			qFieldToCells[currentQField][rowIndex] = tableCell
 		}
 
-		gmc := row{
+		tableRow := row{
 			qFieldToCells: qFieldToCell,
 			cells:         cells,
 		}
 
-		rows[rowIndex] = gmc
-
+		rows[rowIndex] = tableRow
 	}
 
 	return table{
@@ -78,8 +81,10 @@ func parseCSVIntoTable(queryResult string, qFields []qField) (table, error) {
 func parseCSVLine(line string) []string {
 	values := strings.Split(line, ",")
 	result := make([]string, len(values))
+
 	for i, field := range values {
 		result[i] = strings.TrimSpace(field)
 	}
+
 	return result
 }
