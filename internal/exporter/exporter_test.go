@@ -18,10 +18,10 @@ const (
 //go:embed _query-test.txt
 var queryTest string
 
-func assertFloat(t *testing.T, expected, actual float64) bool {
+func assertFloat(t *testing.T, expected, actual float64) {
 	t.Helper()
 
-	return assert.InDelta(t, expected, actual, delta)
+	assert.InDelta(t, expected, actual, delta)
 }
 
 func TestTransformRawValueValidValues(t *testing.T) {
