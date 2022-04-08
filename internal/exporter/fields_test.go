@@ -63,19 +63,16 @@ func TestExtractQFields(t *testing.T) {
 func TestParseAutoQFields(t *testing.T) {
 	t.Parallel()
 
-	runCmdOriginal := runCmd
-	defer func() { runCmd = runCmdOriginal }()
-
 	var capturedCmd *exec.Cmd
 
-	runCmd = func(cmd *exec.Cmd) error {
+	command := func(cmd *exec.Cmd) error {
 		capturedCmd = cmd
 		_, _ = cmd.Stdout.Write([]byte(fieldsTest))
 
 		return nil
 	}
 
-	fields, err := parseAutoQFields("nvidia-smi")
+	fields, err := parseAutoQFields("nvidia-smi", command)
 
 	assert.Len(t, capturedCmd.Args, 2)
 	assert.Equal(t, capturedCmd.Args[0], "nvidia-smi")

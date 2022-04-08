@@ -144,7 +144,7 @@ var (
 	}
 )
 
-func parseAutoQFields(nvidiaSmiCommand string) ([]qField, error) {
+func parseAutoQFields(nvidiaSmiCommand string, command runCmd) ([]qField, error) {
 	cmdAndArgs := strings.Fields(nvidiaSmiCommand)
 	cmdAndArgs = append(cmdAndArgs, "--help-query-gpu")
 	cmd := exec.Command(cmdAndArgs[0], cmdAndArgs[1:]...) //nolint:gosec
@@ -156,7 +156,7 @@ func parseAutoQFields(nvidiaSmiCommand string) ([]qField, error) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	err := runCmd(cmd)
+	err := command(cmd)
 
 	outStr := stdout.String()
 	errStr := stdout.String()

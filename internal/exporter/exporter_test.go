@@ -212,19 +212,17 @@ end:
 func TestCollect(t *testing.T) {
 	t.Parallel()
 
-	runCmdOriginal := runCmd
-	defer func() { runCmd = runCmdOriginal }()
+	logger := log.NewNopLogger()
+	exp, err := New("aaa", "bbb",
+		"uuid,name,driver_model.current,driver_model.pending,"+
+			"vbios_version,driver_version,fan.speed,memory.used", logger)
 
-	runCmd = func(cmd *exec.Cmd) error {
+	exp.command = func(cmd *exec.Cmd) error {
 		_, _ = cmd.Stdout.Write([]byte(queryTest))
 
 		return nil
 	}
 
-	logger := log.NewNopLogger()
-	exp, err := New("aaa", "bbb",
-		"uuid,name,driver_model.current,driver_model.pending,"+
-			"vbios_version,driver_version,fan.speed,memory.used", logger)
 	assert.NoError(t, err)
 
 	doneCh := make(chan bool)

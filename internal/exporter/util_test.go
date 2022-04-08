@@ -47,7 +47,7 @@ func TestParseQueryFields(t *testing.T) {
 
 	nvidiaSmiCommand := "nvidia-smi"
 
-	qFields, err := parseAutoQFields(nvidiaSmiCommand)
+	qFields, err := parseAutoQFields(nvidiaSmiCommand, nil)
 	if err != nil {
 		fmt.Printf("error: %v\n", err)
 		os.Exit(1)

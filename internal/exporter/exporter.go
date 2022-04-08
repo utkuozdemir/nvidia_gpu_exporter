@@ -21,6 +21,8 @@ type qField string
 // rField stands for returned field - the field name as returned by the nvidia-smi.
 type rField string
 
+type runCmd func(cmd *exec.Cmd) error
+
 const (
 	DefaultPrefix           = "nvidia_smi"
 	DefaultNvidiaSmiCommand = "nvidia-smi"
@@ -43,7 +45,7 @@ var (
 		{qField: driverVersionQField, label: "driver_version"},
 	}
 
-	runCmd = func(cmd *exec.Cmd) error {
+	defaultRunCmd = func(cmd *exec.Cmd) error {
 		err := cmd.Run()
 		if err != nil {
 			return fmt.Errorf("error running command: %w", err)
@@ -65,10 +67,11 @@ type GPUExporter struct {
 	exitCode              prometheus.Gauge
 	gpuInfoDesc           *prometheus.Desc
 	logger                log.Logger
+	command               runCmd
 }
 
 func New(prefix string, nvidiaSmiCommand string, qFieldsRaw string, logger log.Logger) (*GPUExporter, error) {
-	qFieldsOrdered, qFieldToRFieldMap, err := buildQFieldToRFieldMap(logger, qFieldsRaw, nvidiaSmiCommand)
+	qFieldsOrdered, qFieldToRFieldMap, err := buildQFieldToRFieldMap(logger, qFieldsRaw, nvidiaSmiCommand, defaultRunCmd)
 	if err != nil {
 		return nil, err
 	}
@@ -98,13 +101,14 @@ func New(prefix string, nvidiaSmiCommand string, qFieldsRaw string, logger log.L
 				strings.Join(infoLabels, ", ")),
 			infoLabels,
 			nil),
+		command: defaultRunCmd,
 	}
 
 	return &exporter, nil
 }
 
 func buildQFieldToRFieldMap(logger log.Logger, qFieldsRaw string,
-	nvidiaSmiCommand string,
+	nvidiaSmiCommand string, command runCmd,
 ) ([]qField, map[qField]rField, error) {
 	qFieldsSeparated := strings.Split(qFieldsRaw, ",")
 
@@ -116,7 +120,7 @@ func buildQFieldToRFieldMap(logger log.Logger, qFieldsRaw string,
 	qFields = removeDuplicateQFields(qFields)
 
 	if len(qFieldsSeparated) == 1 && qFieldsSeparated[0] == qFieldsAuto {
-		parsed, err := parseAutoQFields(nvidiaSmiCommand)
+		parsed, err := parseAutoQFields(nvidiaSmiCommand, command)
 		if err != nil {
 			_ = level.Warn(logger).Log("msg",
 				"Failed to auto-determine query field names, "+
@@ -128,7 +132,7 @@ func buildQFieldToRFieldMap(logger log.Logger, qFieldsRaw string,
 		qFields = parsed
 	}
 
-	_, resultTable, err := scrape(qFields, nvidiaSmiCommand)
+	_, resultTable, err := scrape(qFields, nvidiaSmiCommand, command)
 
 	var rFields []rField
 
@@ -167,7 +171,7 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
 
-	exitCode, currentTable, err := scrape(e.qFields, e.nvidiaSmiCommand)
+	exitCode, currentTable, err := scrape(e.qFields, e.nvidiaSmiCommand, e.command)
 	e.exitCode.Set(float64(exitCode))
 	metricCh <- e.exitCode
 
@@ -208,7 +212,7 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 	}
 }
 
-func scrape(qFields []qField, nvidiaSmiCommand string) (int, *table, error) {
+func scrape(qFields []qField, nvidiaSmiCommand string, command runCmd) (int, *table, error) {
 	qFieldsJoined := strings.Join(QFieldSliceToStringSlice(qFields), ",")
 
 	cmdAndArgs := strings.Fields(nvidiaSmiCommand)
@@ -223,7 +227,7 @@ func scrape(qFields []qField, nvidiaSmiCommand string) (int, *table, error) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	err := runCmd(cmd)
+	err := command(cmd)
 	if err != nil {
 		exitCode := -1
 
