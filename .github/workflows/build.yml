@@ -42,10 +42,10 @@ jobs:
       - name: Ensure go.mod is already tidied
         run: go mod tidy && git diff --no-patch --exit-code
       - name: Run linters
-        uses: golangci/golangci-lint-action@v3.1.0
+        uses: golangci/golangci-lint-action@v3.2.0
         with:
           # renovate: golangci-lint
-          version: v1.45.2
+          version: v1.46.0
           args: --timeout=3m0s
       - name: Install go-acc
         # renovate: go-acc
