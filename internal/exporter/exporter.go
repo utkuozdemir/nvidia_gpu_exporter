@@ -13,6 +13,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
+	"golang.org/x/exp/maps"
 )
 
 // qField stands for query field - the field name before the query.
@@ -34,7 +35,7 @@ var (
 	ErrUnexpectedQueryField = errors.New("unexpected query field")
 	ErrParseNumber          = errors.New("could not parse number from value")
 
-	numericRegex = regexp.MustCompile("[+-]?([0-9]*[.])?[0-9]+")
+	numericRegex = regexp.MustCompile(`[+-]?(\d*[.])?\d+`)
 
 	requiredFields = []requiredField{
 		{qField: uuidQField, label: "uuid"},
@@ -117,7 +118,7 @@ func buildQFieldToRFieldMap(logger log.Logger, qFieldsRaw string,
 		qFields = append(qFields, reqField.qField)
 	}
 
-	qFields = removeDuplicateQFields(qFields)
+	qFields = removeDuplicates(qFields)
 
 	if len(qFieldsSeparated) == 1 && qFieldsSeparated[0] == qFieldsAuto {
 		parsed, err := parseAutoQFields(nvidiaSmiCommand, command)
@@ -126,7 +127,7 @@ func buildQFieldToRFieldMap(logger log.Logger, qFieldsRaw string,
 				"Failed to auto-determine query field names, "+
 					"falling back to the built-in list", "error", err)
 
-			return getKeys(fallbackQFieldToRFieldMap), fallbackQFieldToRFieldMap, nil
+			return maps.Keys(fallbackQFieldToRFieldMap), fallbackQFieldToRFieldMap, nil
 		}
 
 		qFields = parsed
@@ -212,7 +213,7 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 	}
 }
 
-func scrape(qFields []qField, nvidiaSmiCommand string, command runCmd) (int, *table, error) {
+func scrape(qFields []qField, nvidiaSmiCommand string, command runCmd) (int, *table[string], error) {
 	qFieldsJoined := strings.Join(QFieldSliceToStringSlice(qFields), ",")
 
 	cmdAndArgs := strings.Fields(nvidiaSmiCommand)
@@ -341,19 +342,6 @@ func buildFQNameAndMultiplier(prefix string, rField rField) (string, float64) {
 	return fqName, multiplier
 }
 
-func getKeys(m map[qField]rField) []qField {
-	qFields := make([]qField, len(m))
-
-	i := 0
-
-	for key := range m {
-		qFields[i] = key
-		i++
-	}
-
-	return qFields
-}
-
 func getFallbackValues(qFields []qField) ([]rField, error) {
 	rFields := make([]rField, len(qFields))
 
@@ -386,18 +374,18 @@ type requiredField struct {
 	label  string
 }
 
-func removeDuplicateQFields(qFields []qField) []qField {
-	qFieldMap := make(map[qField]struct{})
+func removeDuplicates[T comparable](qFields []T) []T {
+	valMap := make(map[T]struct{})
 
-	var uniqueQFields []qField
+	var uniques []T
 
 	for _, field := range qFields {
-		_, exists := qFieldMap[field]
+		_, exists := valMap[field]
 		if !exists {
-			uniqueQFields = append(uniqueQFields, field)
-			qFieldMap[field] = struct{}{}
+			uniques = append(uniques, field)
+			valMap[field] = struct{}{}
 		}
 	}
 
-	return uniqueQFields
+	return uniques
 }
