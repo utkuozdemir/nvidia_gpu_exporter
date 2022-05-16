@@ -51,7 +51,7 @@ jobs:
         # renovate: depName=kyoh86/richgo
         run: go install github.com/kyoh86/richgo@v0.3.10
       - name: Run tests
-        run: richgo test -race -coverpkg=./... -coverprofile=profile.cov -covermode=count -timeout 20m -v ./...
+        run: richgo test -race -coverpkg=./... -coverprofile=profile.cov -covermode=atomic -timeout 20m -v ./...
       - name: Send coverage
         uses: shogo82148/actions-goveralls@v1.6.0
         with:
