@@ -44,14 +44,14 @@ jobs:
       - name: Run linters
         uses: golangci/golangci-lint-action@v3.2.0
         with:
-          # renovate: golangci-lint
+          # renovate: depName=golangci/golangci-lint
           version: v1.46.2
           args: --timeout=3m0s
-      - name: Install go-acc
-        # renovate: go-acc
-        run: go install github.com/ory/go-acc@v0.2.8
+      - name: Install richgo
+        # renovate: depName=kyoh86/richgo
+        run: go install github.com/kyoh86/richgo@v0.3.10
       - name: Run tests
-        run: go-acc --output profile.cov ./... -- -v
+        run: richgo test -race -coverpkg=./... -coverprofile=profile.cov -covermode=count -timeout 20m -v ./...
       - name: Send coverage
         uses: shogo82148/actions-goveralls@v1.6.0
         with:
@@ -60,7 +60,7 @@ jobs:
       - name: Build with Goreleaser
         uses: goreleaser/goreleaser-action@v3.0.0
         with:
-          # renovate: goreleaser
+          # renovate: depName=goreleaser/goreleaser
           version: v1.9.2
           args: release --snapshot --skip-publish --rm-dist
         env:
