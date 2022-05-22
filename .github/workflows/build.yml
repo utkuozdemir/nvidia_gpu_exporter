@@ -58,7 +58,7 @@ jobs:
           path-to-profile: profile.cov
           shallow: true
       - name: Build with Goreleaser
-        uses: goreleaser/goreleaser-action@v2.9.1
+        uses: goreleaser/goreleaser-action@v3.0.0
         with:
           # renovate: goreleaser
           version: v1.9.1
