@@ -18,7 +18,7 @@ jobs:
         uses: actions/setup-go@v3.2.0
         with:
           # renovate: go
-          go-version: 1.18
+          go-version: 1.18.2
       - name: Login to DockerHub
         uses: docker/login-action@v2.0.0
         with:
@@ -27,7 +27,7 @@ jobs:
       - name: GoReleaser
         uses: goreleaser/goreleaser-action@v3.0.0
         with:
-          # renovate: goreleaser
+          # renovate: depName=goreleaser/goreleaser
           version: v1.9.2
           args: release --rm-dist
         env:
