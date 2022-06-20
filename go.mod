@@ -8,7 +8,7 @@ require (
 	github.com/prometheus/client_golang v1.12.2
 	github.com/prometheus/common v0.35.0
 	github.com/prometheus/exporter-toolkit v0.7.1
-	github.com/stretchr/testify v1.7.3
+	github.com/stretchr/testify v1.7.4
 	golang.org/x/exp v0.0.0-20220613132600-b0d781184e0d
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 )
