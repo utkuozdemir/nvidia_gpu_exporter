@@ -6,9 +6,9 @@ go 1.18
 require (
 	github.com/go-kit/log v0.2.1
 	github.com/prometheus/client_golang v1.12.2
-	github.com/prometheus/common v0.34.0
+	github.com/prometheus/common v0.35.0
 	github.com/prometheus/exporter-toolkit v0.7.1
-	github.com/stretchr/testify v1.7.2
+	github.com/stretchr/testify v1.7.3
 	golang.org/x/exp v0.0.0-20220613132600-b0d781184e0d
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 )
