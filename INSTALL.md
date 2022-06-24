@@ -175,3 +175,4 @@ Extending the Docker entrypoint with:
 
 This reduces overall complexity, inherits the packaged drivers & nvidia-smi, and most importantly leverages the same GPU resource request as the deployment/GPU you are trying to monitor.
 
+**It is recommended to add logic to only start the `nvidia_gpu_exporter` if an Nvidia GPU is detected.**
