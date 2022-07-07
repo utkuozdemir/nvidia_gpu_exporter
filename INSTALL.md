@@ -5,7 +5,7 @@ There are many different installation methods for different use cases.
 ### All-in-One Windows Installation
 
 If you use Windows and not familiar with the tools like Prometheus/Grafana,
-you can simply use the PowerShell installation script to get the Exporter, 
+you can simply use the PowerShell installation script to get the Exporter,
 Prometheus and Grafana installed on the same machine.
 
 Follow the steps below:
@@ -107,5 +107,72 @@ The chart was tested on the following configuration:
 - Nvidia GeForce RTX 2080 Super
 - Nvidia Driver version `465.27`
 
-**Note:** I didn't have chance to test it on an enterprise cluster with GPU support.
-If you have access to one and give the exporter a try and share the results, I would appreciate it greatly.
+#### Running on Azure Kubernetes (AKS)
+- NCasT4_v3 series VM node
+- Nvidia Tesla T4 GPU
+- Nvidia Driver version `470.57.02`
+- Ubuntu `18.04` node image
+
+By default, GPU resource allocations must be whole numbers. Unlike CPU and memory allocations, GPUs cannot be subdivided into smaller increments.
+
+**Multi Instance GPU (MIG) configurations are not in scope of these notes.**
+
+**The GPU allocation limitations apply to all instances of Kubernetes, regardless of vendor.**
+
+```yaml
+limits:
+  memory: 1Gi
+  cpu: 1000m
+  nvidia.com/gpu: "1"
+```
+Unless the node has multiple GPUs, only a single GPU enabled deployment can run per node, assuming the node has a single GPU. This means that the `nvidia_gpu_exporter` cannot be run as a separate deployment or as a sidecar because it will be unable to schedule the GPU.
+
+##### Driver Installation
+This is a particularly vague area in Nvidia's fragmented documentation and while there are several articles online outlining Nvidia driver installation on Ubuntu and other distros, there is little that explains how this works in managed Kubernetes.
+
+Containerized setups require:
+- Nvidia GPU drivers for the specific Linux distribution
+- Nvidia Container Toolkit
+
+In AKS this manifests as:
+- The AKS node Ubuntu image already packages the GPU drivers, [here](https://github.com/Azure/AKS/blob/master/vhd-notes/aks-ubuntu/AKSUbuntu-1804/2022.03.03.txt).
+- The [Nvidia Device Plugin](https://docs.microsoft.com/en-us/azure/aks/gpu-cluster#manually-install-the-nvidia-device-plugin) exposes the GPU to containers requesting GPU resources.
+
+Testing locally and within several VMs on Azure confirms that the drivers are packaged with the VM image and do not need to be installed separately.
+
+For example running a Docker image locally with no GPU drivers using `docker exec -ti` confirms no drivers present in `/usr/lib/x86_64-linux-gnu`.
+
+Running the same image on an AKS GPU node reveals the following GPU driver files, confirming the driver injection using node OS image and Nvidia Driver Plugin.
+```bash
+libnvidia-allocator.so.1 -> libnvidia-allocator.so.470.57.02
+libnvidia-allocator.so.470.57.02
+libnvidia-cfg.so.1 -> libnvidia-cfg.so.470.57.02
+libnvidia-cfg.so.470.57.02
+libnvidia-compiler.so.470.57.02
+libnvidia-ml.so.1 -> libnvidia-ml.so.470.57.02
+libnvidia-ml.so.470.57.02
+libnvidia-opencl.so.1 -> libnvidia-opencl.so.470.57.02
+libnvidia-opencl.so.470.57.02
+libnvidia-ptxjitcompiler.so.1 -> libnvidia-ptxjitcompiler.so.470.57.02
+libnvidia-ptxjitcompiler.so.470.57.02
+```
+
+Additionally, we can now see the following in `/usr/bin`
+```bash
+nvidia-cuda-mps-control
+nvidia-cuda-mps-server
+nvidia-debugdump
+nvidia-persistenced
+nvidia-smi
+```
+
+##### Packaging and Deployment
+Taking the above into account, we can embed the `/usr/local/bin/nvidia_gpu_exporter` into a GPU enabled deployment through a multi-stage Docker build using the `utkuozdemir/nvidia_gpu_exporter:0.5.0` as the base image.
+
+Extending the Docker entrypoint with:
+
+`/usr/local/bin/nvidia_gpu_exporter --web.listen-address=:9835 --web.telemetry-path=/metrics --nvidia-smi-command=nvidia-smi --log.level=info --query-field-names=AUTO --log.format=logfmt &`
+
+This reduces overall complexity, inherits the packaged drivers & nvidia-smi, and most importantly leverages the same GPU resource request as the deployment/GPU you are trying to monitor.
+
+**It is recommended to add logic to only start the `nvidia_gpu_exporter` if an Nvidia GPU is detected.**
