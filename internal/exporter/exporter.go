@@ -37,6 +37,7 @@ var (
 
 	numericRegex = regexp.MustCompile(`[+-]?(\d*[.])?\d+`)
 
+	//nolint:gochecknoglobals
 	requiredFields = []requiredField{
 		{qField: uuidQField, label: "uuid"},
 		{qField: nameQField, label: "name"},
@@ -46,6 +47,7 @@ var (
 		{qField: driverVersionQField, label: "driver_version"},
 	}
 
+	//nolint:gochecknoglobals
 	defaultRunCmd = func(cmd *exec.Cmd) error {
 		err := cmd.Run()
 		if err != nil {

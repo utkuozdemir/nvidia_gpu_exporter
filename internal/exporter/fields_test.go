@@ -10,7 +10,9 @@ import (
 
 var (
 	//go:embed _fields-test.txt
-	fieldsTest      string
+	fieldsTest string
+
+	//nolint:gochecknoglobals
 	expectedQFields = []qField{
 		"timestamp", "driver_version", "count", "name", "serial", "uuid", "pci.bus_id",
 		"pci.domain", "pci.bus", "pci.device", "pci.device_id", "pci.sub_device_id", "pcie.link.gen.current",

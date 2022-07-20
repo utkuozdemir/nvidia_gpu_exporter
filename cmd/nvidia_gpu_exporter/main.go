@@ -14,8 +14,9 @@ import (
 	"github.com/prometheus/common/version"
 	"github.com/prometheus/exporter-toolkit/web"
 	webflag "github.com/prometheus/exporter-toolkit/web/kingpinflag"
-	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
 	"gopkg.in/alecthomas/kingpin.v2"
+
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
 )
 
 const (

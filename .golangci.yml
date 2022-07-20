@@ -1,6 +1,7 @@
 # https://golangci-lint.run/usage/linters/
 linters:
   enable:
+    - asasalint
     - asciicheck
     - bidichk
     - containedctx
@@ -18,7 +19,7 @@ linters:
     - forcetypeassert
     - funlen
     - gci
-#    - gochecknoglobals
+    - gochecknoglobals
     - gochecknoinits
     - gocognit
     - goconst
@@ -29,10 +30,9 @@ linters:
     - goerr113
     - gofumpt
     - goheader
-#    - goimports # inconsistent with gci
+    - goimports
     - gomnd
     - gomoddirectives
-#    - gomodguard # no need
     - goprintffuncname
     - gosec
     - grouper
@@ -50,12 +50,15 @@ linters:
     - nlreturn
     - noctx
     - nolintlint
+    - nonamedreturns
+    - nosnakecase
+    - nosprintfhostport
     - paralleltest
     - prealloc
     - predeclared
+    - promlinter
     - revive
     - rowserrcheck
-#    - sqlclosecheck
     - stylecheck
     - tagliatelle
     - tenv
@@ -71,5 +74,9 @@ linters:
     - wsl
 
 linters-settings:
+  gci:
+    local-prefixes: github.com/utkuozdemir/nvidia_gpu_exporter
+  goimports:
+    local-prefixes: github.com/utkuozdemir/nvidia_gpu_exporter
   goconst:
     ignore-tests: true
