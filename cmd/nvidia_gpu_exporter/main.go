@@ -29,12 +29,25 @@ const (
 `
 )
 
+//nolint: funlen
 func main() {
 	var (
 		webConfig     = webflag.AddFlags(kingpin.CommandLine)
 		listenAddress = kingpin.Flag("web.listen-address",
 			"Address to listen on for web interface and telemetry.").
 			Default(":9835").String()
+		readTimeout = kingpin.Flag("web.read-timeout",
+			"Maximum duration before timing out read of the request.").
+			Default("10s").Duration()
+		readHeaderTimeout = kingpin.Flag("web.read-header-timeout",
+			"Maximum duration before timing out read of the request headers.").
+			Default("10s").Duration()
+		writeTimeout = kingpin.Flag("web.write-timeout",
+			"Maximum duration before timing out write of the response.").
+			Default("15s").Duration()
+		idleTimeout = kingpin.Flag("web.idle-timeout",
+			"Maximum amount of time to wait for the next request when keep-alive is enabled.").
+			Default("60s").Duration()
 		metricsPath = kingpin.Flag("web.telemetry-path", "Path under which to expose metrics.").
 				Default("/metrics").String()
 		nvidiaSmiCommand = kingpin.Flag("nvidia-smi-command",
@@ -71,7 +84,14 @@ func main() {
 	http.Handle("/", rootHandler)
 	http.Handle(*metricsPath, promhttp.Handler())
 
-	srv := &http.Server{Addr: *listenAddress}
+	srv := &http.Server{
+		Addr:              *listenAddress,
+		ReadHeaderTimeout: *readHeaderTimeout,
+		ReadTimeout:       *readTimeout,
+		WriteTimeout:      *writeTimeout,
+		IdleTimeout:       *idleTimeout,
+	}
+
 	if err := web.ListenAndServe(srv, *webConfig, logger); err != nil {
 		_ = level.Error(logger).Log("msg", "Error starting HTTP server", "err", err)
 
