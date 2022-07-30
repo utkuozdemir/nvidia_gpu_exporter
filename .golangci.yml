@@ -1,77 +1,17 @@
 # https://golangci-lint.run/usage/linters/
 linters:
-  enable:
-    - asasalint
-    - asciicheck
-    - bidichk
-    - containedctx
-    - contextcheck
-    - cyclop
-    - decorder
-    - dogsled
-    - dupl
-    - durationcheck
-    - errname
-    - errorlint
-    - exhaustive
-    - exportloopref
-    - forbidigo
-    - forcetypeassert
-    - funlen
-    - gci
-    - gochecknoglobals
-    - gochecknoinits
-    - gocognit
-    - goconst
-    - gocritic
-    - gocyclo
-    - godot
-    - godox
-    - goerr113
-    - gofumpt
-    - goheader
-    - goimports
-    - gomnd
-    - gomoddirectives
-    - goprintffuncname
-    - gosec
-    - grouper
-    - ifshort
-    - importas
-    - ireturn
-    - lll
-    - maintidx
-    - makezero
-    - misspell
-    - nakedret
-    - nestif
-    - nilerr
-    - nilnil
-    - nlreturn
-    - noctx
-    - nolintlint
-    - nonamedreturns
-    - nosnakecase
-    - nosprintfhostport
-    - paralleltest
-    - prealloc
-    - predeclared
-    - promlinter
-    - revive
-    - rowserrcheck
-    - stylecheck
-    - tagliatelle
-    - tenv
-#    - testpackage # TODO: visit
-    - thelper
-    - tparallel
-    - unconvert
-    - unparam
-    - varnamelen
-    - wastedassign
-    - whitespace
-    - wrapcheck
-    - wsl
+  enable-all: true
+  disable:
+    # deprecated:
+    - exhaustivestruct
+    - golint
+    - interfacer
+    - maligned
+    - scopelint
+    # not useful
+    - exhaustruct
+    # TODO: consider enabling:
+    - testpackage
 
 linters-settings:
   gci:
