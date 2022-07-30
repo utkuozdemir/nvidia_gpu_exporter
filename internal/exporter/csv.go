@@ -5,26 +5,26 @@ import (
 	"strings"
 )
 
-type table[T any] struct {
-	rows          []row[T]
-	rFields       []rField
-	qFieldToCells map[qField][]cell[T]
+type Table[T any] struct {
+	Rows          []Row[T]
+	RFields       []RField
+	QFieldToCells map[QField][]Cell[T]
 }
 
-type row[T any] struct {
-	qFieldToCells map[qField]cell[T]
-	cells         []cell[T]
+type Row[T any] struct {
+	QFieldToCells map[QField]Cell[T]
+	Cells         []Cell[T]
 }
 
-type cell[T any] struct {
-	qField   qField
-	rField   rField
-	rawValue T
+type Cell[T any] struct {
+	QField   QField
+	RField   RField
+	RawValue T
 }
 
 var ErrFieldCountMismatch = fmt.Errorf("field count mismatch")
 
-func parseCSVIntoTable(queryResult string, qFields []qField) (table[string], error) {
+func ParseCSVIntoTable(queryResult string, qFields []QField) (Table[string], error) {
 	lines := strings.Split(strings.TrimSpace(queryResult), "\n")
 	titlesLine := lines[0]
 	valuesLines := lines[1:]
@@ -33,48 +33,48 @@ func parseCSVIntoTable(queryResult string, qFields []qField) (table[string], err
 	numCols := len(qFields)
 	numRows := len(valuesLines)
 
-	rows := make([]row[string], numRows)
+	rows := make([]Row[string], numRows)
 
-	qFieldToCells := make(map[qField][]cell[string])
+	qFieldToCells := make(map[QField][]Cell[string])
 	for _, q := range qFields {
-		qFieldToCells[q] = make([]cell[string], numRows)
+		qFieldToCells[q] = make([]Cell[string], numRows)
 	}
 
 	for rowIndex, valuesLine := range valuesLines {
-		qFieldToCell := make(map[qField]cell[string], numCols)
-		cells := make([]cell[string], numCols)
+		qFieldToCell := make(map[QField]Cell[string], numCols)
+		cells := make([]Cell[string], numCols)
 		rawValues := parseCSVLine(valuesLine)
 
 		if len(qFields) != len(rFields) {
-			return table[string]{}, fmt.Errorf("%w: query fields: %d, returned fields: %d",
+			return Table[string]{}, fmt.Errorf("%w: query fields: %d, returned fields: %d",
 				ErrFieldCountMismatch, len(qFields), len(rFields))
 		}
 
 		for colIndex, rawValue := range rawValues {
 			currentQField := qFields[colIndex]
 			currentRField := rFields[colIndex]
-			tableCell := cell[string]{
-				qField:   currentQField,
-				rField:   currentRField,
-				rawValue: rawValue,
+			tableCell := Cell[string]{
+				QField:   currentQField,
+				RField:   currentRField,
+				RawValue: rawValue,
 			}
 			qFieldToCell[currentQField] = tableCell
 			cells[colIndex] = tableCell
 			qFieldToCells[currentQField][rowIndex] = tableCell
 		}
 
-		tableRow := row[string]{
-			qFieldToCells: qFieldToCell,
-			cells:         cells,
+		tableRow := Row[string]{
+			QFieldToCells: qFieldToCell,
+			Cells:         cells,
 		}
 
 		rows[rowIndex] = tableRow
 	}
 
-	return table[string]{
-		rows:          rows,
-		rFields:       rFields,
-		qFieldToCells: qFieldToCells,
+	return Table[string]{
+		Rows:          rows,
+		RFields:       rFields,
+		QFieldToCells: qFieldToCells,
 	}, nil
 }
 
