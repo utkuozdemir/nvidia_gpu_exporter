@@ -10,12 +10,12 @@ import (
 )
 
 const (
-	uuidQField               qField = "uuid"
-	nameQField               qField = "name"
-	driverModelCurrentQField qField = "driver_model.current"
-	driverModelPendingQField qField = "driver_model.pending"
-	vBiosVersionQField       qField = "vbios_version"
-	driverVersionQField      qField = "driver_version"
+	uuidQField               QField = "uuid"
+	nameQField               QField = "name"
+	driverModelCurrentQField QField = "driver_model.current"
+	driverModelPendingQField QField = "driver_model.pending"
+	vBiosVersionQField       QField = "vbios_version"
+	driverVersionQField      QField = "driver_version"
 	qFieldsAuto                     = "AUTO"
 	DefaultQField                   = qFieldsAuto
 )
@@ -26,7 +26,7 @@ var (
 	fieldRegex = regexp.MustCompile(`(?m)\n\s*\n^"([^"]+)"`)
 
 	//nolint:gochecknoglobals
-	fallbackQFieldToRFieldMap = map[qField]rField{
+	fallbackQFieldToRFieldMap = map[QField]RField{
 		"timestamp":                         "timestamp",
 		"driver_version":                    "driver_version",
 		"count":                             "count",
@@ -145,7 +145,7 @@ var (
 	}
 )
 
-func parseAutoQFields(nvidiaSmiCommand string, command runCmd) ([]qField, error) {
+func ParseAutoQFields(nvidiaSmiCommand string, command runCmd) ([]QField, error) {
 	cmdAndArgs := strings.Fields(nvidiaSmiCommand)
 	cmdAndArgs = append(cmdAndArgs, "--help-query-gpu")
 	cmd := exec.Command(cmdAndArgs[0], cmdAndArgs[1:]...) //nolint:gosec
@@ -174,7 +174,7 @@ func parseAutoQFields(nvidiaSmiCommand string, command runCmd) ([]qField, error)
 			exitCode, strings.Join(cmdAndArgs, " "), outStr, errStr)
 	}
 
-	fields := extractQFields(outStr)
+	fields := ExtractQFields(outStr)
 	if fields == nil {
 		return nil, fmt.Errorf("%w: code: %d | command: %s | stdout: %s | stderr: %s", ErrNoQueryFields,
 			exitCode, strings.Join(cmdAndArgs, " "), outStr, errStr)
@@ -183,36 +183,36 @@ func parseAutoQFields(nvidiaSmiCommand string, command runCmd) ([]qField, error)
 	return fields, nil
 }
 
-func extractQFields(text string) []qField {
+func ExtractQFields(text string) []QField {
 	found := fieldRegex.FindAllStringSubmatch(text, -1)
 
-	fields := make([]qField, len(found))
+	fields := make([]QField, len(found))
 	for i, ss := range found {
-		fields[i] = qField(ss[1])
+		fields[i] = QField(ss[1])
 	}
 
 	return fields
 }
 
-func toQFieldSlice(ss []string) []qField {
-	r := make([]qField, len(ss))
+func toQFieldSlice(ss []string) []QField {
+	r := make([]QField, len(ss))
 	for i, s := range ss {
-		r[i] = qField(s)
+		r[i] = QField(s)
 	}
 
 	return r
 }
 
-func toRFieldSlice(ss []string) []rField {
-	r := make([]rField, len(ss))
+func toRFieldSlice(ss []string) []RField {
+	r := make([]RField, len(ss))
 	for i, s := range ss {
-		r[i] = rField(s)
+		r[i] = RField(s)
 	}
 
 	return r
 }
 
-func QFieldSliceToStringSlice(qs []qField) []string {
+func QFieldSliceToStringSlice(qs []QField) []string {
 	r := make([]string, len(qs))
 	for i, q := range qs {
 		r[i] = string(q)

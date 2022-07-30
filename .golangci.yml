@@ -11,7 +11,7 @@ linters:
     # not useful
     - exhaustruct
     # TODO: consider enabling:
-    - testpackage
+#    - testpackage
 
 linters-settings:
   gci:

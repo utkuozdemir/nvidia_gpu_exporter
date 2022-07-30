@@ -14,13 +14,15 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/exp/maps"
+
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/util"
 )
 
-// qField stands for query field - the field name before the query.
-type qField string
+// QField stands for query field - the field name before the query.
+type QField string
 
-// rField stands for returned field - the field name as returned by the nvidia-smi.
-type rField string
+// RField stands for returned field - the field name as returned by the nvidia-smi.
+type RField string
 
 type runCmd func(cmd *exec.Cmd) error
 
@@ -63,14 +65,14 @@ var (
 type GPUExporter struct {
 	mutex                 sync.RWMutex
 	prefix                string
-	qFields               []qField
-	qFieldToMetricInfoMap map[qField]MetricInfo
+	qFields               []QField
+	qFieldToMetricInfoMap map[QField]MetricInfo
 	nvidiaSmiCommand      string
 	failedScrapesTotal    prometheus.Counter
 	exitCode              prometheus.Gauge
 	gpuInfoDesc           *prometheus.Desc
 	logger                log.Logger
-	command               runCmd
+	Command               runCmd
 }
 
 func New(prefix string, nvidiaSmiCommand string, qFieldsRaw string, logger log.Logger) (*GPUExporter, error) {
@@ -79,7 +81,7 @@ func New(prefix string, nvidiaSmiCommand string, qFieldsRaw string, logger log.L
 		return nil, err
 	}
 
-	qFieldToMetricInfoMap := buildQFieldToMetricInfoMap(prefix, qFieldToRFieldMap)
+	qFieldToMetricInfoMap := BuildQFieldToMetricInfoMap(prefix, qFieldToRFieldMap)
 
 	infoLabels := getLabels(requiredFields)
 	exporter := GPUExporter{
@@ -104,7 +106,7 @@ func New(prefix string, nvidiaSmiCommand string, qFieldsRaw string, logger log.L
 				strings.Join(infoLabels, ", ")),
 			infoLabels,
 			nil),
-		command: defaultRunCmd,
+		Command: defaultRunCmd,
 	}
 
 	return &exporter, nil
@@ -112,7 +114,7 @@ func New(prefix string, nvidiaSmiCommand string, qFieldsRaw string, logger log.L
 
 func buildQFieldToRFieldMap(logger log.Logger, qFieldsRaw string,
 	nvidiaSmiCommand string, command runCmd,
-) ([]qField, map[qField]rField, error) {
+) ([]QField, map[QField]RField, error) {
 	qFieldsSeparated := strings.Split(qFieldsRaw, ",")
 
 	qFields := toQFieldSlice(qFieldsSeparated)
@@ -123,7 +125,7 @@ func buildQFieldToRFieldMap(logger log.Logger, qFieldsRaw string,
 	qFields = removeDuplicates(qFields)
 
 	if len(qFieldsSeparated) == 1 && qFieldsSeparated[0] == qFieldsAuto {
-		parsed, err := parseAutoQFields(nvidiaSmiCommand, command)
+		parsed, err := ParseAutoQFields(nvidiaSmiCommand, command)
 		if err != nil {
 			_ = level.Warn(logger).Log("msg",
 				"Failed to auto-determine query field names, "+
@@ -137,7 +139,7 @@ func buildQFieldToRFieldMap(logger log.Logger, qFieldsRaw string,
 
 	_, resultTable, err := scrape(qFields, nvidiaSmiCommand, command)
 
-	var rFields []rField
+	var rFields []RField
 
 	if err != nil {
 		_ = level.Warn(logger).Log("msg",
@@ -148,10 +150,10 @@ func buildQFieldToRFieldMap(logger log.Logger, qFieldsRaw string,
 			return nil, nil, err
 		}
 	} else {
-		rFields = resultTable.rFields
+		rFields = resultTable.RFields
 	}
 
-	r := make(map[qField]rField, len(qFields))
+	r := make(map[QField]RField, len(qFields))
 	for i, q := range qFields {
 		r[q] = rFields[i]
 	}
@@ -174,7 +176,7 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
 
-	exitCode, currentTable, err := scrape(e.qFields, e.nvidiaSmiCommand, e.command)
+	exitCode, currentTable, err := scrape(e.qFields, e.nvidiaSmiCommand, e.Command)
 	e.exitCode.Set(float64(exitCode))
 	metricCh <- e.exitCode
 
@@ -186,36 +188,36 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 		return
 	}
 
-	for _, currentRow := range currentTable.rows {
-		uuid := strings.TrimPrefix(strings.ToLower(currentRow.qFieldToCells[uuidQField].rawValue), "gpu-")
-		name := currentRow.qFieldToCells[nameQField].rawValue
-		driverModelCurrent := currentRow.qFieldToCells[driverModelCurrentQField].rawValue
-		driverModelPending := currentRow.qFieldToCells[driverModelPendingQField].rawValue
-		vBiosVersion := currentRow.qFieldToCells[vBiosVersionQField].rawValue
-		driverVersion := currentRow.qFieldToCells[driverVersionQField].rawValue
+	for _, currentRow := range currentTable.Rows {
+		uuid := strings.TrimPrefix(strings.ToLower(currentRow.QFieldToCells[uuidQField].RawValue), "gpu-")
+		name := currentRow.QFieldToCells[nameQField].RawValue
+		driverModelCurrent := currentRow.QFieldToCells[driverModelCurrentQField].RawValue
+		driverModelPending := currentRow.QFieldToCells[driverModelPendingQField].RawValue
+		vBiosVersion := currentRow.QFieldToCells[vBiosVersionQField].RawValue
+		driverVersion := currentRow.QFieldToCells[driverVersionQField].RawValue
 
 		infoMetric := prometheus.MustNewConstMetric(e.gpuInfoDesc, prometheus.GaugeValue,
 			1, uuid, name, driverModelCurrent,
 			driverModelPending, vBiosVersion, driverVersion)
 		metricCh <- infoMetric
 
-		for _, currentCell := range currentRow.cells {
-			metricInfo := e.qFieldToMetricInfoMap[currentCell.qField]
+		for _, currentCell := range currentRow.Cells {
+			metricInfo := e.qFieldToMetricInfoMap[currentCell.QField]
 
-			num, err := transformRawValue(currentCell.rawValue, metricInfo.valueMultiplier)
+			num, err := TransformRawValue(currentCell.RawValue, metricInfo.ValueMultiplier)
 			if err != nil {
 				_ = level.Debug(e.logger).Log("error", err, "query_field_name",
-					currentCell.qField, "raw_value", currentCell.rawValue)
+					currentCell.QField, "raw_value", currentCell.RawValue)
 
 				continue
 			}
 
-			metricCh <- prometheus.MustNewConstMetric(metricInfo.desc, metricInfo.mType, num, uuid)
+			metricCh <- prometheus.MustNewConstMetric(metricInfo.desc, metricInfo.MType, num, uuid)
 		}
 	}
 }
 
-func scrape(qFields []qField, nvidiaSmiCommand string, command runCmd) (int, *table[string], error) {
+func scrape(qFields []QField, nvidiaSmiCommand string, command runCmd) (int, *Table[string], error) {
 	qFieldsJoined := strings.Join(QFieldSliceToStringSlice(qFields), ",")
 
 	cmdAndArgs := strings.Fields(nvidiaSmiCommand)
@@ -243,7 +245,7 @@ func scrape(qFields []qField, nvidiaSmiCommand string, command runCmd) (int, *ta
 			err, exitCode, strings.Join(cmdAndArgs, " "), stdout.String(), stderr.String())
 	}
 
-	t, err := parseCSVIntoTable(strings.TrimSpace(stdout.String()), qFields)
+	t, err := ParseCSVIntoTable(strings.TrimSpace(stdout.String()), qFields)
 	if err != nil {
 		return -1, nil, err
 	}
@@ -253,15 +255,20 @@ func scrape(qFields []qField, nvidiaSmiCommand string, command runCmd) (int, *ta
 
 type MetricInfo struct {
 	desc            *prometheus.Desc
-	mType           prometheus.ValueType
-	valueMultiplier float64
+	MType           prometheus.ValueType
+	ValueMultiplier float64
 }
 
 //nolint:gomnd
-func transformRawValue(rawValue string, valueMultiplier float64) (float64, error) {
+func TransformRawValue(rawValue string, valueMultiplier float64) (float64, error) {
 	trimmed := strings.TrimSpace(rawValue)
 	if strings.HasPrefix(trimmed, "0x") {
-		return hexToDecimal(trimmed)
+		decimal, err := util.HexToDecimal(trimmed)
+		if err != nil {
+			return 0, fmt.Errorf("%w: %s", err, trimmed)
+		}
+
+		return decimal, nil
 	}
 
 	val := strings.ToLower(trimmed)
@@ -298,27 +305,27 @@ func parseSanitizedValueWithBestEffort(sanitizedValue string, valueMultiplier fl
 	return parsed * valueMultiplier, nil
 }
 
-func buildQFieldToMetricInfoMap(prefix string, qFieldtoRFieldMap map[qField]rField) map[qField]MetricInfo {
-	result := make(map[qField]MetricInfo)
+func BuildQFieldToMetricInfoMap(prefix string, qFieldtoRFieldMap map[QField]RField) map[QField]MetricInfo {
+	result := make(map[QField]MetricInfo)
 	for qField, rField := range qFieldtoRFieldMap {
-		result[qField] = buildMetricInfo(prefix, rField)
+		result[qField] = BuildMetricInfo(prefix, rField)
 	}
 
 	return result
 }
 
-func buildMetricInfo(prefix string, rField rField) MetricInfo {
-	fqName, multiplier := buildFQNameAndMultiplier(prefix, rField)
+func BuildMetricInfo(prefix string, rField RField) MetricInfo {
+	fqName, multiplier := BuildFQNameAndMultiplier(prefix, rField)
 	desc := prometheus.NewDesc(fqName, string(rField), []string{"uuid"}, nil)
 
 	return MetricInfo{
 		desc:            desc,
-		mType:           prometheus.GaugeValue,
-		valueMultiplier: multiplier,
+		MType:           prometheus.GaugeValue,
+		ValueMultiplier: multiplier,
 	}
 }
 
-func buildFQNameAndMultiplier(prefix string, rField rField) (string, float64) {
+func BuildFQNameAndMultiplier(prefix string, rField RField) (string, float64) {
 	rFieldStr := string(rField)
 	suffixTransformed := rFieldStr
 	multiplier := 1.0
@@ -338,14 +345,14 @@ func buildFQNameAndMultiplier(prefix string, rField rField) (string, float64) {
 		multiplier = 0.01
 	}
 
-	metricName := toSnakeCase(strings.ReplaceAll(suffixTransformed, ".", "_"))
+	metricName := util.ToSnakeCase(strings.ReplaceAll(suffixTransformed, ".", "_"))
 	fqName := prometheus.BuildFQName(prefix, "", metricName)
 
 	return fqName, multiplier
 }
 
-func getFallbackValues(qFields []qField) ([]rField, error) {
-	rFields := make([]rField, len(qFields))
+func getFallbackValues(qFields []QField) ([]RField, error) {
+	rFields := make([]RField, len(qFields))
 
 	counter := 0
 
@@ -372,7 +379,7 @@ func getLabels(reqFields []requiredField) []string {
 }
 
 type requiredField struct {
-	qField qField
+	qField QField
 	label  string
 }
 

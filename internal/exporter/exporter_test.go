@@ -1,7 +1,9 @@
-package exporter
+package exporter_test
 
 import (
 	_ "embed"
+	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -9,6 +11,8 @@ import (
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
 )
 
 const (
@@ -43,7 +47,7 @@ func TestTransformRawValueValidValues(t *testing.T) {
 	}
 
 	for raw, expected := range expectedConversions {
-		val, err := transformRawValue(raw, 1)
+		val, err := exporter.TransformRawValue(raw, 1)
 		assert.NoError(t, err)
 		assertFloat(t, expected, val)
 	}
@@ -57,7 +61,7 @@ func TestTransformRawValueInvalidValues(t *testing.T) {
 	}
 
 	for _, raw := range rawValues {
-		_, err := transformRawValue(raw, 1)
+		_, err := exporter.TransformRawValue(raw, 1)
 		assert.Error(t, err)
 	}
 }
@@ -65,16 +69,16 @@ func TestTransformRawValueInvalidValues(t *testing.T) {
 func TestTransformRawMultiplier(t *testing.T) {
 	t.Parallel()
 
-	val, err := transformRawValue("11", 2)
+	val, err := exporter.TransformRawValue("11", 2)
 
 	assert.NoError(t, err)
 	assertFloat(t, 22, val)
 
-	val, err = transformRawValue("10", 0.5)
+	val, err = exporter.TransformRawValue("10", 0.5)
 	assert.NoError(t, err)
 	assertFloat(t, 5, val)
 
-	val, err = transformRawValue("enabled", 42)
+	val, err = exporter.TransformRawValue("enabled", 42)
 	assert.NoError(t, err)
 	assertFloat(t, 1, val)
 }
@@ -82,7 +86,7 @@ func TestTransformRawMultiplier(t *testing.T) {
 func TestBuildFQNameAndMultiplierRegular(t *testing.T) {
 	t.Parallel()
 
-	fqName, multiplier := buildFQNameAndMultiplier("prefix", "encoder.stats.sessionCount")
+	fqName, multiplier := exporter.BuildFQNameAndMultiplier("prefix", "encoder.stats.sessionCount")
 
 	assertFloat(t, 1, multiplier)
 	assert.Equal(t, "prefix_encoder_stats_session_count", fqName)
@@ -91,7 +95,7 @@ func TestBuildFQNameAndMultiplierRegular(t *testing.T) {
 func TestBuildFQNameAndMultiplierWatts(t *testing.T) {
 	t.Parallel()
 
-	fqName, multiplier := buildFQNameAndMultiplier("prefix", "power.draw [W]")
+	fqName, multiplier := exporter.BuildFQNameAndMultiplier("prefix", "power.draw [W]")
 
 	assertFloat(t, 1, multiplier)
 	assert.Equal(t, "prefix_power_draw_watts", fqName)
@@ -100,7 +104,7 @@ func TestBuildFQNameAndMultiplierWatts(t *testing.T) {
 func TestBuildFQNameAndMultiplierMiB(t *testing.T) {
 	t.Parallel()
 
-	fqName, multiplier := buildFQNameAndMultiplier("prefix", "memory.total [MiB]")
+	fqName, multiplier := exporter.BuildFQNameAndMultiplier("prefix", "memory.total [MiB]")
 
 	assertFloat(t, 1048576, multiplier)
 	assert.Equal(t, "prefix_memory_total_bytes", fqName)
@@ -109,7 +113,7 @@ func TestBuildFQNameAndMultiplierMiB(t *testing.T) {
 func TestBuildFQNameAndMultiplierMHZ(t *testing.T) {
 	t.Parallel()
 
-	fqName, multiplier := buildFQNameAndMultiplier("prefix", "clocks.current.graphics [MHz]")
+	fqName, multiplier := exporter.BuildFQNameAndMultiplier("prefix", "clocks.current.graphics [MHz]")
 
 	assertFloat(t, 1000000, multiplier)
 	assert.Equal(t, "prefix_clocks_current_graphics_clock_hz", fqName)
@@ -118,7 +122,7 @@ func TestBuildFQNameAndMultiplierMHZ(t *testing.T) {
 func TestBuildFQNameAndMultiplierRatio(t *testing.T) {
 	t.Parallel()
 
-	fqName, multiplier := buildFQNameAndMultiplier("prefix", "fan.speed [%]")
+	fqName, multiplier := exporter.BuildFQNameAndMultiplier("prefix", "fan.speed [%]")
 
 	assertFloat(t, 0.01, multiplier)
 	assert.Equal(t, "prefix_fan_speed_ratio", fqName)
@@ -127,7 +131,7 @@ func TestBuildFQNameAndMultiplierRatio(t *testing.T) {
 func TestBuildFQNameAndMultiplierNoPrefix(t *testing.T) {
 	t.Parallel()
 
-	fqName, multiplier := buildFQNameAndMultiplier("", "encoder.stats.sessionCount")
+	fqName, multiplier := exporter.BuildFQNameAndMultiplier("", "encoder.stats.sessionCount")
 
 	assertFloat(t, 1, multiplier)
 	assert.Equal(t, "encoder_stats_session_count", fqName)
@@ -136,33 +140,36 @@ func TestBuildFQNameAndMultiplierNoPrefix(t *testing.T) {
 func TestBuildMetricInfo(t *testing.T) {
 	t.Parallel()
 
-	metricInfo := buildMetricInfo("prefix", "encoder.stats.sessionCount")
+	metricInfo := exporter.BuildMetricInfo("prefix", "encoder.stats.sessionCount")
 
-	assertFloat(t, 1, metricInfo.valueMultiplier)
-	assert.Equal(t, prometheus.GaugeValue, metricInfo.mType)
+	assertFloat(t, 1, metricInfo.ValueMultiplier)
+	assert.Equal(t, prometheus.GaugeValue, metricInfo.MType)
 }
 
 func TestBuildQFieldToMetricInfoMap(t *testing.T) {
 	t.Parallel()
 
-	qFieldToMetricInfoMap := buildQFieldToMetricInfoMap("prefix", map[qField]rField{"aaa": "AAA", "bbb": "BBB"})
+	qFieldToMetricInfoMap := exporter.BuildQFieldToMetricInfoMap(
+		"prefix",
+		map[exporter.QField]exporter.RField{"aaa": "AAA", "bbb": "BBB"},
+	)
 
 	assert.Len(t, qFieldToMetricInfoMap, 2)
 
 	metricInfo1 := qFieldToMetricInfoMap["aaa"]
-	assertFloat(t, 1, metricInfo1.valueMultiplier)
-	assert.Equal(t, prometheus.GaugeValue, metricInfo1.mType)
+	assertFloat(t, 1, metricInfo1.ValueMultiplier)
+	assert.Equal(t, prometheus.GaugeValue, metricInfo1.MType)
 
 	metricInfo2 := qFieldToMetricInfoMap["bbb"]
-	assertFloat(t, 1, metricInfo2.valueMultiplier)
-	assert.Equal(t, prometheus.GaugeValue, metricInfo2.mType)
+	assertFloat(t, 1, metricInfo2.ValueMultiplier)
+	assert.Equal(t, prometheus.GaugeValue, metricInfo2.MType)
 }
 
 func TestNewUnknownField(t *testing.T) {
 	t.Parallel()
 
 	logger := log.NewNopLogger()
-	_, err := New("aaa", "bbb", "a", logger)
+	_, err := exporter.New("aaa", "bbb", "a", logger)
 
 	assert.Error(t, err)
 }
@@ -171,7 +178,7 @@ func TestDescribe(t *testing.T) {
 	t.Parallel()
 
 	logger := log.NewNopLogger()
-	exp, err := New("aaa", "bbb", "fan.speed,memory.used", logger)
+	exp, err := exporter.New("aaa", "bbb", "fan.speed,memory.used", logger)
 
 	assert.NoError(t, err)
 
@@ -213,11 +220,11 @@ func TestCollect(t *testing.T) {
 	t.Parallel()
 
 	logger := log.NewNopLogger()
-	exp, err := New("aaa", "bbb",
+	exp, err := exporter.New("aaa", "bbb",
 		"uuid,name,driver_model.current,driver_model.pending,"+
 			"vbios_version,driver_version,fan.speed,memory.used", logger)
 
-	exp.command = func(cmd *exec.Cmd) error {
+	exp.Command = func(cmd *exec.Cmd) error {
 		_, _ = cmd.Stdout.Write([]byte(queryTest))
 
 		return nil
@@ -259,7 +266,7 @@ func TestCollectError(t *testing.T) {
 	t.Parallel()
 
 	logger := log.NewNopLogger()
-	exp, err := New("aaa", "bbb", "fan.speed,memory.used", logger)
+	exp, err := exporter.New("aaa", "bbb", "fan.speed,memory.used", logger)
 
 	assert.NoError(t, err)
 
@@ -288,4 +295,23 @@ end:
 
 	assert.Contains(t, metricsJoined, "aaa_failed_scrapes_total")
 	assert.Contains(t, metricsJoined, "aaa_command_exit_code")
+}
+
+// TestParseQueryFields must be run manually.
+//nolint:forbidigo
+func TestParseQueryFields(t *testing.T) {
+	t.SkipNow()
+	t.Parallel()
+
+	nvidiaSmiCommand := "nvidia-smi"
+
+	qFields, err := exporter.ParseAutoQFields(nvidiaSmiCommand, nil)
+	if err != nil {
+		fmt.Printf("error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fields := exporter.QFieldSliceToStringSlice(qFields)
+
+	fmt.Printf("Fields:\n\n%s\n", strings.Join(fields, "\n"))
 }

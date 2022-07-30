@@ -1,4 +1,4 @@
-package exporter
+package exporter_test
 
 import (
 	_ "embed"
@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
 )
 
 var (
@@ -13,7 +15,7 @@ var (
 	fieldsTest string
 
 	//nolint:gochecknoglobals
-	expectedQFields = []qField{
+	expectedQFields = []exporter.QField{
 		"timestamp", "driver_version", "count", "name", "serial", "uuid", "pci.bus_id",
 		"pci.domain", "pci.bus", "pci.device", "pci.device_id", "pci.sub_device_id", "pcie.link.gen.current",
 		"pcie.link.gen.max", "pcie.link.width.current", "pcie.link.width.max", "index", "display_mode", "display_active",
@@ -57,7 +59,7 @@ var (
 func TestExtractQFields(t *testing.T) {
 	t.Parallel()
 
-	fields := extractQFields(fieldsTest)
+	fields := exporter.ExtractQFields(fieldsTest)
 
 	assert.Equal(t, expectedQFields, fields)
 }
@@ -74,7 +76,7 @@ func TestParseAutoQFields(t *testing.T) {
 		return nil
 	}
 
-	fields, err := parseAutoQFields("nvidia-smi", command)
+	fields, err := exporter.ParseAutoQFields("nvidia-smi", command)
 
 	assert.Len(t, capturedCmd.Args, 2)
 	assert.Equal(t, capturedCmd.Args[0], "nvidia-smi")
