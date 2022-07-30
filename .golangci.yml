@@ -10,8 +10,6 @@ linters:
     - scopelint
     # not useful
     - exhaustruct
-    # TODO: consider enabling:
-#    - testpackage
 
 linters-settings:
   gci:
