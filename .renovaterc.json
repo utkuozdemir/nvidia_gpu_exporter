@@ -52,8 +52,7 @@
         "(#|\\/\\/) renovate: go\\n[^\\n]*?(?<currentValue>v?\\d+\\.\\d+(\\.\\d+(-[\\S]+)?)?)"
       ],
       "depNameTemplate": "golang/go",
-      "datasourceTemplate": "github-tags",
-      "extractVersionTemplate": "^go(?<version>\\d+\\.\\d+\\.\\d+)$"
+      "datasourceTemplate": "golang-version"
     }
   ]
 }
