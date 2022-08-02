@@ -52,6 +52,7 @@
         "(#|\\/\\/) renovate: go\\n[^\\n]*?(?<currentValue>v?\\d+\\.\\d+(\\.\\d+(-[\\S]+)?)?)"
       ],
       "depNameTemplate": "golang/go",
+      "versioningTemplate": "loose",
       "datasourceTemplate": "golang-version"
     }
   ]
