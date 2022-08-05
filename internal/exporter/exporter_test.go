@@ -298,6 +298,7 @@ end:
 }
 
 // TestParseQueryFields must be run manually.
+//
 //nolint:forbidigo
 func TestParseQueryFields(t *testing.T) {
 	t.SkipNow()

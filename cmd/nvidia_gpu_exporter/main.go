@@ -30,7 +30,9 @@ const (
 `
 )
 
-//nolint: funlen
+// main is the entrypoint of the application.
+//
+//nolint:funlen
 func main() {
 	var (
 		webConfig     = webflag.AddFlags(kingpin.CommandLine)
