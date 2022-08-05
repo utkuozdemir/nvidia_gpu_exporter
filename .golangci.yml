@@ -8,6 +8,7 @@ linters:
     - interfacer
     - maligned
     - scopelint
+    - ifshort
     # not useful
     - exhaustruct
 
