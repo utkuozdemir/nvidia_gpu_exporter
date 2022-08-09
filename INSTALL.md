@@ -33,7 +33,7 @@ Sample steps for Linux 64-bit:
 $ VERSION=0.3.0
 $ wget https://github.com/utkuozdemir/nvidia_gpu_exporter/releases/download/v${VERSION}/nvidia_gpu_exporter_${VERSION}_linux_x86_64.tar.gz
 $ tar -xvzf nvidia_gpu_exporter_${VERSION}_linux_x86_64.tar.gz
-$ mv nvidia_gpu_exporter /usr/local/bin
+$ mv nvidia_gpu_exporter /usr/bin
 $ nvidia_gpu_exporter --help
 ```
 
@@ -167,11 +167,11 @@ nvidia-smi
 ```
 
 ##### Packaging and Deployment
-Taking the above into account, we can embed the `/usr/local/bin/nvidia_gpu_exporter` into a GPU enabled deployment through a multi-stage Docker build using the `utkuozdemir/nvidia_gpu_exporter:0.5.0` as the base image.
+Taking the above into account, we can embed the `/usr/bin/nvidia_gpu_exporter` into a GPU enabled deployment through a multi-stage Docker build using the `utkuozdemir/nvidia_gpu_exporter:0.5.0` as the base image.
 
 Extending the Docker entrypoint with:
 
-`/usr/local/bin/nvidia_gpu_exporter --web.listen-address=:9835 --web.telemetry-path=/metrics --nvidia-smi-command=nvidia-smi --log.level=info --query-field-names=AUTO --log.format=logfmt &`
+`/usr/bin/nvidia_gpu_exporter --web.listen-address=:9835 --web.telemetry-path=/metrics --nvidia-smi-command=nvidia-smi --log.level=info --query-field-names=AUTO --log.format=logfmt &`
 
 This reduces overall complexity, inherits the packaged drivers & nvidia-smi, and most importantly leverages the same GPU resource request as the deployment/GPU you are trying to monitor.
 
