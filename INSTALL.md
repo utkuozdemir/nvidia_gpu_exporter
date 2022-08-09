@@ -67,7 +67,7 @@ These steps do the following:
 If your Linux distro is using systemd, you can install the exporter as a service using the unit file provided.
 
 Follow these simple steps:
-1. Download the Linux binary matching your CPU architecture and put it under `/usr/local/bin` directory.
+1. Download the Linux binary matching your CPU architecture and put it under `/usr/bin` directory.
 2. Drop a copy of the file **[nvidia_gpu_exporter.service](systemd/nvidia_gpu_exporter.service)** under `/etc/systemd/system` directory.
 3. Run `sudo systemctl daemon-reload`
 4. Start and enable the service to run on boot: `sudo systemctl enable --now nvidia_gpu_exporter`

@@ -8,23 +8,12 @@ Type=simple
 User=nvidia_gpu_exporter
 Group=nvidia_gpu_exporter
 
-ExecStart=/usr/local/bin/nvidia_gpu_exporter
+ExecStart=/usr/bin/nvidia_gpu_exporter
 
 SyslogIdentifier=nvidia_gpu_exporter
 
 Restart=always
 RestartSec=1
-
-NoNewPrivileges=yes
-
-ProtectHome=yes
-ProtectSystem=strict
-ProtectControlGroups=true
-ProtectKernelModules=true
-ProtectKernelTunables=yes
-ProtectHostname=yes
-ProtectKernelLogs=yes
-ProtectProc=yes
 
 [Install]
 WantedBy=multi-user.target

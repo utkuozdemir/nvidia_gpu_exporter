@@ -2,14 +2,14 @@ version: "3"
 
 tasks:
   fmt:
-    desc: format all code
+    desc: format code
     cmds:
       - go mod tidy
       - gci write -s standard -s default -s "prefix(github.com/utkuozdemir/nvidia_gpu_exporter)" .
       - gofumpt -w -l .
 
   lint:
-    desc: Lint the code with golangci-lint
+    desc: lint code
     cmds:
       - go mod tidy && git diff --no-patch --exit-code go.mod go.sum
       - golangci-lint run ./...
