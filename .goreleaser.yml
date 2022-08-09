@@ -24,9 +24,9 @@ builds:
       - amd64
       - arm
       - arm64
-      - 386
+      - "386"
     goarm:
-     - 7
+     - "7"
     ignore:
       - goos: windows
         goarch: arm
@@ -37,9 +37,9 @@ builds:
       - goos: darwin
         goarch: arm64
       - goos: darwin
-        goarch: 386
+        goarch: "386"
       - goos: linux
-        goarch: 386
+        goarch: "386"
 
 archives:
   - id: nvidia_gpu_exporter-archive
@@ -53,6 +53,48 @@ archives:
         format: zip
     files: 
       - LICENSE
+
+nfpms:
+  - id: nvidia_gpu_exporter
+    package_name: nvidia-gpu-exporter
+    bindir: /usr/bin
+    vendor: Utku Ozdemir
+    homepage: https://github.com/utkuozdemir/nvidia_gpu_exporter
+    license: MIT
+    maintainer: Utku Ozdemir <uoz@protonmail.com>
+    section: misc
+    description: |-
+      Nvidia GPU exporter for prometheus.
+      This is a simple exporter that uses `nvidia-smi(.exe)` binary to collect, 
+      parse and export metrics.
+    formats:
+      - deb
+      - rpm
+    contents:
+      - src: ./systemd/nvidia_gpu_exporter.service
+        dst: /usr/lib/systemd/system/nvidia_gpu_exporter.service
+        file_info:
+          owner: root
+          group: root
+          mode: 0644
+      - src: ./LICENSE
+        dst: /usr/share/doc/nvidia-gpu-exporter/copyright
+        file_info:
+          owner: root
+          group: root
+          mode: 0644
+    scripts:
+      preinstall: scripts/pre-install.sh
+      postinstall: scripts/post-install.sh
+      preremove: scripts/pre-remove.sh
+      postremove: scripts/post-remove.sh
+    deb:
+      lintian_overrides:
+        - statically-linked-binary
+        - changelog-file-missing-in-native-package
+        - no-manual-page
+        # Probably won't be implemented: https://github.com/goreleaser/nfpm/issues/15#issuecomment-830816661
+        - maintainer-script-calls-systemctl
 
 checksum:
   name_template: checksums.txt
@@ -93,7 +135,7 @@ dockers:
       - docker.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}-armv7
     use: buildx
     goarch: arm
-    goarm: 7
+    goarm: "7"
     dockerfile: Dockerfile
     build_flag_templates:
       - --platform=linux/arm/v7
