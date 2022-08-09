@@ -197,7 +197,7 @@ nvidia-persistenced
 nvidia-smi
 ```
 
-#### Packaging and Deployment
+### Packaging and Deployment
 
 Taking the above into account, we can embed the `/usr/bin/nvidia_gpu_exporter` into a GPU enabled deployment through a multi-stage Docker build using the `utkuozdemir/nvidia_gpu_exporter:0.5.0` as the base image.
 
