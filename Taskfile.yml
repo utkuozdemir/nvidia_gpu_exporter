@@ -7,18 +7,23 @@ tasks:
       - go mod tidy
       - gci write -s standard -s default -s "prefix(github.com/utkuozdemir/nvidia_gpu_exporter)" .
       - gofumpt -w -l .
+      - markdownlint --fix **/*.md
+      - shfmt --write **/*.sh
 
   lint:
     desc: lint code
     cmds:
       - go mod tidy && git diff --no-patch --exit-code go.mod go.sum
       - golangci-lint run ./...
+      - markdownlint **/*.md
+      - shellcheck **/*.sh
+      - shfmt --diff **/*.sh
 
   release:
-    desc: Create a new tag
+    desc: release
     vars:
       NEXT:
-        sh: svu n
+        sh: svu next
     cmds:
       - git tag -a {{.NEXT}} -m "Release {{.NEXT}}"
       - echo {{.NEXT}}

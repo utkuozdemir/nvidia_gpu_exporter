@@ -12,8 +12,8 @@ Nvidia GPU exporter for prometheus, using `nvidia-smi` binary to gather metrics.
 
 ## Introduction
 
-There are many Nvidia GPU exporters out there however they have problems such as not being maintained, 
-not providing pre-built binaries, having a dependency to Linux and/or Docker, 
+There are many Nvidia GPU exporters out there however they have problems such as not being maintained,
+not providing pre-built binaries, having a dependency to Linux and/or Docker,
 targeting enterprise setups (DCGM) and so on.
 
 This is a simple exporter that uses `nvidia-smi(.exe)` binary to collect, parse and export metrics.
@@ -40,15 +40,18 @@ to see your GPU metrics in a nicely visualized way.
 Here's how it looks like:
 ![Grafana dashboard](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/master/grafana/dashboard.png)
 
-
 ## Installation
+
 See [INSTALL.md](INSTALL.md) for details.
 
 ## Configuration
+
 See [CONFIGURE.md](CONFIGURE.md) for details.
 
 ## Metrics
+
 See [METRICS.md](METRICS.md) for details.
 
 ## Contributing
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) for details.

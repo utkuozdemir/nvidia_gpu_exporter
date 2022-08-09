@@ -15,9 +15,10 @@ That's it.
 
 ## Creating Releases
 
-- To make a release, push an annotated tag. Example:
+- To make a release, simply run:
+
   ```bash
-  git tag -a v0.1.3 -m "Release v0.1.3"
-  git push
-  git push --tags
+  task release
   ```
+
+Note: You will need [task](https://github.com/go-task/task) and [svu](https://github.com/caarlos0/svu) installed.

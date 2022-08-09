@@ -1,12 +1,11 @@
 # Metrics
 
-
 This is an example output of the returned metrics.
 
-Note that when `AUTO` query fields mode is used (it is the default), 
+Note that when `AUTO` query fields mode is used (it is the default),
 the exporter will discover new fields and expose them on a best-effort basis.
 
-```
+```text
 # HELP go_gc_duration_seconds A summary of the pause duration of garbage collection cycles.
 # TYPE go_gc_duration_seconds summary
 go_gc_duration_seconds{quantile="0"} 0

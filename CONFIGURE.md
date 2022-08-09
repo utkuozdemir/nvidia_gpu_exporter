@@ -6,7 +6,7 @@ You can find the configuration reference on this page.
 
 The exporter binary accepts the following arguments:
 
-```
+```text
 usage: nvidia_gpu_exporter [<flags>]
 
 Flags:
