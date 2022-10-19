@@ -35,10 +35,7 @@ const (
 //nolint:funlen
 func main() {
 	var (
-		webConfig     = webflag.AddFlags(kingpin.CommandLine)
-		listenAddress = kingpin.Flag("web.listen-address",
-			"Address to listen on for web interface and telemetry.").
-			Default(":9835").String()
+		webConfig   = webflag.AddFlags(kingpin.CommandLine, ":9835")
 		readTimeout = kingpin.Flag("web.read-timeout",
 			"Maximum duration before timing out read of the request.").
 			Default("10s").Duration()
@@ -81,21 +78,18 @@ func main() {
 	prometheus.MustRegister(exp)
 	prometheus.MustRegister(version.NewCollector("nvidia_gpu_exporter"))
 
-	_ = level.Info(logger).Log("msg", "Listening on address", "address", listenAddress)
-
 	rootHandler := NewRootHandler(logger, *metricsPath)
 	http.Handle("/", rootHandler)
 	http.Handle(*metricsPath, promhttp.Handler())
 
 	srv := &http.Server{
-		Addr:              *listenAddress,
 		ReadHeaderTimeout: *readHeaderTimeout,
 		ReadTimeout:       *readTimeout,
 		WriteTimeout:      *writeTimeout,
 		IdleTimeout:       *idleTimeout,
 	}
 
-	if err := web.ListenAndServe(srv, *webConfig, logger); err != nil {
+	if err := web.ListenAndServe(srv, webConfig, logger); err != nil {
 		_ = level.Error(logger).Log("msg", "Error starting HTTP server", "err", err)
 
 		os.Exit(1)
