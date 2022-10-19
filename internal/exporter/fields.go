@@ -160,7 +160,7 @@ func ParseAutoQFields(nvidiaSmiCommand string, command runCmd) ([]QField, error)
 	err := command(cmd)
 
 	outStr := stdout.String()
-	errStr := stdout.String()
+	errStr := stderr.String()
 
 	exitCode := -1
 
