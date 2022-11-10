@@ -9,7 +9,7 @@ require (
 	github.com/prometheus/common v0.37.0
 	github.com/prometheus/exporter-toolkit v0.8.1
 	github.com/stretchr/testify v1.8.1
-	golang.org/x/exp v0.0.0-20221109205753-fc8884afc316
+	golang.org/x/exp v0.0.0-20221110155412-d0897a79cd37
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 )
 
