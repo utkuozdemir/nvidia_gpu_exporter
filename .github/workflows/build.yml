@@ -49,7 +49,7 @@ jobs:
           args: --timeout=3m0s
       - name: Install richgo
         # renovate: depName=kyoh86/richgo
-        run: go install github.com/kyoh86/richgo@v0.3.10
+        run: go install github.com/kyoh86/richgo@v0.3.11
       - name: Run tests
         run: richgo test -race -coverpkg=./... -coverprofile=coverage.txt -covermode=atomic -timeout 20m -v ./...
       - name: Send coverage
