@@ -45,7 +45,7 @@ jobs:
         uses: golangci/golangci-lint-action@v3.4.0
         with:
           # renovate: depName=golangci/golangci-lint datasource=github-releases
-          version: v1.50.1
+          version: v1.51.0
           args: --timeout=3m0s
       - name: Install richgo
         # renovate: depName=kyoh86/richgo
@@ -60,7 +60,7 @@ jobs:
         uses: goreleaser/goreleaser-action@v4.2.0
         with:
           # renovate: depName=goreleaser/goreleaser datasource=github-releases
-          version: v1.15.0
+          version: v1.15.1
           args: release --snapshot --skip-publish --rm-dist
         env:
           PRIVATE_ACCESS_TOKEN: placeholder
