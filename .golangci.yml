@@ -2,14 +2,8 @@
 linters:
   enable-all: true
   disable:
-    # deprecated:
-    - exhaustivestruct
-    - golint
-    - interfacer
-    - maligned
-    - scopelint
-    - ifshort
     # not useful
+    - exhaustivestruct
     - exhaustruct
 
 linters-settings:

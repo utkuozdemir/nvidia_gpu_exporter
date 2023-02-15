@@ -1,10 +1,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 
+	"github.com/coreos/go-systemd/v22/activation"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
@@ -31,9 +34,14 @@ const (
 )
 
 // main is the entrypoint of the application.
+//
+//nolint:funlen
 func main() {
 	var (
-		webConfig   = webflag.AddFlags(kingpin.CommandLine, ":9835")
+		webConfig = webflag.AddFlags(kingpin.CommandLine, ":9835")
+		network   = kingpin.Flag("web.network",
+			"Network type. Valid values are tcp4, tcp6 or tcp (for listening on both stacks).").
+			Default("tcp").String()
 		readTimeout = kingpin.Flag("web.read-timeout",
 			"Maximum duration before timing out read of the request.").
 			Default("10s").Duration()
@@ -87,7 +95,7 @@ func main() {
 		IdleTimeout:       *idleTimeout,
 	}
 
-	if err := web.ListenAndServe(srv, webConfig, logger); err != nil {
+	if err := listenAndServe(srv, webConfig, *network, logger); err != nil {
 		_ = level.Error(logger).Log("msg", "Error starting HTTP server", "err", err)
 
 		os.Exit(1)
@@ -110,4 +118,31 @@ func (r *RootHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 	if _, err := w.Write(r.response); err != nil {
 		_ = level.Error(r.logger).Log("msg", "Error writing redirect", "err", err)
 	}
+}
+
+// listenAndServe is same as web.ListenAndServe but supports passing network stack as an argument.
+//
+//nolint:all
+func listenAndServe(server *http.Server, flags *web.FlagConfig, network string, logger log.Logger) error {
+	if *flags.WebSystemdSocket {
+		level.Info(logger).Log("msg", "Listening on systemd activated listeners instead of port listeners.")
+		listeners, err := activation.Listeners()
+		if err != nil {
+			return err
+		}
+		if len(listeners) < 1 {
+			return errors.New("no socket activation file descriptors found")
+		}
+		return web.ServeMultiple(listeners, server, flags, logger)
+	}
+	listeners := make([]net.Listener, 0, len(*flags.WebListenAddresses))
+	for _, address := range *flags.WebListenAddresses {
+		listener, err := net.Listen(network, address)
+		if err != nil {
+			return err
+		}
+		defer listener.Close()
+		listeners = append(listeners, listener)
+	}
+	return web.ServeMultiple(listeners, server, flags, logger)
 }
