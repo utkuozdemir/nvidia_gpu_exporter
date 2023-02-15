@@ -13,3 +13,6 @@ linters-settings:
     local-prefixes: github.com/utkuozdemir/nvidia_gpu_exporter
   goconst:
     ignore-tests: true
+  gomoddirectives:
+    replace-allow-list:
+      - gopkg.in/alecthomas/kingpin.v2
