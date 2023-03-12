@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/alecthomas/kingpin/v2"
 	"github.com/coreos/go-systemd/v22/activation"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -17,7 +18,6 @@ import (
 	"github.com/prometheus/common/version"
 	"github.com/prometheus/exporter-toolkit/web"
 	webflag "github.com/prometheus/exporter-toolkit/web/kingpinflag"
-	"gopkg.in/alecthomas/kingpin.v2"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
 )
