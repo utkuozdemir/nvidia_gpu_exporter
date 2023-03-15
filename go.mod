@@ -11,7 +11,7 @@ require (
 	github.com/prometheus/common v0.42.0
 	github.com/prometheus/exporter-toolkit v0.9.1
 	github.com/stretchr/testify v1.8.2
-	golang.org/x/exp v0.0.0-20230310171629-522b1b587ee0
+	golang.org/x/exp v0.0.0-20230314191032-db074128a8ec
 )
 
 require (
