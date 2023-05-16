@@ -35,7 +35,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3.5.2
       - name: Setup Go
-        uses: actions/setup-go@v4.0.0
+        uses: actions/setup-go@v4.0.1
         with:
           go-version-file: go.mod
       - name: Ensure go.mod is already tidied
@@ -52,7 +52,7 @@ jobs:
       - name: Run tests
         run: richgo test -race -coverpkg=./... -coverprofile=coverage.txt -covermode=atomic -timeout 20m -v ./...
       - name: Send coverage
-        uses: codecov/codecov-action@v3.1.3
+        uses: codecov/codecov-action@v3.1.4
         with:
           files: coverage.txt
       - name: Build with Goreleaser
