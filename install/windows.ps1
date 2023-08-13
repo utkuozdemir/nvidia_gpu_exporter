@@ -44,7 +44,7 @@ apiVersion: 1
 datasources:
   - name: Prometheus
     type: prometheus
-    access: direct
+    access: proxy
     orgId: 1
     url: http://localhost:9090
     isDefault: true
