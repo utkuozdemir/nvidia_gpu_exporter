@@ -63,3 +63,54 @@ jobs:
           args: release --snapshot --skip-publish --clean
         env:
           PRIVATE_ACCESS_TOKEN: placeholder
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows_exporter_binaries
+          path: |
+            dist/nvidia_gpu_exporter_windows_*/
+            dist/checksums.txt
+  build-msi:
+    needs: build
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3.5.3
+
+      - name: Setup Go
+        uses: actions/setup-go@v4.1.0
+        with:
+          go-version-file: go.mod
+
+      - name: Download Windows Artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: windows_exporter_binaries
+          path: .\dist\
+
+      - name: Build Release Artifacts
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          $ErrorActionPreference = "Stop"
+          $TagName = $env:GITHUB_REF -replace 'refs/tags/', ''
+          # The MSI version is not semver compliant, so just take the numerical parts
+          $MSIVersion = $TagName -replace '^v?([0-9\.]+).*$','$1'
+          Get-ChildItem -Path .\dist\nvidia_gpu_exporter_windows_* | ForEach-Object {
+            $Arch = ($_ -split "nvidia_gpu_exporter_windows_")[1]
+            Write-Verbose "Building windows_exporter ${MSIVersion} msi for $Arch"
+            .\install\build.ps1 -PathToExecutable ".\dist\nvidia_gpu_exporter_windows_${Arch}/nvidia_gpu_exporter.exe" -Version "${MSIVersion}" -Arch "$Arch"
+            Move-Item ".\install\Output\nvidia_gpu_exporter_${MSIVersion}_${Arch}.msi" .\dist\
+          }
+
+      - name: Display structure of downloaded files
+        run: ls -R .\dist\
+
+      - name: Generate checksums for msi
+        run: |
+          "`n" | Add-Content -Path ".\dist\checksums.txt" -NoNewline -Encoding UTF8
+          Get-FileHash -Algorithm SHA256 -Path .\dist\*.deb | ForEach-Object {
+            $filename = Split-Path -Leaf $_.Path
+            $hash = $_.Hash
+            Write-Output "$hash  $filename" |  Add-Content -Path ".\dist\checksums.txt" -Encoding UTF8
+          }
+

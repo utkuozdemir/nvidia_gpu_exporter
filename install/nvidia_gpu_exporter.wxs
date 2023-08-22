@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+     xmlns:fw="http://schemas.microsoft.com/wix/FirewallExtension"
+     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
+  <?if $(sys.BUILDARCH)=x64 ?>
+    <?define PlatformProgramFiles = "ProgramFiles64Folder" ?>
+  <?else ?>
+    <?define PlatformProgramFiles = "ProgramFilesFolder" ?>
+  <?endif ?>
+  <Product Id="*" UpgradeCode="66a6eb5b-1fc2-4b14-a362-6ceec6413302"
+           Name="nvidia_gpu_exporter" Version="$(var.Version)" Manufacturer="lonewayren"
+           Language="1033" Codepage="1252">
+    <Package Id="*" Manufacturer="lonewayren" InstallScope="perMachine" InstallerVersion="500"
+             Description="nvidia_gpu_exporter $(var.Version) installer" Compressed="yes" />
+    <Media Id="1" Cabinet="nvidia_gpu_exporter.cab" EmbedCab="yes"/>
+    <MajorUpgrade Schedule="afterInstallInitialize" DowngradeErrorMessage="A later version of [ProductName] is already installed. Setup will now exit." />
+
+    <Property Id="EXTRA_FLAGS" Secure="yes"/>
+    <SetProperty Id="ExtraFlags" After="InstallFiles" Sequence="execute" Value="[EXTRA_FLAGS]">EXTRA_FLAGS</SetProperty>
+
+    <Property Id="LISTEN_ADDR" Secure="yes" />
+    <Property Id="LISTEN_PORT" Secure="yes" />
+    <SetProperty Id="ListenFlagBoth" After="InstallFiles" Sequence="execute" Value="--web.listen-address=[LISTEN_ADDR]:[LISTEN_PORT]">LISTEN_ADDR AND LISTEN_PORT</SetProperty>
+    <SetProperty Id="ListenFlagAddr" After="InstallFiles" Sequence="execute" Value="--web.listen-address=[LISTEN_ADDR]:9835">LISTEN_ADDR AND (NOT LISTEN_PORT)</SetProperty>
+    <SetProperty Id="ListenFlagPort" After="InstallFiles" Sequence="execute" Value="--web.listen-address=0.0.0.0:[LISTEN_PORT]">LISTEN_PORT AND (NOT LISTEN_ADDR)</SetProperty>
+
+    <Property Id="METRICS_PATH" Secure="yes"/>
+    <SetProperty Id="MetricsPathFlag" After="InstallFiles" Sequence="execute" Value="--telemetry.path [METRICS_PATH]">METRICS_PATH</SetProperty>
+
+    <Property Id="REMOTE_ADDR" Secure="yes" />
+    <SetProperty Id="RemoteAddressFlag" After="InstallFiles" Sequence="execute" Value="[REMOTE_ADDR]">REMOTE_ADDR</SetProperty>
+
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="$(var.PlatformProgramFiles)">
+        <Directory Id="APPLICATIONROOTDIRECTORY" Name="nvidia_gpu_exporter">
+          <Directory Id="bin" Name="bin" />
+        </Directory>
+      </Directory>
+    </Directory>
+
+
+    <ComponentGroup Id="Files">
+      <Component Id="BinDirectory" Directory="bin">
+        <CreateFolder />
+        <RemoveFolder Id='BinDirectory' On='uninstall' />
+        <File Id="nvidia_gpu_exporter.exe" Name="nvidia_gpu_exporter.exe"
+              Source="nvidia_gpu_exporter.exe" KeyPath="yes">
+          <fw:FirewallException Id="GpuMetricsEndpoint" Name="nvidia_gpu_exporter"
+                                Description="nvidia_gpu_exporter HTTP endpoint" Scope="any"
+                                Protocol="tcp" IgnoreFailure="yes" />
+        </File>
+        <ServiceInstall Id="GpuInstallExporterService" Name="nvidia_gpu_exporter"
+                        DisplayName="nvidia_gpu_exporter"
+                        Description="Exports Prometheus metrics about the system, Version: $(var.Version)"
+                        ErrorControl="normal" Start="auto" Account="LocalSystem" Type="ownProcess"
+                        Arguments='[ListenFlagBoth] [ListenFlagAddr] [ListenFlagPort] [ExtraFlags]'>
+          <util:ServiceConfig FirstFailureActionType="restart" SecondFailureActionType="restart"
+                              ThirdFailureActionType="restart" RestartServiceDelayInSeconds="60" />
+          <ServiceDependency Id="wmiApSrv" />
+        </ServiceInstall>
+        <ServiceControl Id="GpuServiceStateControl" Name="nvidia_gpu_exporter" Remove="uninstall" Start="install" Stop="both" />
+      </Component>
+    </ComponentGroup>
+
+    <Feature Id="GpuDefaultFeature" Level="1">
+      <ComponentGroupRef Id="Files" />
+    </Feature>
+  </Product>
+</Wix>
+
