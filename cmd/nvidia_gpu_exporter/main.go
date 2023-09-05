@@ -6,6 +6,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/coreos/go-systemd/v22/activation"
@@ -20,6 +22,7 @@ import (
 	webflag "github.com/prometheus/exporter-toolkit/web/kingpinflag"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/initiate"
 )
 
 const (
@@ -95,11 +98,25 @@ func main() {
 		IdleTimeout:       *idleTimeout,
 	}
 
-	if err := listenAndServe(srv, webConfig, *network, logger); err != nil {
-		_ = level.Error(logger).Log("msg", "Error starting HTTP server", "err", err)
+	go func() {
+		if err := listenAndServe(srv, webConfig, *network, logger); err != nil {
+			_ = level.Error(logger).Log("msg", "Error starting HTTP server", "err", err)
 
-		os.Exit(1)
+			os.Exit(1)
+		}
+	}()
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT)
+
+	select {
+	case <-initiate.StopCh:
+		_ = level.Info(logger).Log("msg", "Shutting down from service")
+	case <-sig:
+		_ = level.Info(logger).Log("msg", "Shutting down from signal")
 	}
+
+	os.Exit(0)
 }
 
 type RootHandler struct {
