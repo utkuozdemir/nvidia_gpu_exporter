@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/util"
 )
@@ -22,7 +23,7 @@ func TestHexToDecimal(t *testing.T) {
 
 	decimal, err := util.HexToDecimal("0x40051458")
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, almostEqual(decimal, 1074074712.0))
 }
 
@@ -31,7 +32,7 @@ func TestHexToDecimalError(t *testing.T) {
 
 	_, err := util.HexToDecimal("SOMETHING")
 
-	assert.Error(t, err)
+	require.Error(t, err)
 }
 
 func almostEqual(a, b float64) bool {

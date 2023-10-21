@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
 )
@@ -21,7 +22,7 @@ func TestParseCsvIntoTable(t *testing.T) {
 
 	parsed, err := exporter.ParseCSVIntoTable(testCsv, []exporter.QField{"name", "power.draw"})
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Len(t, parsed.Rows, 2)
 	assert.Equal(t, []exporter.RField{"name", "power.draw [W]"}, parsed.RFields)
 

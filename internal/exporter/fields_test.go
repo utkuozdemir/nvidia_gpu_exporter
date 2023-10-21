@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
 )
@@ -78,10 +79,11 @@ func TestParseAutoQFields(t *testing.T) {
 
 	fields, err := exporter.ParseAutoQFields("nvidia-smi", command)
 
-	assert.Len(t, capturedCmd.Args, 2)
-	assert.Equal(t, capturedCmd.Args[0], "nvidia-smi")
-	assert.Equal(t, capturedCmd.Args[1], "--help-query-gpu")
+	if assert.Len(t, capturedCmd.Args, 2) {
+		assert.Equal(t, "nvidia-smi", capturedCmd.Args[0])
+		assert.Equal(t, "--help-query-gpu", capturedCmd.Args[1])
+	}
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, expectedQFields, fields)
 }

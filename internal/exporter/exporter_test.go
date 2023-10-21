@@ -11,6 +11,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
 )
@@ -48,7 +49,7 @@ func TestTransformRawValueValidValues(t *testing.T) {
 
 	for raw, expected := range expectedConversions {
 		val, err := exporter.TransformRawValue(raw, 1)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assertFloat(t, expected, val)
 	}
 }
@@ -62,7 +63,7 @@ func TestTransformRawValueInvalidValues(t *testing.T) {
 
 	for _, raw := range rawValues {
 		_, err := exporter.TransformRawValue(raw, 1)
-		assert.Error(t, err)
+		require.Error(t, err)
 	}
 }
 
@@ -71,15 +72,15 @@ func TestTransformRawMultiplier(t *testing.T) {
 
 	val, err := exporter.TransformRawValue("11", 2)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assertFloat(t, 22, val)
 
 	val, err = exporter.TransformRawValue("10", 0.5)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assertFloat(t, 5, val)
 
 	val, err = exporter.TransformRawValue("enabled", 42)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assertFloat(t, 1, val)
 }
 
@@ -171,7 +172,7 @@ func TestNewUnknownField(t *testing.T) {
 	logger := log.NewNopLogger()
 	_, err := exporter.New("aaa", "bbb", "a", logger)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 }
 
 func TestDescribe(t *testing.T) {
@@ -180,7 +181,7 @@ func TestDescribe(t *testing.T) {
 	logger := log.NewNopLogger()
 	exp, err := exporter.New("aaa", "bbb", "fan.speed,memory.used", logger)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	doneCh := make(chan bool)
 	descCh := make(chan *prometheus.Desc)
@@ -230,7 +231,7 @@ func TestCollect(t *testing.T) {
 		return nil
 	}
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	doneCh := make(chan bool)
 	metricCh := make(chan prometheus.Metric)
@@ -268,7 +269,7 @@ func TestCollectError(t *testing.T) {
 	logger := log.NewNopLogger()
 	exp, err := exporter.New("aaa", "bbb", "fan.speed,memory.used", logger)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	doneCh := make(chan bool)
 	metricCh := make(chan prometheus.Metric)
