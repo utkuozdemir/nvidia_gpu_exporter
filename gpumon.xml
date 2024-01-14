@@ -1,0 +1,10 @@
+<service>
+  <!-- ID of the service. It should be unique across the Windows system-->
+  <id>nvidia_gpu_exporter</id>
+  <!-- Display name of the service -->
+  <name>NVIDIA GPU Exporter</name>
+  <!-- Service description -->
+  <description>NVIDIA Prometheus GPU exporter (WinSW)</description>
+  <!-- Path to the executable, which should be started -->
+  <executable>%BASE%\nvidia_gpu_exporter.exe</executable>
+</service>

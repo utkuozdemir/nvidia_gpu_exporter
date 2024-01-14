@@ -21,6 +21,52 @@ Follow the steps below:
 9. Finally, choose "Prometheus" as data source from the dropdown. Hit "import".
 10. Enjoy the dashboard!
 
+## Windows Exporter-Only Installation
+
+NOTE: Prometheus/Grafana are NOT INCLUDED in this procedure. This setup method assumes
+Prometheus/Grafana will run somewhere else.
+
+### Differences from All-in-One Windows Installation
+
+- WinSW replaces nssm
+- choco replaces scoop (may be omitted if golang is already installed)
+
+### 1. Get the exporter
+
+Build the latest code:
+
+- Install [Chocolatey](https://chocolatey.org/install) for Individual Use
+- Install golang: `choco install golang`
+- Build nvidia_gpu_exporter.exe: `go -C cmd/nvidia_gpu_exporter build -o ../..`
+
+Or download a release version of nvidia_gpu_exporter.exe from [releases](https://github.com/utkuozdemir/nvidia_gpu_exporter/releases) to the build directory.
+
+### 2. Get WinSW
+
+- Download [WinSW-x64.exe](https://github.com/winsw/winsw/releases/tag/v2.12.0) to the build directory
+- Rename WinSW-x64.exe to gpumon.exe: `ren WinSW-x64.exe gpumon.exe`
+
+### 3. Installation
+- Install service: `gpumon install`
+- Start service: `gpumon start`
+- Add firewall rule for exporter:
+  - CMD: `netsh advfirewall firewall add rule name="nvidia_gpu_exporter" dir=in action=allow program="%cd%\nvidia_gpu_exporter.exe" enable=yes`
+  - PowerShell (as Administrator): `New-NetFirewallRule -DisplayName "nvidia_gpu_exporter" -Direction Inbound -Program "($pwd | Select -ExpandProperty Path)\nvidia_gpu_exporter.exe" -Action Allow`
+- Verify the exporter is running by going to [http://localhost:9835/metrics](http://localhost:9835/metrics) in your browser (or with `curl`)
+
+### 4. (Optional) Create a Distribution
+
+To create a distribution for other GPU hosts, make a folder containing the distribution files:
+
+- nvidia_gpu_exporter.exe
+- gpumon.exe
+- gpumon.xml
+
+Installation from distribution files:
+
+- Copy the distribution folder to the target hard drive
+- Execute Installation steps
+
 ## Using .deb or .rpm packages
 
 If you are on a Debian-based system (.deb), you can install the exporter with the following command:
