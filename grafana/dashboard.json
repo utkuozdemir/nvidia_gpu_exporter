@@ -699,7 +699,7 @@
     },
     {
       "cacheTimeout": null,
-      "datasource": null,
+      "datasource": "${DS_PROMETHEUS}",
       "description": "Information about factors that are reducing the frequency of clocks. If all throttle reasons are returned as \"Not Active\" it means that clocks are running as high as possible.",
       "fieldConfig": {
         "defaults": {
