@@ -21,8 +21,6 @@ const (
 )
 
 var (
-	ErrNoQueryFields = errors.New("could not extract any query fields")
-
 	fieldRegex = regexp.MustCompile(`(?m)\n\s*\n^"([^"]+)"`)
 
 	//nolint:gochecknoglobals
@@ -170,13 +168,13 @@ func ParseAutoQFields(nvidiaSmiCommand string, command runCmd) ([]QField, error)
 	}
 
 	if err != nil {
-		return nil, fmt.Errorf("%w: command failed. code: %d | command: %s | stdout: %s | stderr: %s", err,
-			exitCode, strings.Join(cmdAndArgs, " "), outStr, errStr)
+		return nil, fmt.Errorf("command failed: code: %d | command: %q | stdout: %q | stderr: %q: %w",
+			exitCode, strings.Join(cmdAndArgs, " "), outStr, errStr, err)
 	}
 
 	fields := ExtractQFields(outStr)
 	if fields == nil {
-		return nil, fmt.Errorf("%w: code: %d | command: %s | stdout: %s | stderr: %s", ErrNoQueryFields,
+		return nil, fmt.Errorf("could not extract any query fields: code: %d | command: %q | stdout: %q | stderr: %q",
 			exitCode, strings.Join(cmdAndArgs, " "), outStr, errStr)
 	}
 
