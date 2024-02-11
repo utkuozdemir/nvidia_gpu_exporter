@@ -22,8 +22,6 @@ type Cell[T any] struct {
 	RawValue T
 }
 
-var ErrFieldCountMismatch = fmt.Errorf("field count mismatch")
-
 func ParseCSVIntoTable(queryResult string, qFields []QField) (Table[string], error) {
 	lines := strings.Split(strings.TrimSpace(queryResult), "\n")
 	titlesLine := lines[0]
@@ -46,8 +44,8 @@ func ParseCSVIntoTable(queryResult string, qFields []QField) (Table[string], err
 		rawValues := parseCSVLine(valuesLine)
 
 		if len(qFields) != len(rFields) {
-			return Table[string]{}, fmt.Errorf("%w: query fields: %d, returned fields: %d",
-				ErrFieldCountMismatch, len(qFields), len(rFields))
+			return Table[string]{}, fmt.Errorf("field count mismatch: query fields: %d, returned fields: %d",
+				len(qFields), len(rFields))
 		}
 
 		for colIndex, rawValue := range rawValues {
