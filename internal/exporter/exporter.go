@@ -34,9 +34,6 @@ const (
 )
 
 var (
-	ErrUnexpectedQueryField = errors.New("unexpected query field")
-	ErrParseNumber          = errors.New("could not parse number from value")
-
 	numericRegex = regexp.MustCompile(`[+-]?(\d*[.])?\d+`)
 
 	//nolint:gochecknoglobals
@@ -221,7 +218,7 @@ func scrape(qFields []QField, nvidiaSmiCommand string, command runCmd) (int, *Ta
 	qFieldsJoined := strings.Join(QFieldSliceToStringSlice(qFields), ",")
 
 	cmdAndArgs := strings.Fields(nvidiaSmiCommand)
-	cmdAndArgs = append(cmdAndArgs, fmt.Sprintf("--query-gpu=%s", qFieldsJoined))
+	cmdAndArgs = append(cmdAndArgs, "--query-gpu="+qFieldsJoined)
 	cmdAndArgs = append(cmdAndArgs, "--format=csv")
 
 	var stdout bytes.Buffer
@@ -241,8 +238,8 @@ func scrape(qFields []QField, nvidiaSmiCommand string, command runCmd) (int, *Ta
 			exitCode = exitError.ExitCode()
 		}
 
-		return exitCode, nil, fmt.Errorf("%w: command failed. code: %d | command: %s | stdout: %s | stderr: %s",
-			err, exitCode, strings.Join(cmdAndArgs, " "), stdout.String(), stderr.String())
+		return exitCode, nil, fmt.Errorf("command failed: code: %d | command: %s | stdout: %s | stderr: %s: %w",
+			exitCode, strings.Join(cmdAndArgs, " "), stdout.String(), stderr.String(), err)
 	}
 
 	t, err := ParseCSVIntoTable(strings.TrimSpace(stdout.String()), qFields)
@@ -265,7 +262,7 @@ func TransformRawValue(rawValue string, valueMultiplier float64) (float64, error
 	if strings.HasPrefix(trimmed, "0x") {
 		decimal, err := util.HexToDecimal(trimmed)
 		if err != nil {
-			return 0, fmt.Errorf("%w: %s", err, trimmed)
+			return 0, fmt.Errorf("failed to transform raw value %q: %w", trimmed, err)
 		}
 
 		return decimal, nil
@@ -294,12 +291,12 @@ func TransformRawValue(rawValue string, valueMultiplier float64) (float64, error
 func parseSanitizedValueWithBestEffort(sanitizedValue string, valueMultiplier float64) (float64, error) {
 	allNums := numericRegex.FindAllString(sanitizedValue, 2) //nolint:gomnd
 	if len(allNums) != 1 {
-		return -1, fmt.Errorf("%w: %s", ErrParseNumber, sanitizedValue)
+		return -1, fmt.Errorf("could not parse number from value: %q", sanitizedValue)
 	}
 
 	parsed, err := strconv.ParseFloat(allNums[0], floatBitSize)
 	if err != nil {
-		return -1, fmt.Errorf("failed to parse float: %w", err)
+		return -1, fmt.Errorf("failed to parse float %q: %w", allNums[0], err)
 	}
 
 	return parsed * valueMultiplier, nil
@@ -359,7 +356,7 @@ func getFallbackValues(qFields []QField) ([]RField, error) {
 	for _, q := range qFields {
 		val, contains := fallbackQFieldToRFieldMap[q]
 		if !contains {
-			return nil, fmt.Errorf("%w: %s", ErrUnexpectedQueryField, q)
+			return nil, fmt.Errorf("unexpected query field: %q", q)
 		}
 
 		rFields[counter] = val

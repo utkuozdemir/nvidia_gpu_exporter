@@ -41,10 +41,10 @@ jobs:
       - name: Ensure go.mod is already tidied
         run: go mod tidy && git diff --no-patch --exit-code
       - name: Run linters
-        uses: golangci/golangci-lint-action@v3.7.0
+        uses: golangci/golangci-lint-action@v4.0.0
         with:
           # renovate: depName=golangci/golangci-lint datasource=github-releases
-          version: v1.55.2
+          version: v1.56.1
           args: --timeout=3m0s
       - name: Install richgo
         # renovate: depName=kyoh86/richgo
@@ -52,14 +52,14 @@ jobs:
       - name: Run tests
         run: richgo test -race -coverpkg=./... -coverprofile=coverage.txt -covermode=atomic -timeout 20m -v ./...
       - name: Send coverage
-        uses: codecov/codecov-action@v3.1.4
+        uses: codecov/codecov-action@v4.0.1
         with:
           files: coverage.txt
       - name: Build with Goreleaser
         uses: goreleaser/goreleaser-action@v5.0.0
         with:
           # renovate: depName=goreleaser/goreleaser datasource=github-releases
-          version: v1.23.0
+          version: v1.24.0
           args: release --snapshot --skip-publish --clean
         env:
           PRIVATE_ACCESS_TOKEN: placeholder

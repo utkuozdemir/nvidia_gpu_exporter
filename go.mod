@@ -1,7 +1,6 @@
 module github.com/utkuozdemir/nvidia_gpu_exporter
 
-// renovate: go
-go 1.20
+go 1.22
 
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
@@ -11,7 +10,7 @@ require (
 	github.com/prometheus/common v0.46.0
 	github.com/prometheus/exporter-toolkit v0.11.0
 	github.com/stretchr/testify v1.8.4
-	golang.org/x/exp v0.0.0-20240119083558-1b970713d09a
+	golang.org/x/exp v0.0.0-20240213143201-ec583247a57a
 )
 
 require (
