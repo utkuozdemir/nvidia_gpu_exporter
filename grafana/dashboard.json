@@ -831,7 +831,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "nvidia_smi_clocks_throttle_reasons_gpu_idle{uuid=\"$gpu\"}",
+          "expr": "nvidia_smi_clocks_event_reasons_gpu_idle{uuid=\"$gpu\"}",
           "instant": false,
           "interval": "",
           "legendFormat": "Idle",
@@ -843,7 +843,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "nvidia_smi_clocks_throttle_reasons_hw_thermal_slowdown{uuid=\"$gpu\"}",
+          "expr": "nvidia_smi_clocks_event_reasons_hw_thermal_slowdown{uuid=\"$gpu\"}",
           "hide": false,
           "interval": "",
           "legendFormat": "HW Thermal Slowdown",
@@ -855,7 +855,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "nvidia_smi_clocks_throttle_reasons_sw_power_cap{uuid=\"$gpu\"}",
+          "expr": "nvidia_smi_clocks_event_reasons_sw_power_cap{uuid=\"$gpu\"}",
           "hide": false,
           "interval": "",
           "legendFormat": "SW Power Cap",
@@ -867,7 +867,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "nvidia_smi_clocks_throttle_reasons_applications_clocks_setting{uuid=\"$gpu\"}",
+          "expr": "nvidia_smi_clocks_event_reasons_applications_clocks_setting{uuid=\"$gpu\"}",
           "hide": false,
           "interval": "",
           "legendFormat": "App Clocks Setting",
@@ -879,7 +879,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "nvidia_smi_clocks_throttle_reasons_hw_power_brake_slowdown{uuid=\"$gpu\"}",
+          "expr": "nvidia_smi_clocks_event_reasons_hw_power_brake_slowdown{uuid=\"$gpu\"}",
           "hide": false,
           "interval": "",
           "legendFormat": "HW Power Brake",
@@ -891,7 +891,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "nvidia_smi_clocks_throttle_reasons_sw_thermal_slowdown{uuid=\"$gpu\"}",
+          "expr": "nvidia_smi_clocks_event_reasons_sw_thermal_slowdown{uuid=\"$gpu\"}",
           "hide": false,
           "interval": "",
           "legendFormat": "SW Thermal Slowdown",
@@ -903,7 +903,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "nvidia_smi_clocks_throttle_reasons_sync_boost{uuid=\"$gpu\"}",
+          "expr": "nvidia_smi_clocks_event_reasons_sync_boost{uuid=\"$gpu\"}",
           "hide": false,
           "interval": "",
           "legendFormat": "Sync Boost",
