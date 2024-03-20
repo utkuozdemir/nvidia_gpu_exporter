@@ -126,36 +126,36 @@ nvidia_smi_clocks_max_memory_clock_hz{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa
 # HELP nvidia_smi_clocks_max_sm_clock_hz clocks.max.sm [MHz]
 # TYPE nvidia_smi_clocks_max_sm_clock_hz gauge
 nvidia_smi_clocks_max_sm_clock_hz{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 2.28e+09
-# HELP nvidia_smi_clocks_throttle_reasons_active clocks_throttle_reasons.active
-# TYPE nvidia_smi_clocks_throttle_reasons_active gauge
-nvidia_smi_clocks_throttle_reasons_active{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 4
-# HELP nvidia_smi_clocks_throttle_reasons_applications_clocks_setting clocks_throttle_reasons.applications_clocks_setting
-# TYPE nvidia_smi_clocks_throttle_reasons_applications_clocks_setting gauge
-nvidia_smi_clocks_throttle_reasons_applications_clocks_setting{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 0
-# HELP nvidia_smi_clocks_throttle_reasons_gpu_idle clocks_throttle_reasons.gpu_idle
-# TYPE nvidia_smi_clocks_throttle_reasons_gpu_idle gauge
-nvidia_smi_clocks_throttle_reasons_gpu_idle{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 0
-# HELP nvidia_smi_clocks_throttle_reasons_hw_power_brake_slowdown clocks_throttle_reasons.hw_power_brake_slowdown
-# TYPE nvidia_smi_clocks_throttle_reasons_hw_power_brake_slowdown gauge
-nvidia_smi_clocks_throttle_reasons_hw_power_brake_slowdown{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 0
-# HELP nvidia_smi_clocks_throttle_reasons_hw_slowdown clocks_throttle_reasons.hw_slowdown
-# TYPE nvidia_smi_clocks_throttle_reasons_hw_slowdown gauge
-nvidia_smi_clocks_throttle_reasons_hw_slowdown{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 0
-# HELP nvidia_smi_clocks_throttle_reasons_hw_thermal_slowdown clocks_throttle_reasons.hw_thermal_slowdown
-# TYPE nvidia_smi_clocks_throttle_reasons_hw_thermal_slowdown gauge
-nvidia_smi_clocks_throttle_reasons_hw_thermal_slowdown{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 0
-# HELP nvidia_smi_clocks_throttle_reasons_supported clocks_throttle_reasons.supported
-# TYPE nvidia_smi_clocks_throttle_reasons_supported gauge
-nvidia_smi_clocks_throttle_reasons_supported{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 511
-# HELP nvidia_smi_clocks_throttle_reasons_sw_power_cap clocks_throttle_reasons.sw_power_cap
-# TYPE nvidia_smi_clocks_throttle_reasons_sw_power_cap gauge
-nvidia_smi_clocks_throttle_reasons_sw_power_cap{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 1
-# HELP nvidia_smi_clocks_throttle_reasons_sw_thermal_slowdown clocks_throttle_reasons.sw_thermal_slowdown
-# TYPE nvidia_smi_clocks_throttle_reasons_sw_thermal_slowdown gauge
-nvidia_smi_clocks_throttle_reasons_sw_thermal_slowdown{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 0
-# HELP nvidia_smi_clocks_throttle_reasons_sync_boost clocks_throttle_reasons.sync_boost
-# TYPE nvidia_smi_clocks_throttle_reasons_sync_boost gauge
-nvidia_smi_clocks_throttle_reasons_sync_boost{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 0
+# HELP nvidia_smi_clocks_event_reasons_active clocks_event_reasons.active
+# TYPE nvidia_smi_clocks_event_reasons_active gauge
+nvidia_smi_clocks_event_reasons_active{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 4
+# HELP nvidia_smi_clocks_event_reasons_applications_clocks_setting clocks_event_reasons.applications_clocks_setting
+# TYPE nvidia_smi_clocks_event_reasons_applications_clocks_setting gauge
+nvidia_smi_clocks_event_reasons_applications_clocks_setting{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 0
+# HELP nvidia_smi_clocks_event_reasons_gpu_idle clocks_event_reasons.gpu_idle
+# TYPE nvidia_smi_clocks_event_reasons_gpu_idle gauge
+nvidia_smi_clocks_event_reasons_gpu_idle{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 0
+# HELP nvidia_smi_clocks_event_reasons_hw_power_brake_slowdown clocks_event_reasons.hw_power_brake_slowdown
+# TYPE nvidia_smi_clocks_event_reasons_hw_power_brake_slowdown gauge
+nvidia_smi_clocks_event_reasons_hw_power_brake_slowdown{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 0
+# HELP nvidia_smi_clocks_event_reasons_hw_slowdown clocks_event_reasons.hw_slowdown
+# TYPE nvidia_smi_clocks_event_reasons_hw_slowdown gauge
+nvidia_smi_clocks_event_reasons_hw_slowdown{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 0
+# HELP nvidia_smi_clocks_event_reasons_hw_thermal_slowdown clocks_event_reasons.hw_thermal_slowdown
+# TYPE nvidia_smi_clocks_event_reasons_hw_thermal_slowdown gauge
+nvidia_smi_clocks_event_reasons_hw_thermal_slowdown{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 0
+# HELP nvidia_smi_clocks_event_reasons_supported clocks_event_reasons.supported
+# TYPE nvidia_smi_clocks_event_reasons_supported gauge
+nvidia_smi_clocks_event_reasons_supported{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 511
+# HELP nvidia_smi_clocks_event_reasons_sw_power_cap clocks_event_reasons.sw_power_cap
+# TYPE nvidia_smi_clocks_event_reasons_sw_power_cap gauge
+nvidia_smi_clocks_event_reasons_sw_power_cap{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 1
+# HELP nvidia_smi_clocks_event_reasons_sw_thermal_slowdown clocks_event_reasons.sw_thermal_slowdown
+# TYPE nvidia_smi_clocks_event_reasons_sw_thermal_slowdown gauge
+nvidia_smi_clocks_event_reasons_sw_thermal_slowdown{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 0
+# HELP nvidia_smi_clocks_event_reasons_sync_boost clocks_event_reasons.sync_boost
+# TYPE nvidia_smi_clocks_event_reasons_sync_boost gauge
+nvidia_smi_clocks_event_reasons_sync_boost{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 0
 # HELP nvidia_smi_compute_mode compute_mode
 # TYPE nvidia_smi_compute_mode gauge
 nvidia_smi_compute_mode{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 0
