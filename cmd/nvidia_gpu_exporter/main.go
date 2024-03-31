@@ -12,6 +12,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
+	clientversion "github.com/prometheus/client_golang/prometheus/collectors/version"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/promlog"
 	"github.com/prometheus/common/promlog/flag"
@@ -82,7 +83,7 @@ func main() {
 	}
 
 	prometheus.MustRegister(exp)
-	prometheus.MustRegister(version.NewCollector("nvidia_gpu_exporter"))
+	prometheus.MustRegister(clientversion.NewCollector("nvidia_gpu_exporter"))
 
 	rootHandler := NewRootHandler(logger, *metricsPath)
 	http.Handle("/", rootHandler)
@@ -95,7 +96,7 @@ func main() {
 		IdleTimeout:       *idleTimeout,
 	}
 
-	if err := listenAndServe(srv, webConfig, *network, logger); err != nil {
+	if err = listenAndServe(srv, webConfig, *network, logger); err != nil {
 		_ = level.Error(logger).Log("msg", "Error starting HTTP server", "err", err)
 
 		os.Exit(1)
@@ -121,28 +122,48 @@ func (r *RootHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 }
 
 // listenAndServe is same as web.ListenAndServe but supports passing network stack as an argument.
-//
-//nolint:all
 func listenAndServe(server *http.Server, flags *web.FlagConfig, network string, logger log.Logger) error {
 	if *flags.WebSystemdSocket {
-		level.Info(logger).Log("msg", "Listening on systemd activated listeners instead of port listeners.")
+		level.Info(logger).Log("msg", "Listening on systemd activated listeners instead of port listeners.") //nolint:errcheck
+
 		listeners, err := activation.Listeners()
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get activation listeners: %w", err)
 		}
+
 		if len(listeners) < 1 {
 			return errors.New("no socket activation file descriptors found")
 		}
-		return web.ServeMultiple(listeners, server, flags, logger)
+
+		if err = web.ServeMultiple(listeners, server, flags, logger); err != nil {
+			return fmt.Errorf("failed to serve: %w", err)
+		}
+
+		return nil
 	}
+
 	listeners := make([]net.Listener, 0, len(*flags.WebListenAddresses))
+
 	for _, address := range *flags.WebListenAddresses {
 		listener, err := net.Listen(network, address)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to listen on %s: %w", address, err)
 		}
-		defer listener.Close()
+
 		listeners = append(listeners, listener)
 	}
-	return web.ServeMultiple(listeners, server, flags, logger)
+
+	defer func() {
+		for _, listener := range listeners {
+			if err := listener.Close(); err != nil {
+				level.Error(logger).Log("msg", "Error closing listener", "err", err) //nolint:errcheck
+			}
+		}
+	}()
+
+	if err := web.ServeMultiple(listeners, server, flags, logger); err != nil {
+		return fmt.Errorf("failed to serve: %w", err)
+	}
+
+	return nil
 }
