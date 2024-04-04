@@ -52,14 +52,14 @@ jobs:
       - name: Run tests
         run: richgo test -race -coverpkg=./... -coverprofile=coverage.txt -covermode=atomic -timeout 20m -v ./...
       - name: Send coverage
-        uses: codecov/codecov-action@v4.1.1
+        uses: codecov/codecov-action@v4.2.0
         with:
           files: coverage.txt
       - name: Build with Goreleaser
         uses: goreleaser/goreleaser-action@v5.0.0
         with:
           # renovate: depName=goreleaser/goreleaser datasource=github-releases
-          version: v1.25.0
+          version: v1.25.1
           args: release --snapshot --skip-publish --clean
         env:
           PRIVATE_ACCESS_TOKEN: placeholder
