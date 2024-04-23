@@ -69,7 +69,7 @@ nfpms:
     vendor: Utku Ozdemir
     homepage: https://github.com/utkuozdemir/nvidia_gpu_exporter
     license: MIT
-    maintainer: Utku Ozdemir <uoz@protonmail.com>
+    maintainer: Utku Ozdemir <utkuozdemir@gmail.com>
     section: misc
     description: |-
       Nvidia GPU exporter for prometheus.
@@ -167,7 +167,7 @@ scoop:
     token: "{{ .Env.PRIVATE_ACCESS_TOKEN }}"
   commit_author:
     name: Utku Ozdemir
-    email: uoz@protonmail.com
+    email: utkuozdemir@gmail.com
   commit_msg_template: "Scoop update for {{ .ProjectName }} version {{ .Tag }}"
   homepage: https://github.com/utkuozdemir/nvidia_gpu_exporter
   description: Nvidia GPU exporter for prometheus using nvidia-smi binary
