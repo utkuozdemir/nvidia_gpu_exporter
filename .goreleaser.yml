@@ -172,3 +172,24 @@ scoop:
   homepage: https://github.com/utkuozdemir/nvidia_gpu_exporter
   description: Nvidia GPU exporter for prometheus using nvidia-smi binary
   license: MIT
+
+aurs:
+  name: nvidia-gpu-exporter-bin
+  homepage: https://github.com/utkuozdemir/nvidia_gpu_exporter
+  description: Nvidia GPU exporter for prometheus using nvidia-smi binary
+  maintainers:
+    - kpj <kim.philipp.jablonski@gmail.com>
+  license: MIT
+  private_key: '{{ .Env.AUR_KEY }}'
+  git_url: 'ssh://aur@aur.archlinux.org/nvidia-gpu-exporter-bin.git'
+  package: |-
+    # systemd
+    install -Dm644 "systemd/nvidia_gpu_exporter.service" "$pkgdir/usr/lib/systemd/system/nvidia-gpu-exporter.service"
+    echo 'u nvidia_gpu_exporter - "Prometheus Nvidia GPU exporter user"' > "$pkgdir/usr/lib/sysusers.d/nvidia-gpu-exporter.conf"
+
+    # binary
+    install -Dm755 "$srcdir/nvidia_gpu_exporter" "$pkgdir/usr/bin/nvidia-gpu-exporter"
+
+    # license
+    install -Dm644 "$srcdir/LICENSE" "$pkgdir/usr/share/licenses/nvidia-gpu-exporter/LICENSE"
+  url_template: " https://github.com/utkuozdemir/nvidia_gpu_exporter/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
