@@ -12,15 +12,16 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
-	clientversion "github.com/prometheus/client_golang/prometheus/collectors/version"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/promlog"
 	"github.com/prometheus/common/promlog/flag"
 	"github.com/prometheus/common/version"
 	"github.com/prometheus/exporter-toolkit/web"
-	webflag "github.com/prometheus/exporter-toolkit/web/kingpinflag"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
+
+	clientversion "github.com/prometheus/client_golang/prometheus/collectors/version"
+	webflag "github.com/prometheus/exporter-toolkit/web/kingpinflag"
 )
 
 const (
