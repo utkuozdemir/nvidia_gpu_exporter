@@ -256,7 +256,9 @@ type MetricInfo struct {
 	ValueMultiplier float64
 }
 
-//nolint:gomnd
+// TransformRawValue transforms a raw value into a float64.
+//
+//nolint:gomnd,mnd
 func TransformRawValue(rawValue string, valueMultiplier float64) (float64, error) {
 	trimmed := strings.TrimSpace(rawValue)
 	if strings.HasPrefix(trimmed, "0x") {
@@ -289,7 +291,7 @@ func TransformRawValue(rawValue string, valueMultiplier float64) (float64, error
 }
 
 func parseSanitizedValueWithBestEffort(sanitizedValue string, valueMultiplier float64) (float64, error) {
-	allNums := numericRegex.FindAllString(sanitizedValue, 2) //nolint:gomnd
+	allNums := numericRegex.FindAllString(sanitizedValue, 2) //nolint:gomnd,mnd
 	if len(allNums) != 1 {
 		return -1, fmt.Errorf("could not parse number from value: %q", sanitizedValue)
 	}

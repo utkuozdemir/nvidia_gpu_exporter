@@ -1,7 +1,6 @@
 package exporter_test
 
 import (
-	_ "embed"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
+
+	_ "embed"
 )
 
 const (

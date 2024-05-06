@@ -11,7 +11,13 @@ linters:
 
 linters-settings:
   gci:
-    local-prefixes: github.com/utkuozdemir/nvidia_gpu_exporter
+    sections:
+        - standard
+        - default
+        - prefix(github.com/utkuozdemir/nvidia_gpu_exporter)
+        - blank
+        - dot
+        - alias
   goimports:
     local-prefixes: github.com/utkuozdemir/nvidia_gpu_exporter
   goconst:
