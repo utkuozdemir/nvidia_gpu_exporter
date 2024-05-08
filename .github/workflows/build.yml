@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.1.4
+        uses: actions/checkout@v4.1.5
       - name: Setup Go
         uses: actions/setup-go@v5.0.1
         with:
@@ -44,7 +44,7 @@ jobs:
         uses: golangci/golangci-lint-action@v6.0.1
         with:
           # renovate: depName=golangci/golangci-lint datasource=github-releases
-          version: v1.58.0
+          version: v1.58.1
           args: --timeout=3m0s
       - name: Install richgo
         # renovate: depName=kyoh86/richgo
