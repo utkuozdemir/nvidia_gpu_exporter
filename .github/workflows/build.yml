@@ -54,7 +54,7 @@ jobs:
         env:
           RICHGO_FORCE_COLOR: 1
       - name: Send coverage
-        uses: codecov/codecov-action@v4.3.1
+        uses: codecov/codecov-action@v4.4.0
         with:
           files: coverage.txt
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -62,7 +62,7 @@ jobs:
         uses: goreleaser/goreleaser-action@v5.1.0
         with:
           # renovate: depName=goreleaser/goreleaser datasource=github-releases
-          version: v1.25.1
+          version: v1.26.0
           args: release --snapshot --skip=publish --clean
         env:
           PRIVATE_ACCESS_TOKEN: placeholder
