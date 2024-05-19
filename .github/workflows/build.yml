@@ -44,7 +44,7 @@ jobs:
         uses: golangci/golangci-lint-action@v6.0.1
         with:
           # renovate: depName=golangci/golangci-lint datasource=github-releases
-          version: v1.58.1
+          version: v1.58.2
           args: --timeout=3m0s
       - name: Install richgo
         # renovate: depName=kyoh86/richgo
