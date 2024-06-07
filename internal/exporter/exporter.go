@@ -170,84 +170,202 @@ func (e *GPUExporter) Describe(ch chan<- *prometheus.Desc) {
 
 // Collect fetches the stats and delivers them as Prometheus metrics. It implements prometheus.Collector.
 func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
-	e.mutex.Lock()
-	defer e.mutex.Unlock()
+    e.mutex.Lock()
+    defer e.mutex.Unlock()
 
-	exitCode, currentTable, err := scrape(e.qFields, e.nvidiaSmiCommand, e.Command)
-	e.exitCode.Set(float64(exitCode))
-	metricCh <- e.exitCode
+    exitCode, currentTable, err := scrape(e.qFields, e.nvidiaSmiCommand, e.Command)
+    e.exitCode.Set(float64(exitCode))
+    metricCh <- e.exitCode
 
-	if err != nil {
-		_ = level.Error(e.logger).Log("error", err)
-		metricCh <- e.failedScrapesTotal
-		e.failedScrapesTotal.Inc()
+    if err != nil {
+        _ = level.Error(e.logger).Log("error", err)
+        metricCh <- e.failedScrapesTotal
+        e.failedScrapesTotal.Inc()
+        return
+    }
 
-		return
-	}
+    var uuid string
 
-	for _, currentRow := range currentTable.Rows {
-		uuid := strings.TrimPrefix(strings.ToLower(currentRow.QFieldToCells[uuidQField].RawValue), "gpu-")
-		name := currentRow.QFieldToCells[nameQField].RawValue
-		driverModelCurrent := currentRow.QFieldToCells[driverModelCurrentQField].RawValue
-		driverModelPending := currentRow.QFieldToCells[driverModelPendingQField].RawValue
-		vBiosVersion := currentRow.QFieldToCells[vBiosVersionQField].RawValue
-		driverVersion := currentRow.QFieldToCells[driverVersionQField].RawValue
+    // Duyệt qua các hàng và xử lý từng loại dữ liệu riêng biệt
+    for _, currentRow := range currentTable.Rows {
+        if uuidCell, ok := currentRow.QFieldToCells[uuidQField]; ok {
+            // Xử lý dữ liệu GPU
+            uuid = strings.TrimPrefix(strings.ToLower(uuidCell.RawValue), "gpu-")
+            nameCell, nameExists := currentRow.QFieldToCells[nameQField]
+            driverModelCurrentCell, driverModelCurrentExists := currentRow.QFieldToCells[driverModelCurrentQField]
+            driverModelPendingCell, driverModelPendingExists := currentRow.QFieldToCells[driverModelPendingQField]
+            vBiosVersionCell, vBiosVersionExists := currentRow.QFieldToCells[vBiosVersionQField]
+            driverVersionCell, driverVersionExists := currentRow.QFieldToCells[driverVersionQField]
 
-		infoMetric := prometheus.MustNewConstMetric(e.gpuInfoDesc, prometheus.GaugeValue,
-			1, uuid, name, driverModelCurrent,
-			driverModelPending, vBiosVersion, driverVersion)
-		metricCh <- infoMetric
+            if !nameExists || !driverModelCurrentExists || !driverModelPendingExists || !vBiosVersionExists || !driverVersionExists {
+                _ = level.Warn(e.logger).Log("msg", "Missing required fields in the current row", "row", fmt.Sprintf("%+v", currentRow))
+                continue
+            }
 
-		for _, currentCell := range currentRow.Cells {
-			metricInfo := e.qFieldToMetricInfoMap[currentCell.QField]
+            name := nameCell.RawValue
+            driverModelCurrent := driverModelCurrentCell.RawValue
+            driverModelPending := driverModelPendingCell.RawValue
+            vBiosVersion := vBiosVersionCell.RawValue
+            driverVersion := driverVersionCell.RawValue
 
-			num, err := TransformRawValue(currentCell.RawValue, metricInfo.ValueMultiplier)
-			if err != nil {
-				_ = level.Debug(e.logger).Log("error", err, "query_field_name",
-					currentCell.QField, "raw_value", currentCell.RawValue)
+            if e.gpuInfoDesc == nil {
+                _ = level.Error(e.logger).Log("msg", "gpuInfoDesc is nil")
+                continue
+            }
 
-				continue
-			}
+            infoMetric := prometheus.MustNewConstMetric(e.gpuInfoDesc, prometheus.GaugeValue,
+                1, uuid, name, driverModelCurrent,
+                driverModelPending, vBiosVersion, driverVersion)
+            metricCh <- infoMetric
 
-			metricCh <- prometheus.MustNewConstMetric(metricInfo.desc, metricInfo.MType, num, uuid)
-		}
-	}
+            for qField, currentCell := range currentRow.QFieldToCells {
+                metricInfo, metricInfoExists := e.qFieldToMetricInfoMap[qField]
+                if !metricInfoExists {
+                    _ = level.Warn(e.logger).Log("msg", "Missing metric info for query field", "query_field", qField)
+                    continue
+                }
+
+                num, err := TransformRawValue(currentCell.RawValue, metricInfo.ValueMultiplier)
+                if err != nil {
+                    _ = level.Debug(e.logger).Log("error", err, "query_field_name",
+                        qField, "raw_value", currentCell.RawValue)
+                    continue
+                }
+
+                metricCh <- prometheus.MustNewConstMetric(metricInfo.desc, metricInfo.MType, num, uuid)
+            }
+        } else {
+            // Xử lý dữ liệu ứng dụng tính toán
+            pidCell, pidExists := currentRow.QFieldToCells["pid"]
+            if !pidExists {
+                _ = level.Warn(e.logger).Log("msg", "Missing pid field in compute apps row", "row", fmt.Sprintf("%+v", currentRow))
+                continue
+            }
+            pid := pidCell.RawValue
+
+            processNameCell, processNameExists := currentRow.QFieldToCells["process_name"]
+            if !processNameExists {
+                _ = level.Warn(e.logger).Log("msg", "Missing process_name field in compute apps row", "row", fmt.Sprintf("%+v", currentRow))
+                continue
+            }
+            processName := processNameCell.RawValue
+
+            usedMemoryCell, usedMemoryExists := currentRow.QFieldToCells["used_gpu_memory"]
+            if !usedMemoryExists {
+                _ = level.Warn(e.logger).Log("msg", "Missing used_gpu_memory field in compute apps row", "row", fmt.Sprintf("%+v", currentRow))
+                continue
+            }
+            usedMemory, err := TransformRawValue(usedMemoryCell.RawValue, 1)
+            if err != nil {
+                _ = level.Debug(e.logger).Log("error", err, "query_field_name", "used_gpu_memory", "raw_value", usedMemoryCell.RawValue)
+                continue
+            }
+
+            // Log thêm thông tin về PID và Process Name
+            _ = level.Debug(e.logger).Log("pid", pid, "process_name", processName)
+
+            // Tạo các metric cho các trường từ --query-compute-apps
+            pidMetric := prometheus.NewDesc(
+                prometheus.BuildFQName(e.prefix, "", "compute_app_pid"),
+                "PID của ứng dụng",
+                []string{"uuid", "process_name", "pid"}, nil,
+            )
+            usedMemoryMetric := prometheus.NewDesc(
+                prometheus.BuildFQName(e.prefix, "", "compute_app_used_memory"),
+                "Bộ nhớ được sử dụng bởi ứng dụng",
+                []string{"uuid", "process_name", "pid"}, nil,
+            )
+
+            metricCh <- prometheus.MustNewConstMetric(pidMetric, prometheus.GaugeValue, 1, uuid, processName, pid)
+            metricCh <- prometheus.MustNewConstMetric(usedMemoryMetric, prometheus.GaugeValue, usedMemory, uuid, processName, pid)
+        }
+    }
 }
+
+
+
 
 func scrape(qFields []QField, nvidiaSmiCommand string, command runCmd) (int, *Table[string], error) {
 	qFieldsJoined := strings.Join(QFieldSliceToStringSlice(qFields), ",")
 
-	cmdAndArgs := strings.Fields(nvidiaSmiCommand)
-	cmdAndArgs = append(cmdAndArgs, "--query-gpu="+qFieldsJoined)
-	cmdAndArgs = append(cmdAndArgs, "--format=csv")
+	// Chạy lệnh đầu tiên với --query-gpu
+	cmdAndArgs1 := strings.Fields(nvidiaSmiCommand)
+	cmdAndArgs1 = append(cmdAndArgs1, "--query-gpu="+qFieldsJoined)
+	cmdAndArgs1 = append(cmdAndArgs1, "--format=csv")
 
-	var stdout bytes.Buffer
+	var stdout1 bytes.Buffer
+	var stderr1 bytes.Buffer
 
-	var stderr bytes.Buffer
+	cmd1 := exec.Command(cmdAndArgs1[0], cmdAndArgs1[1:]...)
+	cmd1.Stdout = &stdout1
+	cmd1.Stderr = &stderr1
 
-	cmd := exec.Command(cmdAndArgs[0], cmdAndArgs[1:]...) //nolint:gosec
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	err := command(cmd)
-	if err != nil {
+	err1 := command(cmd1)
+	if err1 != nil {
 		exitCode := -1
-
 		var exitError *exec.ExitError
-		if errors.As(err, &exitError) {
+		if errors.As(err1, &exitError) {
 			exitCode = exitError.ExitCode()
 		}
 
 		return exitCode, nil, fmt.Errorf("command failed: code: %d | command: %s | stdout: %s | stderr: %s: %w",
-			exitCode, strings.Join(cmdAndArgs, " "), stdout.String(), stderr.String(), err)
+			exitCode, strings.Join(cmdAndArgs1, " "), stdout1.String(), stderr1.String(), err1)
 	}
 
-	t, err := ParseCSVIntoTable(strings.TrimSpace(stdout.String()), qFields)
+	t1, err := ParseCSVIntoTable(strings.TrimSpace(stdout1.String()), qFields)
 	if err != nil {
 		return -1, nil, err
 	}
 
-	return 0, &t, nil
+	// Chạy lệnh thứ hai với --query-compute-apps
+	cmdAndArgs2 := strings.Fields(nvidiaSmiCommand)
+	cmdAndArgs2 = append(cmdAndArgs2, "--query-compute-apps=pid,process_name,used_gpu_memory")
+	cmdAndArgs2 = append(cmdAndArgs2, "--format=csv")
+
+	var stdout2 bytes.Buffer
+	var stderr2 bytes.Buffer
+
+	cmd2 := exec.Command(cmdAndArgs2[0], cmdAndArgs2[1:]...)
+	cmd2.Stdout = &stdout2
+	cmd2.Stderr = &stderr2
+
+	err2 := command(cmd2)
+	if err2 != nil {
+		exitCode := -1
+		var exitError *exec.ExitError
+		if errors.As(err2, &exitError) {
+			exitCode = exitError.ExitCode()
+		}
+
+		return exitCode, nil, fmt.Errorf("command failed: code: %d | command: %s | stdout: %s | stderr: %s: %w",
+			exitCode, strings.Join(cmdAndArgs2, " "), stdout2.String(), stderr2.String(), err2)
+	}
+
+	t2, err := ParseCSVIntoTable(strings.TrimSpace(stdout2.String()), []QField{"pid", "process_name", "used_gpu_memory"})
+	if err != nil {
+		return -1, nil, err
+	}
+
+	combinedTable := combineTables(&t1, &t2)
+
+	return 0, combinedTable, nil
+}
+
+func combineTables(t1, t2 *Table[string]) *Table[string] {
+	// Kiểm tra xem t1 và t2 có nil không
+	if t1 == nil {
+		return t2
+	}
+	if t2 == nil {
+		return t1
+	}
+
+	// Kết hợp các hàng từ t1 và t2
+	combinedRows := append(t1.Rows, t2.Rows...)
+	return &Table[string]{
+		RFields: t1.RFields,
+		Rows:    combinedRows,
+	}
 }
 
 type MetricInfo struct {
