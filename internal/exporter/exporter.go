@@ -214,7 +214,7 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 	}
 }
 
-func scrape(qFields []QField, nvidiaSmiCommand string, command runCmd) (int, *Table[string], error) {
+func scrape(qFields []QField, nvidiaSmiCommand string, command runCmd) (int, *Table, error) {
 	qFieldsJoined := strings.Join(QFieldSliceToStringSlice(qFields), ",")
 
 	cmdAndArgs := strings.Fields(nvidiaSmiCommand)

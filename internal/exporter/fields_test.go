@@ -1,6 +1,7 @@
 package exporter_test
 
 import (
+	_ "embed"
 	"os/exec"
 	"testing"
 
@@ -8,12 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
-
-	_ "embed"
 )
 
 var (
-	//go:embed _fields-test.txt
+	//go:embed testdata/fields.txt
 	fieldsTest string
 
 	//nolint:gochecknoglobals

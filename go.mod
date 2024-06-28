@@ -1,6 +1,6 @@
 module github.com/utkuozdemir/nvidia_gpu_exporter
 
-go 1.22
+go 1.22.4
 
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
@@ -14,7 +14,7 @@ require (
 )
 
 require (
-	github.com/alecthomas/units v0.0.0-20231202071711-9a357b53e9c9 // indirect
+	github.com/alecthomas/units v0.0.0-20240626203959-61d1e3462e30 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect

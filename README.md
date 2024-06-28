@@ -63,8 +63,9 @@ See [METRICS.md](METRICS.md) for details.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
-# Star History
+## Star History
 
+<!-- markdownlint-disable no-inline-html -->
 <a href="https://star-history.com/#utkuozdemir/nvidia_gpu_exporter&Date">
  <picture>
    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=utkuozdemir/nvidia_gpu_exporter&type=Date&theme=dark" />
@@ -72,3 +73,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=utkuozdemir/nvidia_gpu_exporter&type=Date" />
  </picture>
 </a>
+<!-- markdownlint-enable no-inline-html -->

@@ -1,6 +1,7 @@
 package exporter_test
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,15 +14,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
-
-	_ "embed"
 )
 
-const (
-	delta = 1e-9
-)
+const delta = 1e-9
 
-//go:embed _query-test.txt
+//go:embed testdata/query.txt
 var queryTest string
 
 func assertFloat(t *testing.T, expected, actual float64) {
