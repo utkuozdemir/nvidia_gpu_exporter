@@ -27,7 +27,7 @@
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "10.4.3"
+      "version": "11.1.0"
     },
     {
       "type": "datasource",
@@ -110,6 +110,7 @@
         "graphMode": "none",
         "justifyMode": "auto",
         "orientation": "auto",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "last"
@@ -122,7 +123,7 @@
         "textMode": "name",
         "wideLayout": true
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "11.1.0",
       "targets": [
         {
           "datasource": {
@@ -187,6 +188,7 @@
         "graphMode": "none",
         "justifyMode": "auto",
         "orientation": "auto",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "last"
@@ -199,7 +201,7 @@
         "textMode": "value",
         "wideLayout": true
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "11.1.0",
       "targets": [
         {
           "datasource": {
@@ -274,7 +276,7 @@
         "sizing": "auto",
         "text": {}
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "11.1.0",
       "targets": [
         {
           "datasource": {
@@ -349,7 +351,7 @@
         "sizing": "auto",
         "text": {}
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "11.1.0",
       "targets": [
         {
           "datasource": {
@@ -424,7 +426,7 @@
         "sizing": "auto",
         "text": {}
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "11.1.0",
       "targets": [
         {
           "datasource": {
@@ -499,7 +501,7 @@
         "sizing": "auto",
         "text": {}
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "11.1.0",
       "targets": [
         {
           "datasource": {
@@ -602,7 +604,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "11.1.0",
       "targets": [
         {
           "datasource": {
@@ -657,6 +659,7 @@
         "graphMode": "none",
         "justifyMode": "auto",
         "orientation": "auto",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "last"
@@ -669,7 +672,7 @@
         "textMode": "name",
         "wideLayout": true
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "11.1.0",
       "targets": [
         {
           "datasource": {
@@ -725,6 +728,7 @@
         "graphMode": "none",
         "justifyMode": "auto",
         "orientation": "auto",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "last"
@@ -737,7 +741,7 @@
         "textMode": "name",
         "wideLayout": true
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "11.1.0",
       "targets": [
         {
           "datasource": {
@@ -819,7 +823,7 @@
         "text": {},
         "valueMode": "color"
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "11.1.0",
       "targets": [
         {
           "datasource": {
@@ -967,7 +971,7 @@
         "sizing": "auto",
         "text": {}
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "11.1.0",
       "targets": [
         {
           "datasource": {
@@ -1042,7 +1046,7 @@
         "sizing": "auto",
         "text": {}
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "11.1.0",
       "targets": [
         {
           "datasource": {
@@ -1117,7 +1121,7 @@
         "sizing": "auto",
         "text": {}
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "11.1.0",
       "targets": [
         {
           "datasource": {
@@ -1192,7 +1196,7 @@
         "sizing": "auto",
         "text": {}
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "11.1.0",
       "targets": [
         {
           "datasource": {
@@ -1295,7 +1299,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "11.1.0",
       "targets": [
         {
           "datasource": {
@@ -1393,7 +1397,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "11.1.0",
       "targets": [
         {
           "datasource": {
@@ -1496,7 +1500,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "11.1.0",
       "targets": [
         {
           "datasource": {
@@ -1594,7 +1598,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "11.1.0",
       "targets": [
         {
           "datasource": {
@@ -1697,7 +1701,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "11.1.0",
       "targets": [
         {
           "datasource": {
@@ -1795,7 +1799,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "11.1.0",
       "targets": [
         {
           "datasource": {
@@ -1894,7 +1898,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "11.1.0",
       "targets": [
         {
           "datasource": {
@@ -1993,7 +1997,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "11.1.0",
       "targets": [
         {
           "datasource": {
@@ -2092,7 +2096,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "11.1.0",
       "targets": [
         {
           "datasource": {
