@@ -5,24 +5,24 @@ import (
 	"strings"
 )
 
-type Table[T any] struct {
-	Rows          []Row[T]
+type Table struct {
+	Rows          []Row
 	RFields       []RField
-	QFieldToCells map[QField][]Cell[T]
+	QFieldToCells map[QField][]Cell
 }
 
-type Row[T any] struct {
-	QFieldToCells map[QField]Cell[T]
-	Cells         []Cell[T]
+type Row struct {
+	QFieldToCells map[QField]Cell
+	Cells         []Cell
 }
 
-type Cell[T any] struct {
+type Cell struct {
 	QField   QField
 	RField   RField
-	RawValue T
+	RawValue string
 }
 
-func ParseCSVIntoTable(queryResult string, qFields []QField) (Table[string], error) {
+func ParseCSVIntoTable(queryResult string, qFields []QField) (Table, error) {
 	lines := strings.Split(strings.TrimSpace(queryResult), "\n")
 	titlesLine := lines[0]
 	valuesLines := lines[1:]
@@ -31,27 +31,27 @@ func ParseCSVIntoTable(queryResult string, qFields []QField) (Table[string], err
 	numCols := len(qFields)
 	numRows := len(valuesLines)
 
-	rows := make([]Row[string], numRows)
+	rows := make([]Row, numRows)
 
-	qFieldToCells := make(map[QField][]Cell[string])
+	qFieldToCells := make(map[QField][]Cell)
 	for _, q := range qFields {
-		qFieldToCells[q] = make([]Cell[string], numRows)
+		qFieldToCells[q] = make([]Cell, numRows)
 	}
 
 	for rowIndex, valuesLine := range valuesLines {
-		qFieldToCell := make(map[QField]Cell[string], numCols)
-		cells := make([]Cell[string], numCols)
+		qFieldToCell := make(map[QField]Cell, numCols)
+		cells := make([]Cell, numCols)
 		rawValues := parseCSVLine(valuesLine)
 
 		if len(qFields) != len(rFields) {
-			return Table[string]{}, fmt.Errorf("field count mismatch: query fields: %d, returned fields: %d",
+			return Table{}, fmt.Errorf("field count mismatch: query fields: %d, returned fields: %d",
 				len(qFields), len(rFields))
 		}
 
 		for colIndex, rawValue := range rawValues {
 			currentQField := qFields[colIndex]
 			currentRField := rFields[colIndex]
-			tableCell := Cell[string]{
+			tableCell := Cell{
 				QField:   currentQField,
 				RField:   currentRField,
 				RawValue: rawValue,
@@ -61,7 +61,7 @@ func ParseCSVIntoTable(queryResult string, qFields []QField) (Table[string], err
 			qFieldToCells[currentQField][rowIndex] = tableCell
 		}
 
-		tableRow := Row[string]{
+		tableRow := Row{
 			QFieldToCells: qFieldToCell,
 			Cells:         cells,
 		}
@@ -69,7 +69,7 @@ func ParseCSVIntoTable(queryResult string, qFields []QField) (Table[string], err
 		rows[rowIndex] = tableRow
 	}
 
-	return Table[string]{
+	return Table{
 		Rows:          rows,
 		RFields:       rFields,
 		QFieldToCells: qFieldToCells,

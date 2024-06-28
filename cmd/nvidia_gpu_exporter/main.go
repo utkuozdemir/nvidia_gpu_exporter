@@ -12,20 +12,18 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
+	clientversion "github.com/prometheus/client_golang/prometheus/collectors/version"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/promlog"
 	"github.com/prometheus/common/promlog/flag"
 	"github.com/prometheus/common/version"
 	"github.com/prometheus/exporter-toolkit/web"
+	webflag "github.com/prometheus/exporter-toolkit/web/kingpinflag"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
-
-	clientversion "github.com/prometheus/client_golang/prometheus/collectors/version"
-	webflag "github.com/prometheus/exporter-toolkit/web/kingpinflag"
 )
 
-const (
-	redirectPageTemplate = `<html lang="en">
+const redirectPageTemplate = `<html lang="en">
 <head><title>Nvidia GPU Exporter</title></head>
 <body>
 <h1>Nvidia GPU Exporter</h1>
@@ -33,7 +31,6 @@ const (
 </body>
 </html>
 `
-)
 
 // main is the entrypoint of the application.
 //
@@ -123,7 +120,7 @@ func (r *RootHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 }
 
 // listenAndServe is same as web.ListenAndServe but supports passing network stack as an argument.
-func listenAndServe(server *http.Server, flags *web.FlagConfig, network string, logger log.Logger) error {
+func listenAndServe(server *http.Server, flags *web.FlagConfig, network string, logger log.Logger) (retErr error) {
 	if *flags.WebSystemdSocket {
 		level.Info(logger).Log("msg", "Listening on systemd activated listeners instead of port listeners.") //nolint:errcheck
 
@@ -157,7 +154,7 @@ func listenAndServe(server *http.Server, flags *web.FlagConfig, network string, 
 	defer func() {
 		for _, listener := range listeners {
 			if err := listener.Close(); err != nil {
-				level.Error(logger).Log("msg", "Error closing listener", "err", err) //nolint:errcheck
+				retErr = errors.Join(retErr, fmt.Errorf("failed to close listener: %w", err))
 			}
 		}
 	}()
