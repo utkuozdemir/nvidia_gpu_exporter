@@ -12,8 +12,8 @@ Nvidia GPU exporter for prometheus, using `nvidia-smi` binary to gather metrics.
 
 ---
 
-⚠️ **Maintenance status**:
-I get that it can be frustrating not to hear back about the stuff you've brought up or the changes you've suggested. But honestly, for over a year now, I've hardly had any time to keep up with my personal open-source projects, including this one. I am still committed to keep this tool working and slowly move it forward, but please bear with me if I can't tackle your fixes or check out your code for a while. Thanks for your understanding.
+> [!WARNING]
+> **Maintenance Status:** I get that it can be frustrating not to hear back about the stuff you've brought up or the changes you've suggested. But honestly, for over a year now, I've hardly had any time to keep up with my personal open-source projects, including this one. I am still committed to keep this tool working and slowly move it forward, but please bear with me if I can't tackle your fixes or check out your code for a while. Thanks for your understanding.
 
 ---
 
@@ -63,8 +63,9 @@ See [METRICS.md](METRICS.md) for details.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
-# Star History
+## Star History
 
+<!-- markdownlint-disable no-inline-html -->
 <a href="https://star-history.com/#utkuozdemir/nvidia_gpu_exporter&Date">
  <picture>
    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=utkuozdemir/nvidia_gpu_exporter&type=Date&theme=dark" />
@@ -72,3 +73,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=utkuozdemir/nvidia_gpu_exporter&type=Date" />
  </picture>
 </a>
+<!-- markdownlint-enable no-inline-html -->

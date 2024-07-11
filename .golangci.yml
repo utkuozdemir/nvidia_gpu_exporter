@@ -2,23 +2,26 @@
 linters:
   enable-all: true
   disable:
-    # breaking things: https://github.com/atc0005/go-ci/issues/1024
-    - depguard
     # not useful
-    - exhaustivestruct
     - exhaustruct
-    - goerr113
+    - err113
 
 linters-settings:
   gci:
     sections:
         - standard
         - default
-        - prefix(github.com/utkuozdemir/nvidia_gpu_exporter)
-        - blank
-        - dot
-        - alias
+        - localmodule
   goimports:
     local-prefixes: github.com/utkuozdemir/nvidia_gpu_exporter
   goconst:
     ignore-tests: true
+  depguard:
+    rules:
+      main:
+        list-mode: lax
+        files:
+          - $all
+        deny:
+          - pkg: io/ioutil
+            desc: "replaced by io and os packages since Go 1.16: https://tip.golang.org/doc/go1.16#ioutil"

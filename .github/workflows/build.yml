@@ -33,9 +33,9 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.1.6
+        uses: actions/checkout@v4.1.7
       - name: Setup Go
-        uses: actions/setup-go@v5.0.1
+        uses: actions/setup-go@v5.0.2
         with:
           go-version-file: go.mod
       - name: Ensure go.mod is already tidied
@@ -54,7 +54,7 @@ jobs:
         env:
           RICHGO_FORCE_COLOR: 1
       - name: Send coverage
-        uses: codecov/codecov-action@v4.4.1
+        uses: codecov/codecov-action@v4.5.0
         with:
           files: coverage.txt
           token: ${{ secrets.CODECOV_TOKEN }}
