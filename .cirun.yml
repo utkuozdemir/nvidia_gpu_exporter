@@ -1,0 +1,15 @@
+runners:
+  - name: gpu-runner
+    cloud: gcp
+    gpu: nvidia-tesla-t4
+    instance_type: n1-standard-1
+    machine_image: c0-deeplearning-common-gpu-v20240708-debian-11-py310
+    preemptible: true
+    region:
+      - europe-west2-b
+      - europe-west2-a
+      - europe-west4-c
+      - europe-west4-b
+      - europe-west4-a
+    labels:
+      - cirun-gpu-runner

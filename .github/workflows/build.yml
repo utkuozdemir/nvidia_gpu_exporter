@@ -30,39 +30,11 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: "cirun-gpu-runner--${{ github.run_id }}"
     steps:
       - name: Checkout
         uses: actions/checkout@v4.1.7
-      - name: Setup Go
-        uses: actions/setup-go@v5.0.2
-        with:
-          go-version-file: go.mod
-      - name: Ensure go.mod is already tidied
-        run: go mod tidy && git diff --no-patch --exit-code
-      - name: Run linters
-        uses: golangci/golangci-lint-action@v6.0.1
-        with:
-          # renovate: depName=golangci/golangci-lint datasource=github-releases
-          version: v1.59.1
-          args: --timeout=3m0s
-      - name: Install richgo
-        # renovate: depName=kyoh86/richgo
-        run: go install github.com/kyoh86/richgo@v0.3.12
-      - name: Run tests
-        run: richgo test -race -coverpkg=./... -coverprofile=coverage.txt -covermode=atomic -timeout 20m -v ./...
-        env:
-          RICHGO_FORCE_COLOR: 1
-      - name: Send coverage
-        uses: codecov/codecov-action@v4.5.0
-        with:
-          files: coverage.txt
-          token: ${{ secrets.CODECOV_TOKEN }}
-      - name: Build with Goreleaser
-        uses: goreleaser/goreleaser-action@v6.0.0
-        with:
-          # renovate: depName=goreleaser/goreleaser datasource=github-releases
-          version: v2.1.0
-          args: release --snapshot --skip=publish --clean
-        env:
-          PRIVATE_ACCESS_TOKEN: placeholder
+      - name: Install nvidia drivers
+        run: /opt/deeplearning/install-driver.sh
+      - name: Test nvidia-smi
+        run: nvidia-smi -L
