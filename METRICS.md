@@ -156,6 +156,20 @@ nvidia_smi_clocks_throttle_reasons_sw_thermal_slowdown{uuid="df6e7a7c-7314-46f8-
 # HELP nvidia_smi_clocks_throttle_reasons_sync_boost clocks_throttle_reasons.sync_boost
 # TYPE nvidia_smi_clocks_throttle_reasons_sync_boost gauge
 nvidia_smi_clocks_throttle_reasons_sync_boost{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 0
+# TYPE nvidia_smi_command_exit_code gauge
+nvidia_smi_command_exit_code 0
+# HELP nvidia_smi_compute_app_pid PID of the application
+# TYPE nvidia_smi_compute_app_pid gauge
+nvidia_smi_compute_app_pid{pid="2994",process_name="/usr/bin/python3",uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 1
+nvidia_smi_compute_app_pid{pid="3093",process_name="/usr/bin/python3",uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 1
+nvidia_smi_compute_app_pid{pid="4865",process_name="/usr/bin/python3",uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 1
+nvidia_smi_compute_app_pid{pid="4915",process_name="/usr/bin/python3",uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 1
+# HELP nvidia_smi_compute_app_used_memory GPU memory used by the application
+# TYPE nvidia_smi_compute_app_used_memory gauge
+nvidia_smi_compute_app_used_memory{pid="2994",process_name="/usr/bin/python3",uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 1361
+nvidia_smi_compute_app_used_memory{pid="3093",process_name="/usr/bin/python3",uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 1285
+nvidia_smi_compute_app_used_memory{pid="4865",process_name="/usr/bin/python3",uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 1465
+nvidia_smi_compute_app_used_memory{pid="4915",process_name="/usr/bin/python3",uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 2587
 # HELP nvidia_smi_compute_mode compute_mode
 # TYPE nvidia_smi_compute_mode gauge
 nvidia_smi_compute_mode{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 0
