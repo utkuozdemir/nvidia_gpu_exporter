@@ -2141,7 +2141,57 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values(nvidia_smi_index, uuid)",
+        "definition": "label_values(nvidia_smi_index, job)",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Job",
+        "multi": false,
+        "name": "job",
+        "options": [],
+        "query": {
+          "query": "label_values(nvidia_smi_index,job)",
+          "refId": "Prometheus-job-Variable-Query"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "tagValuesQuery": "",
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(nvidia_smi_index{job=\"$job\"},instance)",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Host",
+        "multi": false,
+        "name": "node",
+        "options": [],
+        "query": {
+          "query": "label_values(nvidia_smi_index{job=\"$job\"},instance)",
+          "refId": "Prometheus-node-Variable-Query"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "tagValuesQuery": "",
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(nvidia_smi_index{instance=\"$node\"},uuid)",
         "hide": 0,
         "includeAll": false,
         "label": "GPU",
@@ -2149,7 +2199,7 @@
         "name": "gpu",
         "options": [],
         "query": {
-          "query": "label_values(nvidia_smi_index, uuid)",
+          "query": "label_values(nvidia_smi_index{instance=\"$node\"},uuid)",
           "refId": "StandardVariableQuery"
         },
         "refresh": 1,
