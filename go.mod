@@ -6,8 +6,8 @@ require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/go-kit/log v0.2.1
-	github.com/prometheus/client_golang v1.20.2
-	github.com/prometheus/common v0.58.0
+	github.com/prometheus/client_golang v1.20.3
+	github.com/prometheus/common v0.59.0
 	github.com/prometheus/exporter-toolkit v0.12.0
 	github.com/stretchr/testify v1.9.0
 	golang.org/x/exp v0.0.0-20240904232852-e7e105dedf7e
