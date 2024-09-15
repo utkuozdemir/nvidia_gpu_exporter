@@ -58,11 +58,19 @@ nvidia_gpu_exporter --help
 
 To install the exporter as a Windows service, follow the steps below:
 
-1. Open a privileged powershell prompt (right click - Run as administrator)
+1. Open a powershell prompt (as a regular user):
 2. Run the following commands:
 
 ```powershell
+Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
 Invoke-Expression (New-Object System.Net.WebClient).DownloadString('https://get.scoop.sh')
+```
+
+3. Open a privileged powershell prompt (right click - Run as administrator)
+4. Run the following commands:
+
+```powershell
+scoop install git
 scoop install nssm --global
 scoop bucket add nvidia_gpu_exporter https://github.com/utkuozdemir/scoop_nvidia_gpu_exporter.git
 scoop install nvidia_gpu_exporter/nvidia_gpu_exporter --global
@@ -74,6 +82,7 @@ Start-Service nvidia_gpu_exporter
 These steps do the following:
 
 - Installs [Scoop package manager](https://scoop.sh)
+- Installs git using Scoop (required for [Buckets](https://github.com/ScoopInstaller/Scoop/wiki/Buckets))
 - Installs [NSSM - a service manager](https://nssm.cc/download) using Scoop
 - Installs the exporter using Scoop
 - Exposes app's TCP port (`9835`) to be accessible from Windows Firewall
