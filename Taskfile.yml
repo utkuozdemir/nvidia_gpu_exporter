@@ -5,10 +5,9 @@ tasks:
     desc: format code
     cmds:
       - go mod tidy
-      - gci write -s standard -s default -s "prefix(github.com/utkuozdemir/nvidia_gpu_exporter)" .
-      - gofumpt -w -l .
       - markdownlint --fix **/*.md
       - shfmt --write **/*.sh
+      - golangci-lint run --fix ./...
 
   lint:
     desc: lint code
@@ -18,6 +17,7 @@ tasks:
       - markdownlint **/*.md
       - shellcheck **/*.sh
       - shfmt --diff **/*.sh
+      - goreleaser check
 
   release:
     desc: release

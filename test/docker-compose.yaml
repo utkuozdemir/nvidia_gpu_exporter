@@ -1,0 +1,14 @@
+services:
+  prometheus:
+    image: prom/prometheus:v2.45.6
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/data:/prometheus
+      - ./prometheus/config:/etc/prometheus
+  grafana:
+    image: grafana/grafana:11.1.0
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/data:/var/lib/grafana

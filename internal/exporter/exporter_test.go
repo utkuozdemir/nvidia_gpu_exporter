@@ -16,11 +16,9 @@ import (
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
 )
 
-const (
-	delta = 1e-9
-)
+const delta = 1e-9
 
-//go:embed _query-test.txt
+//go:embed testdata/query.txt
 var queryTest string
 
 func assertFloat(t *testing.T, expected, actual float64) {

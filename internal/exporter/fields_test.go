@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	//go:embed _fields-test.txt
+	//go:embed testdata/fields.txt
 	fieldsTest string
 
 	//nolint:gochecknoglobals
