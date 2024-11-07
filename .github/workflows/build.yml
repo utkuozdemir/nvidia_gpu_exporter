@@ -59,7 +59,7 @@ jobs:
           files: coverage.txt
           token: ${{ secrets.CODECOV_TOKEN }}
       - name: Build with Goreleaser
-        uses: goreleaser/goreleaser-action@v6.0.0
+        uses: goreleaser/goreleaser-action@v6.1.0
         with:
           # renovate: depName=goreleaser/goreleaser datasource=github-releases
           version: v2.4.4
