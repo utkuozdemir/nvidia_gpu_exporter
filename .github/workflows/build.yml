@@ -54,7 +54,7 @@ jobs:
         env:
           RICHGO_FORCE_COLOR: 1
       - name: Send coverage
-        uses: codecov/codecov-action@v5.0.2
+        uses: codecov/codecov-action@v5.0.3
         with:
           files: coverage.txt
           token: ${{ secrets.CODECOV_TOKEN }}
