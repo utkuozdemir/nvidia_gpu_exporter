@@ -30,21 +30,21 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.1.7
+        uses: actions/checkout@v4.2.2
       - name: Setup Go
-        uses: actions/setup-go@v5.0.2
+        uses: actions/setup-go@v5.1.0
         with:
           go-version-file: go.mod
       - name: Ensure go.mod is already tidied
         run: go mod tidy && git diff --no-patch --exit-code
       - name: Run linters
-        uses: golangci/golangci-lint-action@v6.1.0
+        uses: golangci/golangci-lint-action@v6.1.1
         with:
           # renovate: depName=golangci/golangci-lint datasource=github-releases
-          version: v1.61.0
+          version: v1.62.0
           args: --timeout=3m0s
       - name: Install richgo
         # renovate: depName=kyoh86/richgo
@@ -54,15 +54,15 @@ jobs:
         env:
           RICHGO_FORCE_COLOR: 1
       - name: Send coverage
-        uses: codecov/codecov-action@v4.5.0
+        uses: codecov/codecov-action@v5.0.4
         with:
           files: coverage.txt
           token: ${{ secrets.CODECOV_TOKEN }}
       - name: Build with Goreleaser
-        uses: goreleaser/goreleaser-action@v6.0.0
+        uses: goreleaser/goreleaser-action@v6.1.0
         with:
           # renovate: depName=goreleaser/goreleaser datasource=github-releases
-          version: v2.3.2
+          version: v2.4.7
           args: release --snapshot --skip=publish --clean
         env:
           PRIVATE_ACCESS_TOKEN: placeholder
