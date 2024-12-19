@@ -46,17 +46,14 @@ jobs:
           # renovate: depName=golangci/golangci-lint datasource=github-releases
           version: v1.62.2
           args: --timeout=3m0s
-      - name: Install richgo
-        # renovate: depName=kyoh86/richgo
-        run: go install github.com/kyoh86/richgo@v0.3.12
       - name: Run tests
-        run: richgo test -race -coverpkg=./... -coverprofile=coverage.txt -covermode=atomic -timeout 20m -v ./...
-        env:
-          RICHGO_FORCE_COLOR: 1
+        run: go test -race -coverpkg=./... -coverprofile ./coverage.out -covermode=atomic -timeout 20m ./...
+      - name: Print coverage results
+        run: go tool cover -func ./coverage.out
       - name: Send coverage
         uses: codecov/codecov-action@v5.1.2
         with:
-          files: coverage.txt
+          files: coverage.out
           token: ${{ secrets.CODECOV_TOKEN }}
       - name: Build with Goreleaser
         uses: goreleaser/goreleaser-action@v6.1.0
