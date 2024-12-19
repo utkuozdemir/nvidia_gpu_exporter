@@ -1,14 +1,17 @@
 package exporter_test
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/go-kit/log"
+	"github.com/neilotoole/slogt"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -167,8 +170,12 @@ func TestBuildQFieldToMetricInfoMap(t *testing.T) {
 func TestNewUnknownField(t *testing.T) {
 	t.Parallel()
 
-	logger := log.NewNopLogger()
-	_, err := exporter.New("aaa", "bbb", "a", logger)
+	logger := slogt.New(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	t.Cleanup(cancel)
+
+	_, err := exporter.New(ctx, "aaa", "bbb", "a", logger)
 
 	require.Error(t, err)
 }
@@ -176,8 +183,14 @@ func TestNewUnknownField(t *testing.T) {
 func TestDescribe(t *testing.T) {
 	t.Parallel()
 
-	logger := log.NewNopLogger()
-	exp, err := exporter.New("aaa", "bbb", "fan.speed,memory.used", logger)
+	logger := slogt.New(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	t.Cleanup(cancel)
+
+	const prefix = "aaa"
+
+	exp, err := exporter.New(ctx, prefix, "bbb", "fan.speed,memory.used", logger)
 
 	require.NoError(t, err)
 
@@ -201,27 +214,43 @@ end:
 		}
 	}
 
-	assert.Len(t, descStrs, 10)
-	descs := strings.Join(descStrs, "\n")
-	assert.Contains(t, descs, "aaa_fan_speed")
-	assert.Contains(t, descs, "aaa_memory_used")
-	assert.Contains(t, descs, "aaa_failed_scrapes_total")
-	assert.Contains(t, descs, "aaa_gpu_info")
-	assert.Contains(t, descs, "aaa_uuid")
-	assert.Contains(t, descs, "aaa_name")
-	assert.Contains(t, descs, "aaa_driver_model_current")
-	assert.Contains(t, descs, "aaa_driver_model_pending")
-	assert.Contains(t, descs, "aaa_vbios_version")
-	assert.Contains(t, descs, "aaa_driver_version")
+	slices.Sort(descStrs)
+
+	expectedMetrics := []string{
+		"fan_speed_ratio",
+		"memory_used_bytes",
+		"failed_scrapes_total",
+		"gpu_info",
+		"uuid",
+		"name",
+		"driver_model_current",
+		"driver_model_pending",
+		"vbios_version",
+		"driver_version",
+		"command_exit_code",
+	}
+
+	slices.Sort(expectedMetrics)
+
+	assert.Len(t, descStrs, len(expectedMetrics))
+
+	for i, metric := range expectedMetrics {
+		descStr := descStrs[i]
+
+		assert.Contains(t, descStr, fmt.Sprintf(`"%s_%s"`, prefix, metric))
+	}
 }
 
 func TestCollect(t *testing.T) {
 	t.Parallel()
 
-	logger := log.NewNopLogger()
-	exp, err := exporter.New("aaa", "bbb",
-		"uuid,name,driver_model.current,driver_model.pending,"+
-			"vbios_version,driver_version,fan.speed,memory.used", logger)
+	logger := slogt.New(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	t.Cleanup(cancel)
+
+	exp, err := exporter.New(ctx, "aaa", "bbb", "uuid,name,driver_model.current,driver_model.pending,"+
+		"vbios_version,driver_version,fan.speed,memory.used", logger)
 
 	exp.Command = func(cmd *exec.Cmd) error {
 		_, _ = cmd.Stdout.Write([]byte(queryTest))
@@ -264,8 +293,12 @@ end:
 func TestCollectError(t *testing.T) {
 	t.Parallel()
 
-	logger := log.NewNopLogger()
-	exp, err := exporter.New("aaa", "bbb", "fan.speed,memory.used", logger)
+	logger := slogt.New(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	t.Cleanup(cancel)
+
+	exp, err := exporter.New(ctx, "aaa", "bbb", "fan.speed,memory.used", logger)
 
 	require.NoError(t, err)
 

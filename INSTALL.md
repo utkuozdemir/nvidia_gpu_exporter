@@ -58,18 +58,18 @@ nvidia_gpu_exporter --help
 
 To install the exporter as a Windows service, follow the steps below:
 
-1. Open a powershell prompt (as a regular user):
+1. Open a PowerShell prompt (as a regular user):
 2. Run the following commands:
 
-```powershell
-Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
-Invoke-Expression (New-Object System.Net.WebClient).DownloadString('https://get.scoop.sh')
-```
+   ```PowerShell
+   Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+   Invoke-Expression (New-Object System.Net.WebClient).DownloadString('https://get.scoop.sh')
+   ```
 
-3. Open a privileged powershell prompt (right click - Run as administrator)
+3. Open a privileged PowerShell prompt (right click - Run as administrator)
 4. Run the following commands:
 
-```powershell
+```PowerShell
 scoop install git
 scoop install nssm --global
 scoop bucket add nvidia_gpu_exporter https://github.com/utkuozdemir/scoop_nvidia_gpu_exporter.git
@@ -102,9 +102,9 @@ Follow these simple steps:
    sudo useradd --system --no-create-home --shell /usr/sbin/nologin nvidia_gpu_exporter
    ```
 
-4. Drop a copy of the file **[nvidia_gpu_exporter.service](systemd/nvidia_gpu_exporter.service)** under `/etc/systemd/system` directory.
-5. Run `sudo systemctl daemon-reload`
-6. Start and enable the service to run on boot: `sudo systemctl enable --now nvidia_gpu_exporter`
+3. Drop a copy of the file **[nvidia_gpu_exporter.service](systemd/nvidia_gpu_exporter.service)** under `/etc/systemd/system` directory.
+4. Run `sudo systemctl daemon-reload`
+5. Start and enable the service to run on boot: `sudo systemctl enable --now nvidia_gpu_exporter`
 
 ## Running in Docker
 

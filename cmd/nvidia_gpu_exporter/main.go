@@ -1,21 +1,22 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/coreos/go-systemd/v22/activation"
-	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
 	clientversion "github.com/prometheus/client_golang/prometheus/collectors/version"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/prometheus/common/promlog"
-	"github.com/prometheus/common/promlog/flag"
+	"github.com/prometheus/common/promslog"
+	"github.com/prometheus/common/promslog/flag"
 	"github.com/prometheus/common/version"
 	"github.com/prometheus/exporter-toolkit/web"
 	webflag "github.com/prometheus/exporter-toolkit/web/kingpinflag"
@@ -33,9 +34,16 @@ const redirectPageTemplate = `<html lang="en">
 `
 
 // main is the entrypoint of the application.
-//
-//nolint:funlen
 func main() {
+	if err := run(); err != nil {
+		slog.Default().Error("failed to run", "err", err)
+
+		os.Exit(1)
+	}
+}
+
+//nolint:funlen
+func run() error {
 	var (
 		webConfig = webflag.AddFlags(kingpin.CommandLine, ":9835")
 		network   = kingpin.Flag("web.network",
@@ -65,23 +73,32 @@ func main() {
 			Default(exporter.DefaultQField).String()
 	)
 
-	promlogConfig := &promlog.Config{}
-	flag.AddFlags(kingpin.CommandLine, promlogConfig)
+	promSlogConfig := &promslog.Config{}
+
+	flag.AddFlags(kingpin.CommandLine, promSlogConfig)
 	kingpin.Version(version.Print("nvidia_gpu_exporter"))
 	kingpin.HelpFlag.Short('h')
 	kingpin.Parse()
 
-	logger := promlog.New(promlogConfig)
+	logger := promslog.New(promSlogConfig)
 
-	exp, err := exporter.New(exporter.DefaultPrefix, *nvidiaSmiCommand, *qFields, logger)
+	slog.SetDefault(logger)
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+
+	exp, err := exporter.New(ctx, exporter.DefaultPrefix, *nvidiaSmiCommand, *qFields, logger)
 	if err != nil {
-		_ = level.Error(logger).Log("msg", "Error on creating exporter", "err", err)
-
-		os.Exit(1)
+		return fmt.Errorf("failed to create exporter: %w", err)
 	}
 
-	prometheus.MustRegister(exp)
-	prometheus.MustRegister(clientversion.NewCollector("nvidia_gpu_exporter"))
+	if err = prometheus.Register(exp); err != nil {
+		return fmt.Errorf("failed to register exporter: %w", err)
+	}
+
+	if err = prometheus.Register(clientversion.NewCollector("nvidia_gpu_exporter")); err != nil {
+		return fmt.Errorf("failed to register client version collector: %w", err)
+	}
 
 	rootHandler := NewRootHandler(logger, *metricsPath)
 	http.Handle("/", rootHandler)
@@ -95,18 +112,18 @@ func main() {
 	}
 
 	if err = listenAndServe(srv, webConfig, *network, logger); err != nil {
-		_ = level.Error(logger).Log("msg", "Error starting HTTP server", "err", err)
-
-		os.Exit(1)
+		return fmt.Errorf("failed to serve: %w", err)
 	}
+
+	return nil
 }
 
 type RootHandler struct {
 	response []byte
-	logger   log.Logger
+	logger   *slog.Logger
 }
 
-func NewRootHandler(logger log.Logger, metricsPath string) *RootHandler {
+func NewRootHandler(logger *slog.Logger, metricsPath string) *RootHandler {
 	return &RootHandler{
 		response: []byte(fmt.Sprintf(redirectPageTemplate, metricsPath)),
 		logger:   logger,
@@ -115,14 +132,14 @@ func NewRootHandler(logger log.Logger, metricsPath string) *RootHandler {
 
 func (r *RootHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 	if _, err := w.Write(r.response); err != nil {
-		_ = level.Error(r.logger).Log("msg", "Error writing redirect", "err", err)
+		r.logger.Error("failed to write redirect", "err", err)
 	}
 }
 
-// listenAndServe is same as web.ListenAndServe but supports passing network stack as an argument.
-func listenAndServe(server *http.Server, flags *web.FlagConfig, network string, logger log.Logger) (retErr error) {
+// listenAndServe is the same as web.ListenAndServe but supports passing network stack as an argument.
+func listenAndServe(server *http.Server, flags *web.FlagConfig, network string, logger *slog.Logger) (retErr error) {
 	if *flags.WebSystemdSocket {
-		level.Info(logger).Log("msg", "Listening on systemd activated listeners instead of port listeners.") //nolint:errcheck
+		logger.Info("listening on systemd activated listeners instead of port listeners")
 
 		listeners, err := activation.Listeners()
 		if err != nil {

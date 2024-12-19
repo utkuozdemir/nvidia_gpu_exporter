@@ -2,18 +2,19 @@ package exporter
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"maps"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 
-	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
-	"golang.org/x/exp/maps"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/util"
 )
@@ -68,11 +69,14 @@ type GPUExporter struct {
 	failedScrapesTotal    prometheus.Counter
 	exitCode              prometheus.Gauge
 	gpuInfoDesc           *prometheus.Desc
-	logger                log.Logger
+	logger                *slog.Logger
 	Command               runCmd
+	ctx                   context.Context //nolint:containedctx
 }
 
-func New(prefix string, nvidiaSmiCommand string, qFieldsRaw string, logger log.Logger) (*GPUExporter, error) {
+func New(ctx context.Context, prefix string, nvidiaSmiCommand string, qFieldsRaw string,
+	logger *slog.Logger,
+) (*GPUExporter, error) {
 	qFieldsOrdered, qFieldToRFieldMap, err := buildQFieldToRFieldMap(logger, qFieldsRaw, nvidiaSmiCommand, defaultRunCmd)
 	if err != nil {
 		return nil, err
@@ -82,6 +86,7 @@ func New(prefix string, nvidiaSmiCommand string, qFieldsRaw string, logger log.L
 
 	infoLabels := getLabels(requiredFields)
 	exporter := GPUExporter{
+		ctx:                   ctx,
 		prefix:                prefix,
 		nvidiaSmiCommand:      nvidiaSmiCommand,
 		qFields:               qFieldsOrdered,
@@ -109,8 +114,8 @@ func New(prefix string, nvidiaSmiCommand string, qFieldsRaw string, logger log.L
 	return &exporter, nil
 }
 
-func buildQFieldToRFieldMap(logger log.Logger, qFieldsRaw string,
-	nvidiaSmiCommand string, command runCmd,
+func buildQFieldToRFieldMap(logger *slog.Logger, qFieldsRaw string, nvidiaSmiCommand string,
+	command runCmd,
 ) ([]QField, map[QField]RField, error) {
 	qFieldsSeparated := strings.Split(qFieldsRaw, ",")
 
@@ -124,11 +129,11 @@ func buildQFieldToRFieldMap(logger log.Logger, qFieldsRaw string,
 	if len(qFieldsSeparated) == 1 && qFieldsSeparated[0] == qFieldsAuto {
 		parsed, err := ParseAutoQFields(nvidiaSmiCommand, command)
 		if err != nil {
-			_ = level.Warn(logger).Log("msg",
-				"Failed to auto-determine query field names, "+
-					"falling back to the built-in list", "error", err)
+			logger.Warn("failed to auto-determine query field names, falling back to the built-in list", "err", err)
 
-			return maps.Keys(fallbackQFieldToRFieldMap), fallbackQFieldToRFieldMap, nil
+			keys := slices.Collect(maps.Keys(fallbackQFieldToRFieldMap))
+
+			return keys, fallbackQFieldToRFieldMap, nil
 		}
 
 		qFields = parsed
@@ -139,8 +144,7 @@ func buildQFieldToRFieldMap(logger log.Logger, qFieldsRaw string,
 	var rFields []RField
 
 	if err != nil {
-		_ = level.Warn(logger).Log("msg",
-			"Failed to run an initial scrape, using the built-in list for field mapping")
+		logger.Warn("failed to run the initial scrape, using the built-in list for field mapping", "err", err)
 
 		rFields, err = getFallbackValues(qFields)
 		if err != nil {
@@ -160,12 +164,14 @@ func buildQFieldToRFieldMap(logger log.Logger, qFieldsRaw string,
 
 // Describe describes all the metrics ever exported by the exporter. It
 // implements prometheus.Collector.
-func (e *GPUExporter) Describe(ch chan<- *prometheus.Desc) {
+func (e *GPUExporter) Describe(descCh chan<- *prometheus.Desc) {
 	for _, m := range e.qFieldToMetricInfoMap {
-		ch <- m.desc
+		e.sendDesc(descCh, m.desc)
 	}
-	ch <- e.failedScrapesTotal.Desc()
-	ch <- e.gpuInfoDesc
+
+	e.sendDesc(descCh, e.failedScrapesTotal.Desc())
+	e.sendDesc(descCh, e.exitCode.Desc())
+	e.sendDesc(descCh, e.gpuInfoDesc)
 }
 
 // Collect fetches the stats and delivers them as Prometheus metrics. It implements prometheus.Collector.
@@ -175,10 +181,12 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 
 	exitCode, currentTable, err := scrape(e.qFields, e.nvidiaSmiCommand, e.Command)
 	e.exitCode.Set(float64(exitCode))
-	metricCh <- e.exitCode
+
+	e.sendMetric(metricCh, e.exitCode)
 
 	if err != nil {
-		_ = level.Error(e.logger).Log("error", err)
+		e.logger.Error("failed to collect metrics", "err", err)
+
 		metricCh <- e.failedScrapesTotal
 		e.failedScrapesTotal.Inc()
 
@@ -193,24 +201,58 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 		vBiosVersion := currentRow.QFieldToCells[vBiosVersionQField].RawValue
 		driverVersion := currentRow.QFieldToCells[driverVersionQField].RawValue
 
-		infoMetric := prometheus.MustNewConstMetric(e.gpuInfoDesc, prometheus.GaugeValue,
+		infoMetric, infoMetricErr := prometheus.NewConstMetric(e.gpuInfoDesc, prometheus.GaugeValue,
 			1, uuid, name, driverModelCurrent,
 			driverModelPending, vBiosVersion, driverVersion)
-		metricCh <- infoMetric
+		if infoMetricErr != nil {
+			e.logger.Error("failed to create info metric", "err", infoMetricErr)
+
+			continue
+		}
+
+		e.sendMetric(metricCh, infoMetric)
 
 		for _, currentCell := range currentRow.Cells {
 			metricInfo := e.qFieldToMetricInfoMap[currentCell.QField]
 
-			num, err := TransformRawValue(currentCell.RawValue, metricInfo.ValueMultiplier)
-			if err != nil {
-				_ = level.Debug(e.logger).Log("error", err, "query_field_name",
+			num, numErr := TransformRawValue(currentCell.RawValue, metricInfo.ValueMultiplier)
+			if numErr != nil {
+				e.logger.Debug("failed to transform raw value", "err", numErr, "query_field_name",
 					currentCell.QField, "raw_value", currentCell.RawValue)
 
 				continue
 			}
 
-			metricCh <- prometheus.MustNewConstMetric(metricInfo.desc, metricInfo.MType, num, uuid)
+			metric, metricErr := prometheus.NewConstMetric(metricInfo.desc, metricInfo.MType, num, uuid)
+			if metricErr != nil {
+				e.logger.Error("failed to create metric", "err", metricErr, "query_field_name",
+					currentCell.QField, "raw_value", currentCell.RawValue)
+
+				continue
+			}
+
+			e.sendMetric(metricCh, metric)
 		}
+	}
+}
+
+func (e *GPUExporter) sendMetric(metricCh chan<- prometheus.Metric, metric prometheus.Metric) {
+	select {
+	case <-e.ctx.Done():
+		e.logger.Info("context done, return")
+
+		return
+	case metricCh <- metric:
+	}
+}
+
+func (e *GPUExporter) sendDesc(descCh chan<- *prometheus.Desc, desc *prometheus.Desc) {
+	select {
+	case <-e.ctx.Done():
+		e.logger.Info("context done, return")
+
+		return
+	case descCh <- desc:
 	}
 }
 
