@@ -47,7 +47,7 @@ jobs:
           version: v1.62.2
           args: --timeout=3m0s
       - name: Run tests
-        run: go test -race -coverpkg=./... -coverprofile ./coverage.out -covermode=atomic -timeout 20m ./...
+        run: go test -v -race -coverprofile ./coverage.out -covermode=atomic -timeout 20m ./...
       - name: Print coverage results
         run: go tool cover -func ./coverage.out
       - name: Send coverage
