@@ -46,6 +46,7 @@ to see your GPU metrics in a nicely visualized way.
 
 Here's how it looks like:
 ![Grafana dashboard](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/master/grafana/dashboard.png)
+![Grafana dashboard](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/master/grafana/GPUPID.png)
 
 ## Installation
 
