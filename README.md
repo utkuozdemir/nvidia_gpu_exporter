@@ -1,4 +1,5 @@
-# nvidia_gpu_exporter
+# nvidia_gpu_exporter Update process Pid by me
+https://github.com/utkuozdemir/nvidia_gpu_exporter
 
 [![build](https://github.com/bibo318/nvidia_gpu_exporter/actions/workflows/build.yml/badge.svg)](https://github.com/bibo318/nvidia_gpu_exporter/actions/workflows/build.yml)
 [![codecov](https://codecov.io/gh/bibo318/nvidia_gpu_exporter/branch/master/graph/badge.svg?token=JEWV818FCZ)](https://codecov.io/gh/bibo318/nvidia_gpu_exporter)
@@ -67,11 +68,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 ## Star History
 
 <!-- markdownlint-disable no-inline-html -->
-<a href="https://star-history.com/#bibo318/nvidia_gpu_exporter&Date">
+<a href="https://star-history.com/#utkuozdemir/nvidia_gpu_exporter&Date">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=bibo318/nvidia_gpu_exporter&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=bibo318/nvidia_gpu_exporter&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=bibo318/nvidia_gpu_exporter&type=Date" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=utkuozdemir/nvidia_gpu_exporter&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=utkuozdemir/nvidia_gpu_exporter&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=utkuozdemir/nvidia_gpu_exporter&type=Date" />
  </picture>
 </a>
 <!-- markdownlint-enable no-inline-html -->
