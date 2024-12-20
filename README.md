@@ -1,12 +1,12 @@
 # nvidia_gpu_exporter
 
-[![build](https://github.com/utkuozdemir/nvidia_gpu_exporter/actions/workflows/build.yml/badge.svg)](https://github.com/utkuozdemir/nvidia_gpu_exporter/actions/workflows/build.yml)
-[![codecov](https://codecov.io/gh/utkuozdemir/nvidia_gpu_exporter/branch/master/graph/badge.svg?token=JEWV818FCZ)](https://codecov.io/gh/utkuozdemir/nvidia_gpu_exporter)
-[![Go Report Card](https://goreportcard.com/badge/github.com/utkuozdemir/nvidia_gpu_exporter?kill_cache=1)](https://goreportcard.com/report/github.com/utkuozdemir/nvidia_gpu_exporter)
-![Latest GitHub release](https://img.shields.io/github/release/utkuozdemir/nvidia_gpu_exporter.svg)
-[![GitHub license](https://img.shields.io/github/license/utkuozdemir/nvidia_gpu_exporter)](https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/master/LICENSE)
-![GitHub all releases](https://img.shields.io/github/downloads/utkuozdemir/nvidia_gpu_exporter/total)
-![Docker Pulls](https://img.shields.io/docker/pulls/utkuozdemir/nvidia_gpu_exporter)
+[![build](https://github.com/bibo318/nvidia_gpu_exporter/actions/workflows/build.yml/badge.svg)](https://github.com/bibo318/nvidia_gpu_exporter/actions/workflows/build.yml)
+[![codecov](https://codecov.io/gh/bibo318/nvidia_gpu_exporter/branch/master/graph/badge.svg?token=JEWV818FCZ)](https://codecov.io/gh/bibo318/nvidia_gpu_exporter)
+[![Go Report Card](https://goreportcard.com/badge/github.com/bibo318/nvidia_gpu_exporter?kill_cache=1)](https://goreportcard.com/report/github.com/bibo318/nvidia_gpu_exporter)
+![Latest GitHub release](https://img.shields.io/github/release/bibo318/nvidia_gpu_exporter.svg)
+[![GitHub license](https://img.shields.io/github/license/bibo318/nvidia_gpu_exporter)](https://github.com/bibo318/nvidia_gpu_exporter/blob/master/LICENSE)
+![GitHub all releases](https://img.shields.io/github/downloads/bibo318/nvidia_gpu_exporter/total)
+![Docker Pulls](https://img.shields.io/docker/pulls/bibo318/nvidia_gpu_exporter)
 
 Nvidia GPU exporter for prometheus, using `nvidia-smi` binary to gather metrics.
 
@@ -45,8 +45,8 @@ You can use the official [Grafana dashboard](https://grafana.com/grafana/dashboa
 to see your GPU metrics in a nicely visualized way.
 
 Here's how it looks like:
-![Grafana dashboard](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/master/grafana/dashboard.png)
-![Grafana dashboard](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/master/grafana/GPUPID.png)
+![Grafana dashboard](https://raw.githubusercontent.com/bibo318/nvidia_gpu_exporter/master/grafana/dashboard.png)
+![Grafana dashboard](https://raw.githubusercontent.com/bibo318/nvidia_gpu_exporter/master/grafana/GPUPID.png)
 
 ## Installation
 
@@ -67,11 +67,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 ## Star History
 
 <!-- markdownlint-disable no-inline-html -->
-<a href="https://star-history.com/#utkuozdemir/nvidia_gpu_exporter&Date">
+<a href="https://star-history.com/#bibo318/nvidia_gpu_exporter&Date">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=utkuozdemir/nvidia_gpu_exporter&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=utkuozdemir/nvidia_gpu_exporter&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=utkuozdemir/nvidia_gpu_exporter&type=Date" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=bibo318/nvidia_gpu_exporter&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=bibo318/nvidia_gpu_exporter&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=bibo318/nvidia_gpu_exporter&type=Date" />
  </picture>
 </a>
 <!-- markdownlint-enable no-inline-html -->
