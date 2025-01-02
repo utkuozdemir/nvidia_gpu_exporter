@@ -44,7 +44,7 @@ jobs:
         uses: golangci/golangci-lint-action@v6.1.1
         with:
           # renovate: depName=golangci/golangci-lint datasource=github-releases
-          version: v1.63.1
+          version: v1.63.2
           args: --timeout=3m0s
       - name: Run tests
         run: go test -v -race -coverprofile ./coverage.out -covermode=atomic -timeout 20m ./...
@@ -59,7 +59,7 @@ jobs:
         uses: goreleaser/goreleaser-action@v6.1.0
         with:
           # renovate: depName=goreleaser/goreleaser datasource=github-releases
-          version: v2.5.0
+          version: v2.5.1
           args: release --snapshot --skip=publish --clean
         env:
           PRIVATE_ACCESS_TOKEN: placeholder
