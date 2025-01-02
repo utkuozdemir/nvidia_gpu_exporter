@@ -44,7 +44,7 @@ jobs:
         uses: golangci/golangci-lint-action@v6.1.1
         with:
           # renovate: depName=golangci/golangci-lint datasource=github-releases
-          version: v1.63.2
+          version: v1.63.3
           args: --timeout=3m0s
       - name: Run tests
         run: go test -v -race -coverprofile ./coverage.out -covermode=atomic -timeout 20m ./...
