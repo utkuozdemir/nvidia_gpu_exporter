@@ -41,10 +41,10 @@ jobs:
       - name: Ensure go.mod is already tidied
         run: go mod tidy && git diff --no-patch --exit-code
       - name: Run linters
-        uses: golangci/golangci-lint-action@v6.5.1
+        uses: golangci/golangci-lint-action@v6.5.2
         with:
           # renovate: depName=golangci/golangci-lint datasource=github-releases
-          version: v1.64.7
+          version: v1.64.8
           args: --timeout=3m0s
       - name: Run tests
         run: go test -v -race -coverprofile ./coverage.out -covermode=atomic -timeout 20m ./...
