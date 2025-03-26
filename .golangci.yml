@@ -1,27 +1,27 @@
-# https://golangci-lint.run/usage/linters/
+version: "2"
 linters:
-  enable-all: true
+  default: all
   disable:
-    # not useful
-    - exhaustruct
-    - err113
-
-linters-settings:
-  gci:
-    sections:
+    - depguard # breaking things: https://github.com/atc0005/go-ci/issues/1024
+    - err113 # no need to wrap all errors, too much work
+    - exhaustruct # pointless
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - std-error-handling
+      - common-false-positives
+      - legacy
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+    - goimports
+    - golines
+  settings:
+    gci:
+      sections:
         - standard
         - default
         - localmodule
-  goimports:
-    local-prefixes: github.com/utkuozdemir/nvidia_gpu_exporter
-  goconst:
-    ignore-tests: true
-  depguard:
-    rules:
-      main:
-        list-mode: lax
-        files:
-          - $all
-        deny:
-          - pkg: io/ioutil
-            desc: "replaced by io and os packages since Go 1.16: https://tip.golang.org/doc/go1.16#ioutil"

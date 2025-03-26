@@ -5,18 +5,17 @@ tasks:
     desc: format code
     cmds:
       - go mod tidy
-      - markdownlint --fix **/*.md
-      - shfmt --write **/*.sh
       - golangci-lint run --fix ./...
+      - shfmt -l -i 2 -ci -sr -w .
 
   lint:
     desc: lint code
     cmds:
-      - go mod tidy && git diff --no-patch --exit-code go.mod go.sum
+      - go mod tidy --diff
       - golangci-lint run ./...
       - markdownlint **/*.md
       - shellcheck **/*.sh
-      - shfmt --diff **/*.sh
+      - shfmt -l -i 2 -ci -sr .
       - goreleaser check
 
   release:

@@ -44,8 +44,11 @@ func ParseCSVIntoTable(queryResult string, qFields []QField) (Table, error) {
 		rawValues := parseCSVLine(valuesLine)
 
 		if len(qFields) != len(rFields) {
-			return Table{}, fmt.Errorf("field count mismatch: query fields: %d, returned fields: %d",
-				len(qFields), len(rFields))
+			return Table{}, fmt.Errorf(
+				"field count mismatch: query fields: %d, returned fields: %d",
+				len(qFields),
+				len(rFields),
+			)
 		}
 
 		for colIndex, rawValue := range rawValues {
