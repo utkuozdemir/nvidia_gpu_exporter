@@ -137,7 +137,12 @@ func (r *RootHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 }
 
 // listenAndServe is the same as web.ListenAndServe but supports passing network stack as an argument.
-func listenAndServe(server *http.Server, flags *web.FlagConfig, network string, logger *slog.Logger) (retErr error) {
+func listenAndServe(
+	server *http.Server,
+	flags *web.FlagConfig,
+	network string,
+	logger *slog.Logger,
+) (retErr error) {
 	if *flags.WebSystemdSocket {
 		logger.Info("listening on systemd activated listeners instead of port listeners")
 

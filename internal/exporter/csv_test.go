@@ -24,7 +24,11 @@ func TestParseCsvIntoTable(t *testing.T) {
 	assert.Len(t, parsed.Rows, 2)
 	assert.Equal(t, []exporter.RField{"name", "power.draw [W]"}, parsed.RFields)
 
-	cell00 := exporter.Cell{QField: "name", RField: "name", RawValue: "NVIDIA GeForce RTX 2080 SUPER"}
+	cell00 := exporter.Cell{
+		QField:   "name",
+		RField:   "name",
+		RawValue: "NVIDIA GeForce RTX 2080 SUPER",
+	}
 	cell01 := exporter.Cell{QField: "power.draw", RField: "power.draw [W]", RawValue: "30.14 W"}
 	cell10 := exporter.Cell{QField: "name", RField: "name", RawValue: "Some Dummy GPU"}
 	cell11 := exporter.Cell{QField: "power.draw", RField: "power.draw [W]", RawValue: "12.34 W"}

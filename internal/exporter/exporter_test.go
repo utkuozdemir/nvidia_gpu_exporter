@@ -115,7 +115,10 @@ func TestBuildFQNameAndMultiplierMiB(t *testing.T) {
 func TestBuildFQNameAndMultiplierMHZ(t *testing.T) {
 	t.Parallel()
 
-	fqName, multiplier := exporter.BuildFQNameAndMultiplier("prefix", "clocks.current.graphics [MHz]")
+	fqName, multiplier := exporter.BuildFQNameAndMultiplier(
+		"prefix",
+		"clocks.current.graphics [MHz]",
+	)
 
 	assertFloat(t, 1000000, multiplier)
 	assert.Equal(t, "prefix_clocks_current_graphics_clock_hz", fqName)
@@ -172,7 +175,7 @@ func TestNewUnknownField(t *testing.T) {
 
 	logger := slogt.New(t)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	t.Cleanup(cancel)
 
 	_, err := exporter.New(ctx, "aaa", "bbb", "a", logger)
@@ -185,7 +188,7 @@ func TestDescribe(t *testing.T) {
 
 	logger := slogt.New(t)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	t.Cleanup(cancel)
 
 	const prefix = "aaa"
@@ -246,11 +249,17 @@ func TestCollect(t *testing.T) {
 
 	logger := slogt.New(t)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	t.Cleanup(cancel)
 
-	exp, err := exporter.New(ctx, "aaa", "bbb", "uuid,name,driver_model.current,driver_model.pending,"+
-		"vbios_version,driver_version,fan.speed,memory.used", logger)
+	exp, err := exporter.New(
+		ctx,
+		"aaa",
+		"bbb",
+		"uuid,name,driver_model.current,driver_model.pending,"+
+			"vbios_version,driver_version,fan.speed,memory.used",
+		logger,
+	)
 
 	exp.Command = func(cmd *exec.Cmd) error {
 		_, _ = cmd.Stdout.Write([]byte(queryTest))
@@ -295,7 +304,7 @@ func TestCollectError(t *testing.T) {
 
 	logger := slogt.New(t)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	t.Cleanup(cancel)
 
 	exp, err := exporter.New(ctx, "aaa", "bbb", "fan.speed,memory.used", logger)

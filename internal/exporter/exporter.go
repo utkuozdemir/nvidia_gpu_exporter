@@ -77,7 +77,12 @@ type GPUExporter struct {
 func New(ctx context.Context, prefix string, nvidiaSmiCommand string, qFieldsRaw string,
 	logger *slog.Logger,
 ) (*GPUExporter, error) {
-	qFieldsOrdered, qFieldToRFieldMap, err := buildQFieldToRFieldMap(logger, qFieldsRaw, nvidiaSmiCommand, defaultRunCmd)
+	qFieldsOrdered, qFieldToRFieldMap, err := buildQFieldToRFieldMap(
+		logger,
+		qFieldsRaw,
+		nvidiaSmiCommand,
+		defaultRunCmd,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +134,11 @@ func buildQFieldToRFieldMap(logger *slog.Logger, qFieldsRaw string, nvidiaSmiCom
 	if len(qFieldsSeparated) == 1 && qFieldsSeparated[0] == qFieldsAuto {
 		parsed, err := ParseAutoQFields(nvidiaSmiCommand, command)
 		if err != nil {
-			logger.Warn("failed to auto-determine query field names, falling back to the built-in list", "err", err)
+			logger.Warn(
+				"failed to auto-determine query field names, falling back to the built-in list",
+				"err",
+				err,
+			)
 
 			keys := slices.Collect(maps.Keys(fallbackQFieldToRFieldMap))
 
@@ -144,7 +153,11 @@ func buildQFieldToRFieldMap(logger *slog.Logger, qFieldsRaw string, nvidiaSmiCom
 	var rFields []RField
 
 	if err != nil {
-		logger.Warn("failed to run the initial scrape, using the built-in list for field mapping", "err", err)
+		logger.Warn(
+			"failed to run the initial scrape, using the built-in list for field mapping",
+			"err",
+			err,
+		)
 
 		rFields, err = getFallbackValues(qFields)
 		if err != nil {
@@ -175,6 +188,8 @@ func (e *GPUExporter) Describe(descCh chan<- *prometheus.Desc) {
 }
 
 // Collect fetches the stats and delivers them as Prometheus metrics. It implements prometheus.Collector.
+//
+//nolint:funlen
 func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
@@ -194,7 +209,10 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 	}
 
 	for _, currentRow := range currentTable.Rows {
-		uuid := strings.TrimPrefix(strings.ToLower(currentRow.QFieldToCells[uuidQField].RawValue), "gpu-")
+		uuid := strings.TrimPrefix(
+			strings.ToLower(currentRow.QFieldToCells[uuidQField].RawValue),
+			"gpu-",
+		)
 		name := currentRow.QFieldToCells[nameQField].RawValue
 		driverModelCurrent := currentRow.QFieldToCells[driverModelCurrentQField].RawValue
 		driverModelPending := currentRow.QFieldToCells[driverModelPendingQField].RawValue
@@ -223,7 +241,12 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 				continue
 			}
 
-			metric, metricErr := prometheus.NewConstMetric(metricInfo.desc, metricInfo.MType, num, uuid)
+			metric, metricErr := prometheus.NewConstMetric(
+				metricInfo.desc,
+				metricInfo.MType,
+				num,
+				uuid,
+			)
 			if metricErr != nil {
 				e.logger.Error("failed to create metric", "err", metricErr, "query_field_name",
 					currentCell.QField, "raw_value", currentCell.RawValue)
@@ -280,8 +303,14 @@ func scrape(qFields []QField, nvidiaSmiCommand string, command runCmd) (int, *Ta
 			exitCode = exitError.ExitCode()
 		}
 
-		return exitCode, nil, fmt.Errorf("command failed: code: %d | command: %s | stdout: %s | stderr: %s: %w",
-			exitCode, strings.Join(cmdAndArgs, " "), stdout.String(), stderr.String(), err)
+		return exitCode, nil, fmt.Errorf(
+			"command failed: code: %d | command: %s | stdout: %s | stderr: %s: %w",
+			exitCode,
+			strings.Join(cmdAndArgs, " "),
+			stdout.String(),
+			stderr.String(),
+			err,
+		)
 	}
 
 	t, err := ParseCSVIntoTable(strings.TrimSpace(stdout.String()), qFields)
@@ -300,7 +329,7 @@ type MetricInfo struct {
 
 // TransformRawValue transforms a raw value into a float64.
 //
-//nolint:gomnd,mnd
+//nolint:mnd
 func TransformRawValue(rawValue string, valueMultiplier float64) (float64, error) {
 	trimmed := strings.TrimSpace(rawValue)
 	if strings.HasPrefix(trimmed, "0x") {
@@ -332,8 +361,11 @@ func TransformRawValue(rawValue string, valueMultiplier float64) (float64, error
 	}
 }
 
-func parseSanitizedValueWithBestEffort(sanitizedValue string, valueMultiplier float64) (float64, error) {
-	allNums := numericRegex.FindAllString(sanitizedValue, 2) //nolint:gomnd,mnd
+func parseSanitizedValueWithBestEffort(
+	sanitizedValue string,
+	valueMultiplier float64,
+) (float64, error) {
+	allNums := numericRegex.FindAllString(sanitizedValue, 2) //nolint:mnd
 	if len(allNums) != 1 {
 		return -1, fmt.Errorf("could not parse number from value: %q", sanitizedValue)
 	}
@@ -346,7 +378,10 @@ func parseSanitizedValueWithBestEffort(sanitizedValue string, valueMultiplier fl
 	return parsed * valueMultiplier, nil
 }
 
-func BuildQFieldToMetricInfoMap(prefix string, qFieldtoRFieldMap map[QField]RField) map[QField]MetricInfo {
+func BuildQFieldToMetricInfoMap(
+	prefix string,
+	qFieldtoRFieldMap map[QField]RField,
+) map[QField]MetricInfo {
 	result := make(map[QField]MetricInfo)
 	for qField, rField := range qFieldtoRFieldMap {
 		result[qField] = BuildMetricInfo(prefix, rField)
