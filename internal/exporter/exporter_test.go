@@ -24,6 +24,9 @@ const delta = 1e-9
 //go:embed testdata/query.txt
 var queryTest string
 
+//go:embed testdata/list_gpus.txt
+var listGPUsTest string
+
 func assertFloat(t *testing.T, expected, actual float64) {
 	t.Helper()
 
@@ -231,6 +234,7 @@ end:
 		"vbios_version",
 		"driver_version",
 		"command_exit_code",
+		"mig_info",
 	}
 
 	slices.Sort(expectedMetrics)
@@ -262,7 +266,11 @@ func TestCollect(t *testing.T) {
 	)
 
 	exp.Command = func(cmd *exec.Cmd) error {
-		_, _ = cmd.Stdout.Write([]byte(queryTest))
+		if strings.Contains(cmd.String(), "--list-gpus") {
+			_, _ = cmd.Stdout.Write([]byte(listGPUsTest))
+		} else {
+			_, _ = cmd.Stdout.Write([]byte(queryTest))
+		}
 
 		return nil
 	}
@@ -291,12 +299,16 @@ end:
 
 	metricsJoined := strings.Join(metrics, "\n")
 
-	assert.Len(t, metrics, 10)
+	assert.Len(t, metrics, 66)
 	assert.Contains(t, metricsJoined, "aaa_gpu_info")
 	assert.Contains(t, metricsJoined, "command_exit_code")
 	assert.Contains(t, metricsJoined, "aaa_name")
 	assert.Contains(t, metricsJoined, "aaa_fan_speed_ratio")
 	assert.Contains(t, metricsJoined, "aaa_memory_used_bytes")
+	assert.Contains(t, metricsJoined, "aaa_mig_info")
+
+	migInfoCount := strings.Count(metricsJoined, "aaa_mig_info")
+	assert.Equal(t, 56, migInfoCount)
 }
 
 func TestCollectError(t *testing.T) {
