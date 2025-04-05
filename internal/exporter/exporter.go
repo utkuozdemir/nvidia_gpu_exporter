@@ -33,7 +33,7 @@ const (
 
 	floatBitSize = 64
 
-	migPattern = `^(?P<name>MIG\s+\S+(?:\.\S+)?)\s+Device.*MIG-(?P<uuid>[0-9a-f-]+)`
+	migPattern = `^(?P<name>MIG\s+\S+(?:\.\S+)?)\s+Device\s+(?P<device_index>\d+):\s+\(UUID: MIG-(?P<uuid>[0-9a-f-]+)\)`
 	gpuPattern = `^GPU\s+\d+:\s+(?P<gpu_name>[^(]+)\s+\(UUID: GPU-(?P<gpu_uuid>[0-9a-f-]+)\)`
 )
 
@@ -100,7 +100,7 @@ func New(
 	qFieldToMetricInfoMap := BuildQFieldToMetricInfoMap(prefix, qFieldToRFieldMap)
 
 	infoLabels := getLabels(requiredFields)
-	migInfoLabels := []string{"uuid", "name", "gpu_uuid", "gpu_name"}
+	migInfoLabels := []string{"uuid", "name", "device_index", "gpu_uuid", "gpu_name"}
 	exporter := GPUExporter{
 		ctx:                   ctx,
 		prefix:                prefix,
@@ -297,6 +297,7 @@ func collectMIG(exporter *GPUExporter, metricCh chan<- prometheus.Metric) {
 			1,
 			device.UUID,
 			device.Name,
+			device.DeviceIndex,
 			device.GPUUUID,
 			device.GPUName,
 		)
@@ -373,10 +374,11 @@ func scrape(qFields []QField, nvidiaSmiCommand string, command runCmd) (int, *Ta
 }
 
 type MIGInfo struct {
-	UUID    string
-	Name    string
-	GPUUUID string
-	GPUName string
+	UUID        string
+	Name        string
+	DeviceIndex string
+	GPUUUID     string
+	GPUName     string
 }
 
 //nolint:funlen
@@ -438,14 +440,17 @@ func scrapeMIG(nvidiaSmiCommand string, command runCmd) ([]MIGInfo, error) {
 		if len(migMatch) > 0 {
 			uuidIndex := migRegex.SubexpIndex("uuid")
 			nameIndex := migRegex.SubexpIndex("name")
+			deviceIndexIndex := migRegex.SubexpIndex("device_index")
 			uuid := migMatch[uuidIndex]
 			name := migMatch[nameIndex]
+			deviceIndex := migMatch[deviceIndexIndex]
 
 			device := MIGInfo{
-				UUID:    uuid,
-				Name:    name,
-				GPUUUID: currentGPUUUID,
-				GPUName: currentGPUName,
+				UUID:        uuid,
+				Name:        name,
+				DeviceIndex: deviceIndex,
+				GPUUUID:     currentGPUUUID,
+				GPUName:     currentGPUName,
 			}
 
 			devices = append(devices, device)

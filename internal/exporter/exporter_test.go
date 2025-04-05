@@ -377,6 +377,7 @@ end:
 	for _, migMetric := range migMetrics {
 		assert.Contains(t, migMetric, "name")
 		assert.Contains(t, migMetric, "uuid")
+		assert.Contains(t, migMetric, "device_index")
 		assert.Contains(t, migMetric, "gpu_name")
 		assert.Contains(t, migMetric, "gpu_uuid")
 	}
