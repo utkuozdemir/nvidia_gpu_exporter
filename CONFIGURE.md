@@ -21,6 +21,7 @@ Flags:
       --query-field-names="AUTO"
                             Comma-separated list of the query fields. You can find out possible fields by running `nvidia-smi --help-query-gpus`. The value `AUTO` will
                             automatically detect the fields to query.
+      --[no-]include-mig    Include MIG metrics.
       --log.level=info      Only log messages with the given severity or above. One of: [debug, info, warn, error]
       --log.format=logfmt   Output format of log messages. One of: [logfmt, json]
       --version             Show application version.
