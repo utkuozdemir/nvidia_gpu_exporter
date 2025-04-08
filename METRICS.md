@@ -272,7 +272,7 @@ promhttp_metric_handler_requests_in_flight 1
 promhttp_metric_handler_requests_total{code="200"} 0
 promhttp_metric_handler_requests_total{code="500"} 0
 promhttp_metric_handler_requests_total{code="503"} 0
-# HELP nvidia_mig_info A metric with a constant '1' value labeled by uuid, name, device_index, gpu uuid, gpu name.
-# TYPE nvidia_mig_info gauge
+# HELP nvidia_smi_mig_info A metric with a constant '1' value labeled by uuid, name, device_index, gpu uuid, gpu name.
+# TYPE nvidia_smi_mig_info gauge
 nvidia_smi_mig_info{uuid="4d0efb7d-0970-51d9-b761-0686be6b8af3", name="MIG 1g.10gb", device_index="0", gpu_uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa", gpu_name="NVIDIA H100 80GB HBM3"} 1
 ```
