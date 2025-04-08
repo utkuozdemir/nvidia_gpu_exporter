@@ -24,6 +24,9 @@ const delta = 1e-9
 //go:embed testdata/query.txt
 var queryTest string
 
+//go:embed testdata/list_gpus.txt
+var listGPUsTest string
+
 func assertFloat(t *testing.T, expected, actual float64) {
 	t.Helper()
 
@@ -178,7 +181,7 @@ func TestNewUnknownField(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	t.Cleanup(cancel)
 
-	_, err := exporter.New(ctx, "aaa", "bbb", "a", logger)
+	_, err := exporter.New(ctx, "aaa", "bbb", "a", false, logger)
 
 	require.Error(t, err)
 }
@@ -193,7 +196,7 @@ func TestDescribe(t *testing.T) {
 
 	const prefix = "aaa"
 
-	exp, err := exporter.New(ctx, prefix, "bbb", "fan.speed,memory.used", logger)
+	exp, err := exporter.New(ctx, prefix, "bbb", "fan.speed,memory.used", false, logger)
 
 	require.NoError(t, err)
 
@@ -231,6 +234,7 @@ end:
 		"vbios_version",
 		"driver_version",
 		"command_exit_code",
+		"mig_info",
 	}
 
 	slices.Sort(expectedMetrics)
@@ -258,6 +262,7 @@ func TestCollect(t *testing.T) {
 		"bbb",
 		"uuid,name,driver_model.current,driver_model.pending,"+
 			"vbios_version,driver_version,fan.speed,memory.used",
+		false,
 		logger,
 	)
 
@@ -297,6 +302,85 @@ end:
 	assert.Contains(t, metricsJoined, "aaa_name")
 	assert.Contains(t, metricsJoined, "aaa_fan_speed_ratio")
 	assert.Contains(t, metricsJoined, "aaa_memory_used_bytes")
+	assert.NotContains(t, metricsJoined, "aaa_mig_info")
+}
+
+//nolint:funlen
+func TestCollectMIG(t *testing.T) {
+	t.Parallel()
+
+	logger := slogt.New(t)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	t.Cleanup(cancel)
+
+	exp, err := exporter.New(
+		ctx,
+		"aaa",
+		"bbb",
+		"uuid,name,driver_model.current,driver_model.pending,"+
+			"vbios_version,driver_version,fan.speed,memory.used",
+		true,
+		logger,
+	)
+
+	exp.Command = func(cmd *exec.Cmd) error {
+		if strings.Contains(cmd.String(), "--list-gpus") {
+			_, _ = cmd.Stdout.Write([]byte(listGPUsTest))
+		} else {
+			_, _ = cmd.Stdout.Write([]byte(queryTest))
+		}
+
+		return nil
+	}
+
+	require.NoError(t, err)
+
+	doneCh := make(chan bool)
+	metricCh := make(chan prometheus.Metric)
+
+	go func() {
+		exp.Collect(metricCh)
+		doneCh <- true
+	}()
+
+	var metrics []string
+
+	var migMetrics []string
+
+end:
+	for {
+		select {
+		case metric := <-metricCh:
+			metrics = append(metrics, metric.Desc().String())
+			if strings.Contains(metric.Desc().String(), "aaa_mig_info") {
+				migMetrics = append(migMetrics, metric.Desc().String())
+			}
+		case <-doneCh:
+			break end
+		}
+	}
+
+	metricsJoined := strings.Join(metrics, "\n")
+
+	assert.Len(t, metrics, 66)
+	assert.Contains(t, metricsJoined, "aaa_gpu_info")
+	assert.Contains(t, metricsJoined, "command_exit_code")
+	assert.Contains(t, metricsJoined, "aaa_name")
+	assert.Contains(t, metricsJoined, "aaa_fan_speed_ratio")
+	assert.Contains(t, metricsJoined, "aaa_memory_used_bytes")
+	assert.Contains(t, metricsJoined, "aaa_mig_info")
+
+	migInfoCount := strings.Count(metricsJoined, "aaa_mig_info")
+	assert.Equal(t, 56, migInfoCount)
+
+	for _, migMetric := range migMetrics {
+		assert.Contains(t, migMetric, "name")
+		assert.Contains(t, migMetric, "uuid")
+		assert.Contains(t, migMetric, "device_index")
+		assert.Contains(t, migMetric, "gpu_name")
+		assert.Contains(t, migMetric, "gpu_uuid")
+	}
 }
 
 func TestCollectError(t *testing.T) {
@@ -307,7 +391,7 @@ func TestCollectError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	t.Cleanup(cancel)
 
-	exp, err := exporter.New(ctx, "aaa", "bbb", "fan.speed,memory.used", logger)
+	exp, err := exporter.New(ctx, "aaa", "bbb", "fan.speed,memory.used", false, logger)
 
 	require.NoError(t, err)
 
