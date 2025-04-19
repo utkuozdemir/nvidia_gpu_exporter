@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"slices"
@@ -15,6 +16,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/thejerf/slogassert"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
 )
@@ -88,7 +90,11 @@ func TestTransformRawMultiplier(t *testing.T) {
 func TestBuildFQNameAndMultiplierRegular(t *testing.T) {
 	t.Parallel()
 
-	fqName, multiplier := exporter.BuildFQNameAndMultiplier("prefix", "encoder.stats.sessionCount")
+	fqName, multiplier := exporter.BuildFQNameAndMultiplier(
+		"prefix",
+		"encoder.stats.sessionCount",
+		slogt.New(t),
+	)
 
 	assertFloat(t, 1, multiplier)
 	assert.Equal(t, "prefix_encoder_stats_session_count", fqName)
@@ -97,7 +103,11 @@ func TestBuildFQNameAndMultiplierRegular(t *testing.T) {
 func TestBuildFQNameAndMultiplierWatts(t *testing.T) {
 	t.Parallel()
 
-	fqName, multiplier := exporter.BuildFQNameAndMultiplier("prefix", "power.draw [W]")
+	fqName, multiplier := exporter.BuildFQNameAndMultiplier(
+		"prefix",
+		"power.draw [W]",
+		slogt.New(t),
+	)
 
 	assertFloat(t, 1, multiplier)
 	assert.Equal(t, "prefix_power_draw_watts", fqName)
@@ -106,7 +116,11 @@ func TestBuildFQNameAndMultiplierWatts(t *testing.T) {
 func TestBuildFQNameAndMultiplierMiB(t *testing.T) {
 	t.Parallel()
 
-	fqName, multiplier := exporter.BuildFQNameAndMultiplier("prefix", "memory.total [MiB]")
+	fqName, multiplier := exporter.BuildFQNameAndMultiplier(
+		"prefix",
+		"memory.total [MiB]",
+		slogt.New(t),
+	)
 
 	assertFloat(t, 1048576, multiplier)
 	assert.Equal(t, "prefix_memory_total_bytes", fqName)
@@ -118,6 +132,7 @@ func TestBuildFQNameAndMultiplierMHZ(t *testing.T) {
 	fqName, multiplier := exporter.BuildFQNameAndMultiplier(
 		"prefix",
 		"clocks.current.graphics [MHz]",
+		slogt.New(t),
 	)
 
 	assertFloat(t, 1000000, multiplier)
@@ -127,16 +142,33 @@ func TestBuildFQNameAndMultiplierMHZ(t *testing.T) {
 func TestBuildFQNameAndMultiplierRatio(t *testing.T) {
 	t.Parallel()
 
-	fqName, multiplier := exporter.BuildFQNameAndMultiplier("prefix", "fan.speed [%]")
+	fqName, multiplier := exporter.BuildFQNameAndMultiplier("prefix", "fan.speed [%]", slogt.New(t))
 
 	assertFloat(t, 0.01, multiplier)
 	assert.Equal(t, "prefix_fan_speed_ratio", fqName)
 }
 
+func TestBuildFQNameAndMultiplierMicroseconds(t *testing.T) {
+	t.Parallel()
+
+	fqName, multiplier := exporter.BuildFQNameAndMultiplier(
+		"prefix",
+		"clocks_event_reasons_counters.sw_thermal_slowdown [us]",
+		slogt.New(t),
+	)
+
+	assertFloat(t, 0.000001, multiplier)
+	assert.Equal(t, "prefix_clocks_event_reasons_counters_sw_thermal_slowdown_seconds", fqName)
+}
+
 func TestBuildFQNameAndMultiplierNoPrefix(t *testing.T) {
 	t.Parallel()
 
-	fqName, multiplier := exporter.BuildFQNameAndMultiplier("", "encoder.stats.sessionCount")
+	fqName, multiplier := exporter.BuildFQNameAndMultiplier(
+		"",
+		"encoder.stats.sessionCount",
+		slogt.New(t),
+	)
 
 	assertFloat(t, 1, multiplier)
 	assert.Equal(t, "encoder_stats_session_count", fqName)
@@ -145,18 +177,34 @@ func TestBuildFQNameAndMultiplierNoPrefix(t *testing.T) {
 func TestBuildMetricInfo(t *testing.T) {
 	t.Parallel()
 
-	metricInfo := exporter.BuildMetricInfo("prefix", "encoder.stats.sessionCount")
+	metricInfo := exporter.BuildMetricInfo("prefix", "encoder.stats.sessionCount", slogt.New(t))
 
 	assertFloat(t, 1, metricInfo.ValueMultiplier)
 	assert.Equal(t, prometheus.GaugeValue, metricInfo.MType)
 }
 
+func TestBuildMetricInfoInvalidName(t *testing.T) {
+	t.Parallel()
+
+	handler := slogassert.New(t, slog.LevelError, nil)
+	logger := slog.New(handler)
+
+	exporter.BuildMetricInfo("prefix", "foo.bar [asdf]", logger)
+
+	handler.AssertMessage(
+		"returned field contains unexpected characters, it is parsed it with best effort, " +
+			"but it might get renamed in the future. please report it in the project's issue tracker",
+	)
+}
+
 func TestBuildQFieldToMetricInfoMap(t *testing.T) {
 	t.Parallel()
 
+	logger := slogt.New(t)
 	qFieldToMetricInfoMap := exporter.BuildQFieldToMetricInfoMap(
 		"prefix",
 		map[exporter.QField]exporter.RField{"aaa": "AAA", "bbb": "BBB"},
+		logger,
 	)
 
 	assert.Len(t, qFieldToMetricInfoMap, 2)
