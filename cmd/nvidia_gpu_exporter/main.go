@@ -71,6 +71,7 @@ func run() error {
 				"You can find out possible fields by running `nvidia-smi --help-query-gpu`. "+
 				"The value `%s` will automatically detect the fields to query.", exporter.DefaultQField)).
 			Default(exporter.DefaultQField).String()
+		includeMIG = kingpin.Flag("include-mig", "Include MIG metrics.").Default("false").Bool()
 	)
 
 	promSlogConfig := &promslog.Config{}
@@ -87,7 +88,14 @@ func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	exp, err := exporter.New(ctx, exporter.DefaultPrefix, *nvidiaSmiCommand, *qFields, logger)
+	exp, err := exporter.New(
+		ctx,
+		exporter.DefaultPrefix,
+		*nvidiaSmiCommand,
+		*qFields,
+		*includeMIG,
+		logger,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to create exporter: %w", err)
 	}

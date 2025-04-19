@@ -32,6 +32,9 @@ const (
 	DefaultNvidiaSmiCommand = "nvidia-smi"
 
 	floatBitSize = 64
+
+	migPattern = `^(?P<name>MIG\s+\S+(?:\.\S+)?)\s+Device\s+(?P<device_index>\d+):\s+\(UUID: MIG-(?P<uuid>[0-9a-f-]+)\)`
+	gpuPattern = `^GPU\s+\d+:\s+(?P<gpu_name>[^(]+)\s+\(UUID: GPU-(?P<gpu_uuid>[0-9a-f-]+)\)`
 )
 
 var (
@@ -69,12 +72,19 @@ type GPUExporter struct {
 	failedScrapesTotal    prometheus.Counter
 	exitCode              prometheus.Gauge
 	gpuInfoDesc           *prometheus.Desc
+	includeMIG            bool
+	migInfoDesc           *prometheus.Desc
 	logger                *slog.Logger
 	Command               runCmd
 	ctx                   context.Context //nolint:containedctx
 }
 
-func New(ctx context.Context, prefix string, nvidiaSmiCommand string, qFieldsRaw string,
+func New(
+	ctx context.Context,
+	prefix string,
+	nvidiaSmiCommand string,
+	qFieldsRaw string,
+	includeMIG bool,
 	logger *slog.Logger,
 ) (*GPUExporter, error) {
 	qFieldsOrdered, qFieldToRFieldMap, err := buildQFieldToRFieldMap(
@@ -90,6 +100,7 @@ func New(ctx context.Context, prefix string, nvidiaSmiCommand string, qFieldsRaw
 	qFieldToMetricInfoMap := BuildQFieldToMetricInfoMap(prefix, qFieldToRFieldMap, logger)
 
 	infoLabels := getLabels(requiredFields)
+	migInfoLabels := []string{"uuid", "name", "device_index", "gpu_uuid", "gpu_name"}
 	exporter := GPUExporter{
 		ctx:                   ctx,
 		prefix:                prefix,
@@ -112,6 +123,13 @@ func New(ctx context.Context, prefix string, nvidiaSmiCommand string, qFieldsRaw
 			fmt.Sprintf("A metric with a constant '1' value labeled by gpu %s.",
 				strings.Join(infoLabels, ", ")),
 			infoLabels,
+			nil),
+		includeMIG: includeMIG,
+		migInfoDesc: prometheus.NewDesc(
+			prometheus.BuildFQName(prefix, "", "mig_info"),
+			fmt.Sprintf("A metric with a constant '1' value labeled by mig %s.",
+				strings.Join(migInfoLabels, ", ")),
+			migInfoLabels,
 			nil),
 		Command: defaultRunCmd,
 	}
@@ -185,6 +203,7 @@ func (e *GPUExporter) Describe(descCh chan<- *prometheus.Desc) {
 	e.sendDesc(descCh, e.failedScrapesTotal.Desc())
 	e.sendDesc(descCh, e.exitCode.Desc())
 	e.sendDesc(descCh, e.gpuInfoDesc)
+	e.sendDesc(descCh, e.migInfoDesc)
 }
 
 // Collect fetches the stats and delivers them as Prometheus metrics. It implements prometheus.Collector.
@@ -257,6 +276,39 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 			e.sendMetric(metricCh, metric)
 		}
 	}
+
+	if e.includeMIG {
+		collectMIG(e, metricCh)
+	}
+}
+
+func collectMIG(exporter *GPUExporter, metricCh chan<- prometheus.Metric) {
+	migDevices, err := scrapeMIG(exporter.nvidiaSmiCommand, exporter.Command)
+	if err != nil {
+		exporter.logger.Error("failed to scrape MIG devices", "err", err)
+
+		return
+	}
+
+	for _, device := range migDevices {
+		metric, err := prometheus.NewConstMetric(
+			exporter.migInfoDesc,
+			prometheus.GaugeValue,
+			1,
+			device.UUID,
+			device.Name,
+			device.DeviceIndex,
+			device.GPUUUID,
+			device.GPUName,
+		)
+		if err != nil {
+			exporter.logger.Error("failed to create MIG info metric", "err", err, "device", device)
+
+			continue
+		}
+
+		exporter.sendMetric(metricCh, metric)
+	}
 }
 
 func (e *GPUExporter) sendMetric(metricCh chan<- prometheus.Metric, metric prometheus.Metric) {
@@ -319,6 +371,93 @@ func scrape(qFields []QField, nvidiaSmiCommand string, command runCmd) (int, *Ta
 	}
 
 	return 0, &t, nil
+}
+
+type MIGInfo struct {
+	UUID        string
+	Name        string
+	DeviceIndex string
+	GPUUUID     string
+	GPUName     string
+}
+
+//nolint:funlen
+func scrapeMIG(nvidiaSmiCommand string, command runCmd) ([]MIGInfo, error) {
+	cmdAndArgs := strings.Fields(nvidiaSmiCommand)
+	cmdAndArgs = append(cmdAndArgs, "--list-gpus")
+
+	var stdout bytes.Buffer
+
+	var stderr bytes.Buffer
+
+	cmd := exec.Command(cmdAndArgs[0], cmdAndArgs[1:]...) //nolint:gosec
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := command(cmd)
+	if err != nil {
+		exitCode := -1
+
+		var exitError *exec.ExitError
+		if errors.As(err, &exitError) {
+			exitCode = exitError.ExitCode()
+		}
+
+		return make([]MIGInfo, 0), fmt.Errorf(
+			"command failed: code: %d | command: %s | stdout: %s | stderr: %s: %w",
+			exitCode,
+			strings.Join(cmdAndArgs, " "),
+			stdout.String(),
+			stderr.String(),
+			err,
+		)
+	}
+
+	devices := make([]MIGInfo, 0)
+	currentGPUName := ""
+	currentGPUUUID := ""
+
+	gpuRegex := regexp.MustCompile(gpuPattern)
+	migRegex := regexp.MustCompile(migPattern)
+
+	for _, line := range strings.Split(stdout.String(), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		gpuMatch := gpuRegex.FindStringSubmatch(line)
+		if len(gpuMatch) > 0 {
+			gpuUUIDIndex := gpuRegex.SubexpIndex("gpu_uuid")
+			gpuNameIndex := gpuRegex.SubexpIndex("gpu_name")
+			currentGPUUUID = gpuMatch[gpuUUIDIndex]
+			currentGPUName = gpuMatch[gpuNameIndex]
+
+			continue
+		}
+
+		migMatch := migRegex.FindStringSubmatch(line)
+		if len(migMatch) > 0 {
+			uuidIndex := migRegex.SubexpIndex("uuid")
+			nameIndex := migRegex.SubexpIndex("name")
+			deviceIndexIndex := migRegex.SubexpIndex("device_index")
+			uuid := migMatch[uuidIndex]
+			name := migMatch[nameIndex]
+			deviceIndex := migMatch[deviceIndexIndex]
+
+			device := MIGInfo{
+				UUID:        uuid,
+				Name:        name,
+				DeviceIndex: deviceIndex,
+				GPUUUID:     currentGPUUUID,
+				GPUName:     currentGPUName,
+			}
+
+			devices = append(devices, device)
+		}
+	}
+
+	return devices, nil
 }
 
 type MetricInfo struct {
