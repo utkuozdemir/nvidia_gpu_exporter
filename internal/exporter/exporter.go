@@ -87,7 +87,7 @@ func New(ctx context.Context, prefix string, nvidiaSmiCommand string, qFieldsRaw
 		return nil, err
 	}
 
-	qFieldToMetricInfoMap := BuildQFieldToMetricInfoMap(prefix, qFieldToRFieldMap)
+	qFieldToMetricInfoMap := BuildQFieldToMetricInfoMap(prefix, qFieldToRFieldMap, logger)
 
 	infoLabels := getLabels(requiredFields)
 	exporter := GPUExporter{
@@ -381,17 +381,18 @@ func parseSanitizedValueWithBestEffort(
 func BuildQFieldToMetricInfoMap(
 	prefix string,
 	qFieldtoRFieldMap map[QField]RField,
+	logger *slog.Logger,
 ) map[QField]MetricInfo {
 	result := make(map[QField]MetricInfo)
 	for qField, rField := range qFieldtoRFieldMap {
-		result[qField] = BuildMetricInfo(prefix, rField)
+		result[qField] = BuildMetricInfo(prefix, rField, logger)
 	}
 
 	return result
 }
 
-func BuildMetricInfo(prefix string, rField RField) MetricInfo {
-	fqName, multiplier := BuildFQNameAndMultiplier(prefix, rField)
+func BuildMetricInfo(prefix string, rField RField, logger *slog.Logger) MetricInfo {
+	fqName, multiplier := BuildFQNameAndMultiplier(prefix, rField, logger)
 	desc := prometheus.NewDesc(fqName, string(rField), []string{"uuid"}, nil)
 
 	return MetricInfo{
@@ -401,28 +402,45 @@ func BuildMetricInfo(prefix string, rField RField) MetricInfo {
 	}
 }
 
-func BuildFQNameAndMultiplier(prefix string, rField RField) (string, float64) {
+func BuildFQNameAndMultiplier(prefix string, rField RField, logger *slog.Logger) (string, float64) {
 	rFieldStr := string(rField)
 	suffixTransformed := rFieldStr
 	multiplier := 1.0
 	split := strings.Split(rFieldStr, " ")[0]
 
-	//nolint:gocritic
-	if strings.HasSuffix(rFieldStr, " [W]") {
+	switch {
+	case strings.HasSuffix(rFieldStr, " [W]"):
 		suffixTransformed = split + "_watts"
-	} else if strings.HasSuffix(rFieldStr, " [MHz]") {
+	case strings.HasSuffix(rFieldStr, " [MHz]"):
 		suffixTransformed = split + "_clock_hz"
 		multiplier = 1000000
-	} else if strings.HasSuffix(rFieldStr, " [MiB]") {
+	case strings.HasSuffix(rFieldStr, " [MiB]"):
 		suffixTransformed = split + "_bytes"
 		multiplier = 1048576
-	} else if strings.HasSuffix(rFieldStr, " [%]") {
+	case strings.HasSuffix(rFieldStr, " [%]"):
 		suffixTransformed = split + "_ratio"
 		multiplier = 0.01
+	case strings.HasSuffix(rFieldStr, " [us]"):
+		suffixTransformed = split + "_seconds"
+		multiplier = 0.000001
 	}
 
-	metricName := util.ToSnakeCase(strings.ReplaceAll(suffixTransformed, ".", "_"))
-	fqName := prometheus.BuildFQName(prefix, "", metricName)
+	suffixTransformed = strings.ReplaceAll(suffixTransformed, ".", "_")
+	suffixTransformed = util.ToSnakeCase(suffixTransformed)
+
+	if strings.ContainsAny(suffixTransformed, " []") {
+		suffixTransformed = strings.ReplaceAll(suffixTransformed, " [", "_")
+		suffixTransformed = strings.ReplaceAll(suffixTransformed, "]", "")
+
+		logger.Error("returned field contains unexpected characters, "+
+			"it is parsed it with best effort, but it might get renamed in the future. "+
+			"please report it in the project's issue tracker",
+			"rfield_name", rFieldStr,
+			"parsed_name", suffixTransformed,
+		)
+	}
+
+	fqName := prometheus.BuildFQName(prefix, "", suffixTransformed)
 
 	return fqName, multiplier
 }
