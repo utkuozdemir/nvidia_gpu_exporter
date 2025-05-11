@@ -133,6 +133,9 @@ $ docker run -d \
 utkuozdemir/nvidia_gpu_exporter:1.3.1
 ```
 
+> [!TIP]
+> The Docker image is also available from GHCR as `ghcr.io/utkuozdemir/nvidia_gpu_exporter`
+
 ## Running in Kubernetes
 
 Using the exporter in Kubernetes is pretty similar with running it in Docker.
