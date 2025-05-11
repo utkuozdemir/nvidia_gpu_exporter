@@ -26,13 +26,13 @@ Follow the steps below:
 If you are on a Debian-based system (.deb), you can install the exporter with the following command:
 
 ```bash
-sudo dpkg -i nvidia-gpu-exporter_1.1.0_linux_amd64.deb
+sudo dpkg -i nvidia-gpu-exporter_1.3.1_linux_amd64.deb
 ```
 
 If you are on a Red Hat-based system (.rpm), you can install the exporter with the following command:
 
 ```bash
-sudo rpm -i nvidia-gpu-exporter_1.1.0_linux_amd64.rpm
+sudo rpm -i nvidia-gpu-exporter_1.3.1_linux_amd64.rpm
 ```
 
 **Note:** .rpm and .deb packages only support systems using systemd as init system.
@@ -47,7 +47,7 @@ sudo rpm -i nvidia-gpu-exporter_1.1.0_linux_amd64.rpm
 Sample steps for Linux 64-bit:
 
 ```bash
-VERSION=1.1.0
+VERSION=1.3.1
 wget https://github.com/utkuozdemir/nvidia_gpu_exporter/releases/download/v${VERSION}/nvidia_gpu_exporter_${VERSION}_linux_x86_64.tar.gz
 tar -xvzf nvidia_gpu_exporter_${VERSION}_linux_x86_64.tar.gz
 mv nvidia_gpu_exporter /usr/bin
@@ -130,7 +130,7 @@ $ docker run -d \
 -v /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1 \
 -v /usr/bin/nvidia-smi:/usr/bin/nvidia-smi \
 -p 9835:9835 \
-utkuozdemir/nvidia_gpu_exporter:1.1.0
+utkuozdemir/nvidia_gpu_exporter:1.3.1
 ```
 
 ## Running in Kubernetes
