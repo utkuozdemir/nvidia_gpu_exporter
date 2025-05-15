@@ -51,7 +51,7 @@ jobs:
       - name: Print coverage results
         run: go tool cover -func ./coverage.out
       - name: Send coverage
-        uses: codecov/codecov-action@v5.4.2
+        uses: codecov/codecov-action@v5.4.3
         with:
           files: coverage.out
           token: ${{ secrets.CODECOV_TOKEN }}
