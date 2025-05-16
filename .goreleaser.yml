@@ -128,12 +128,14 @@ changelog:
 dockers:
   - image_templates:
       - docker.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}-amd64
+      - ghcr.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}-amd64
     use: buildx
     dockerfile: Dockerfile
     build_flag_templates:
       - --platform=linux/amd64
   - image_templates:
       - docker.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}-arm64
+      - ghcr.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}-arm64
     use: buildx
     goarch: arm64
     dockerfile: Dockerfile
@@ -141,6 +143,7 @@ dockers:
       - --platform=linux/arm64
   - image_templates:
       - docker.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}-armv7
+      - ghcr.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}-armv7
     use: buildx
     goarch: arm
     goarm: "7"
@@ -154,6 +157,12 @@ docker_manifests:
       - docker.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}-amd64
       - docker.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}-arm64
       - docker.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}-armv7
+
+  - name_template: ghcr.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}
+    image_templates:
+      - ghcr.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}-amd64
+      - ghcr.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}-arm64
+      - ghcr.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}-armv7
 
 # To test docker image push, uncomment the following and run
 # goreleaser release --skip-validate --rm-dist --debug
