@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-        "regexp"
 
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -37,7 +36,6 @@ const (
 
 var (
 	numericRegex = regexp.MustCompile(`[+-]?(\d*[.])?\d+`)
-	invalidChars = regexp.MustCompile(`[^a-zA-Z0-9_]`)
 
 	//nolint:gochecknoglobals
 	requiredFields = []requiredField{
@@ -429,6 +427,7 @@ func BuildFQNameAndMultiplier(prefix string, rField RField, logger *slog.Logger)
 
 	suffixTransformed = strings.ReplaceAll(suffixTransformed, ".", "_")
 	suffixTransformed = util.ToSnakeCase(suffixTransformed)
+	var invalidChars = regexp.MustCompile(`[^a-zA-Z0-9_]`)
 
 	if strings.ContainsAny(suffixTransformed, " []") {
 		// Sanitize suffixTransformed to be a valid Prometheus metric name
