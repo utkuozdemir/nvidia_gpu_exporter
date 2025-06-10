@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+        "regexp"
 
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -36,6 +37,7 @@ const (
 
 var (
 	numericRegex = regexp.MustCompile(`[+-]?(\d*[.])?\d+`)
+	invalidChars = regexp.MustCompile(`[^a-zA-Z0-9_]`)
 
 	//nolint:gochecknoglobals
 	requiredFields = []requiredField{
@@ -429,9 +431,16 @@ func BuildFQNameAndMultiplier(prefix string, rField RField, logger *slog.Logger)
 	suffixTransformed = util.ToSnakeCase(suffixTransformed)
 
 	if strings.ContainsAny(suffixTransformed, " []") {
+		// Sanitize suffixTransformed to be a valid Prometheus metric name
+		suffixTransformed = strings.ToLower(suffixTransformed)
 		suffixTransformed = strings.ReplaceAll(suffixTransformed, " [", "_")
 		suffixTransformed = strings.ReplaceAll(suffixTransformed, "]", "")
-
+		suffixTransformed = strings.ReplaceAll(suffixTransformed, "[", "_")
+		suffixTransformed = strings.ReplaceAll(suffixTransformed, " ", "_")
+		suffixTransformed = strings.ReplaceAll(suffixTransformed, "-", "_")
+		suffixTransformed = strings.ReplaceAll(suffixTransformed, ".", "_")
+		suffixTransformed = invalidChars.ReplaceAllString(suffixTransformed, "_")
+		
 		logger.Error("returned field contains unexpected characters, "+
 			"it is parsed it with best effort, but it might get renamed in the future. "+
 			"please report it in the project's issue tracker",
