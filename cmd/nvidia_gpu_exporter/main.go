@@ -111,7 +111,7 @@ func run() error {
 		IdleTimeout:       *idleTimeout,
 	}
 
-	if err = listenAndServe(srv, webConfig, *network, logger); err != nil {
+	if err = listenAndServe(ctx, srv, webConfig, *network, logger); err != nil {
 		return fmt.Errorf("failed to serve: %w", err)
 	}
 
@@ -138,6 +138,7 @@ func (r *RootHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 
 // listenAndServe is the same as web.ListenAndServe but supports passing network stack as an argument.
 func listenAndServe(
+	ctx context.Context,
 	server *http.Server,
 	flags *web.FlagConfig,
 	network string,
@@ -165,7 +166,9 @@ func listenAndServe(
 	listeners := make([]net.Listener, 0, len(*flags.WebListenAddresses))
 
 	for _, address := range *flags.WebListenAddresses {
-		listener, err := net.Listen(network, address)
+		var lc net.ListenConfig
+
+		listener, err := lc.Listen(ctx, network, address)
 		if err != nil {
 			return fmt.Errorf("failed to listen on %s: %w", address, err)
 		}

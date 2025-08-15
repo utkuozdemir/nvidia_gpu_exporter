@@ -77,7 +77,7 @@ func TestParseAutoQFields(t *testing.T) {
 		return nil
 	}
 
-	fields, err := exporter.ParseAutoQFields("nvidia-smi", command)
+	fields, err := exporter.ParseAutoQFields(t.Context(), "nvidia-smi", command)
 
 	if assert.Len(t, capturedCmd.Args, 2) {
 		assert.Equal(t, "nvidia-smi", capturedCmd.Args[0])

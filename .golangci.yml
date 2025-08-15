@@ -5,6 +5,8 @@ linters:
     - depguard # breaking things: https://github.com/atc0005/go-ci/issues/1024
     - err113 # no need to wrap all errors, too much work
     - exhaustruct # pointless
+    - wsl # deprecated
+    - noinlineerr # enormous fan of inline errors
   exclusions:
     generated: lax
     presets:
