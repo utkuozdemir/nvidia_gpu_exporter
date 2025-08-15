@@ -250,6 +250,7 @@ func TestDescribe(t *testing.T) {
 
 	go func() {
 		exp.Describe(descCh)
+
 		doneCh <- true
 	}()
 
@@ -322,6 +323,7 @@ func TestCollect(t *testing.T) {
 
 	go func() {
 		exp.Collect(metricCh)
+
 		doneCh <- true
 	}()
 
@@ -364,6 +366,7 @@ func TestCollectError(t *testing.T) {
 
 	go func() {
 		exp.Collect(metricCh)
+
 		doneCh <- true
 	}()
 
@@ -395,7 +398,7 @@ func TestParseQueryFields(t *testing.T) {
 
 	nvidiaSmiCommand := "nvidia-smi"
 
-	qFields, err := exporter.ParseAutoQFields(nvidiaSmiCommand, nil)
+	qFields, err := exporter.ParseAutoQFields(t.Context(), nvidiaSmiCommand, nil)
 	if err != nil {
 		fmt.Printf("error: %v\n", err)
 		os.Exit(1)

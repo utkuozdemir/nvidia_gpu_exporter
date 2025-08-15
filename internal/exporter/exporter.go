@@ -78,6 +78,7 @@ func New(ctx context.Context, prefix string, nvidiaSmiCommand string, qFieldsRaw
 	logger *slog.Logger,
 ) (*GPUExporter, error) {
 	qFieldsOrdered, qFieldToRFieldMap, err := buildQFieldToRFieldMap(
+		ctx,
 		logger,
 		qFieldsRaw,
 		nvidiaSmiCommand,
@@ -119,7 +120,11 @@ func New(ctx context.Context, prefix string, nvidiaSmiCommand string, qFieldsRaw
 	return &exporter, nil
 }
 
-func buildQFieldToRFieldMap(logger *slog.Logger, qFieldsRaw string, nvidiaSmiCommand string,
+func buildQFieldToRFieldMap(
+	ctx context.Context,
+	logger *slog.Logger,
+	qFieldsRaw string,
+	nvidiaSmiCommand string,
 	command runCmd,
 ) ([]QField, map[QField]RField, error) {
 	qFieldsSeparated := strings.Split(qFieldsRaw, ",")
@@ -132,7 +137,7 @@ func buildQFieldToRFieldMap(logger *slog.Logger, qFieldsRaw string, nvidiaSmiCom
 	qFields = removeDuplicates(qFields)
 
 	if len(qFieldsSeparated) == 1 && qFieldsSeparated[0] == qFieldsAuto {
-		parsed, err := ParseAutoQFields(nvidiaSmiCommand, command)
+		parsed, err := ParseAutoQFields(ctx, nvidiaSmiCommand, command)
 		if err != nil {
 			logger.Warn(
 				"failed to auto-determine query field names, falling back to the built-in list",
@@ -148,7 +153,7 @@ func buildQFieldToRFieldMap(logger *slog.Logger, qFieldsRaw string, nvidiaSmiCom
 		qFields = parsed
 	}
 
-	_, resultTable, err := scrape(qFields, nvidiaSmiCommand, command)
+	_, resultTable, err := scrape(ctx, qFields, nvidiaSmiCommand, command)
 
 	var rFields []RField
 
@@ -194,7 +199,7 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
 
-	exitCode, currentTable, err := scrape(e.qFields, e.nvidiaSmiCommand, e.Command)
+	exitCode, currentTable, err := scrape(e.ctx, e.qFields, e.nvidiaSmiCommand, e.Command)
 	e.exitCode.Set(float64(exitCode))
 
 	e.sendMetric(metricCh, e.exitCode)
@@ -203,6 +208,7 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 		e.logger.Error("failed to collect metrics", "err", err)
 
 		metricCh <- e.failedScrapesTotal
+
 		e.failedScrapesTotal.Inc()
 
 		return
@@ -279,7 +285,12 @@ func (e *GPUExporter) sendDesc(descCh chan<- *prometheus.Desc, desc *prometheus.
 	}
 }
 
-func scrape(qFields []QField, nvidiaSmiCommand string, command runCmd) (int, *Table, error) {
+func scrape(
+	ctx context.Context,
+	qFields []QField,
+	nvidiaSmiCommand string,
+	command runCmd,
+) (int, *Table, error) {
 	qFieldsJoined := strings.Join(QFieldSliceToStringSlice(qFields), ",")
 
 	cmdAndArgs := strings.Fields(nvidiaSmiCommand)
@@ -290,7 +301,7 @@ func scrape(qFields []QField, nvidiaSmiCommand string, command runCmd) (int, *Ta
 
 	var stderr bytes.Buffer
 
-	cmd := exec.Command(cmdAndArgs[0], cmdAndArgs[1:]...) //nolint:gosec
+	cmd := exec.CommandContext(ctx, cmdAndArgs[0], cmdAndArgs[1:]...) //nolint:gosec
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 

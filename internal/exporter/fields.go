@@ -2,6 +2,7 @@ package exporter
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os/exec"
@@ -143,10 +144,14 @@ var (
 	}
 )
 
-func ParseAutoQFields(nvidiaSmiCommand string, command runCmd) ([]QField, error) {
+func ParseAutoQFields(
+	ctx context.Context,
+	nvidiaSmiCommand string,
+	command runCmd,
+) ([]QField, error) {
 	cmdAndArgs := strings.Fields(nvidiaSmiCommand)
 	cmdAndArgs = append(cmdAndArgs, "--help-query-gpu")
-	cmd := exec.Command(cmdAndArgs[0], cmdAndArgs[1:]...) //nolint:gosec
+	cmd := exec.CommandContext(ctx, cmdAndArgs[0], cmdAndArgs[1:]...) //nolint:gosec
 
 	var stdout bytes.Buffer
 
