@@ -7,7 +7,7 @@ require (
 	github.com/coreos/go-systemd/v22 v22.6.0
 	github.com/neilotoole/slogt v1.1.0
 	github.com/prometheus/client_golang v1.23.0
-	github.com/prometheus/common v0.66.0
+	github.com/prometheus/common v1.20.3
 	github.com/prometheus/exporter-toolkit v0.14.0
 	github.com/stretchr/testify v1.11.1
 	github.com/thejerf/slogassert v0.3.4
