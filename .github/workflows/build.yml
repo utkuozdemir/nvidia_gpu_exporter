@@ -59,7 +59,7 @@ jobs:
         uses: goreleaser/goreleaser-action@v6.4.0
         with:
           # renovate: depName=goreleaser/goreleaser datasource=github-releases
-          version: v2.12.1
+          version: v2.12.2
           args: release --snapshot --skip=publish --clean
         env:
           PRIVATE_ACCESS_TOKEN: placeholder
