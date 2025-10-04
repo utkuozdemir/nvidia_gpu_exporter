@@ -8,7 +8,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
+	"time"
 
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/coreos/go-systemd/v22/activation"
@@ -20,6 +22,7 @@ import (
 	"github.com/prometheus/common/version"
 	"github.com/prometheus/exporter-toolkit/web"
 	webflag "github.com/prometheus/exporter-toolkit/web/kingpinflag"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
 )
@@ -37,6 +40,12 @@ const redirectPageTemplate = `<html lang="en">
 func main() {
 	if err := run(); err != nil {
 		slog.Default().Error("failed to run", "err", err)
+
+		var exitErr *exec.ExitError
+
+		if errors.As(err, &exitErr) {
+			os.Exit(exitErr.ExitCode())
+		}
 
 		os.Exit(1)
 	}
@@ -71,6 +80,10 @@ func run() error {
 				"You can find out possible fields by running `nvidia-smi --help-query-gpu`. "+
 				"The value `%s` will automatically detect the fields to query.", exporter.DefaultQField)).
 			Default(exporter.DefaultQField).String()
+		shutdownOnErr = kingpin.Flag("shutdown-on-error",
+			"Shut down the exporter if there is an error querying nvidia-smi. "+
+				"When false, exporter will simply log this error and export it as a metric, but will not crash.").
+			Default("false").Bool()
 	)
 
 	promSlogConfig := &promslog.Config{}
@@ -87,7 +100,22 @@ func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	exp, err := exporter.New(ctx, exporter.DefaultPrefix, *nvidiaSmiCommand, *qFields, logger)
+	ctx, serverCancel := context.WithCancelCause(ctx)
+	defer serverCancel(nil)
+
+	var shutdownOnErrFunc context.CancelCauseFunc
+	if *shutdownOnErr {
+		shutdownOnErrFunc = serverCancel
+	}
+
+	exp, err := exporter.New(
+		ctx,
+		shutdownOnErrFunc,
+		exporter.DefaultPrefix,
+		*nvidiaSmiCommand,
+		*qFields,
+		logger,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to create exporter: %w", err)
 	}
@@ -111,8 +139,44 @@ func run() error {
 		IdleTimeout:       *idleTimeout,
 	}
 
-	if err = listenAndServe(ctx, srv, webConfig, *network, logger); err != nil {
-		return fmt.Errorf("failed to serve: %w", err)
+	eg, ctx := errgroup.WithContext(ctx) //nolint:varnamelen
+
+	eg.Go(func() error {
+		<-ctx.Done()
+
+		//nolint:mnd
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+
+		logger.Info("shutting down http server")
+
+		//nolint:contextcheck
+		if shutdownErr := srv.Shutdown(shutdownCtx); shutdownErr != nil {
+			return fmt.Errorf("failed to shutdown http server: %w", shutdownErr)
+		}
+
+		return nil
+	})
+
+	eg.Go(func() error {
+		if runErr := listenAndServe(ctx, srv, webConfig, *network, logger); runErr != nil {
+			if !errors.Is(runErr, http.ErrServerClosed) {
+				return runErr
+			}
+
+			serverCancelCause := context.Cause(ctx)
+			if errors.Is(serverCancelCause, context.Canceled) {
+				return nil
+			}
+
+			return fmt.Errorf("exporter failed: %w", serverCancelCause)
+		}
+
+		return nil
+	})
+
+	if err = eg.Wait(); err != nil {
+		return fmt.Errorf("failed to run: %w", err)
 	}
 
 	return nil
