@@ -226,7 +226,7 @@ func TestNewUnknownField(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	t.Cleanup(cancel)
 
-	_, err := exporter.New(ctx, "aaa", "bbb", "a", logger)
+	_, err := exporter.New(ctx, nil, "aaa", "bbb", "a", logger)
 
 	require.Error(t, err)
 }
@@ -241,7 +241,7 @@ func TestDescribe(t *testing.T) {
 
 	const prefix = "aaa"
 
-	exp, err := exporter.New(ctx, prefix, "bbb", "fan.speed,memory.used", logger)
+	exp, err := exporter.New(ctx, nil, prefix, "bbb", "fan.speed,memory.used", logger)
 
 	require.NoError(t, err)
 
@@ -303,6 +303,7 @@ func TestCollect(t *testing.T) {
 
 	exp, err := exporter.New(
 		ctx,
+		nil,
 		"aaa",
 		"bbb",
 		"uuid,name,driver_model.current,driver_model.pending,"+
@@ -357,7 +358,7 @@ func TestCollectError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	t.Cleanup(cancel)
 
-	exp, err := exporter.New(ctx, "aaa", "bbb", "fan.speed,memory.used", logger)
+	exp, err := exporter.New(ctx, nil, "aaa", "bbb", "fan.speed,memory.used", logger)
 
 	require.NoError(t, err)
 

@@ -72,10 +72,11 @@ type GPUExporter struct {
 	logger                *slog.Logger
 	Command               runCmd
 	ctx                   context.Context //nolint:containedctx
+	shutdownOnErrorFunc   context.CancelCauseFunc
 }
 
-func New(ctx context.Context, prefix string, nvidiaSmiCommand string, qFieldsRaw string,
-	logger *slog.Logger,
+func New(ctx context.Context, shutdownOnErrorFunc context.CancelCauseFunc, prefix string,
+	nvidiaSmiCommand string, qFieldsRaw string, logger *slog.Logger,
 ) (*GPUExporter, error) {
 	qFieldsOrdered, qFieldToRFieldMap, err := buildQFieldToRFieldMap(
 		ctx,
@@ -93,6 +94,7 @@ func New(ctx context.Context, prefix string, nvidiaSmiCommand string, qFieldsRaw
 	infoLabels := getLabels(requiredFields)
 	exporter := GPUExporter{
 		ctx:                   ctx,
+		shutdownOnErrorFunc:   shutdownOnErrorFunc,
 		prefix:                prefix,
 		nvidiaSmiCommand:      nvidiaSmiCommand,
 		qFields:               qFieldsOrdered,
@@ -210,6 +212,14 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 		metricCh <- e.failedScrapesTotal
 
 		e.failedScrapesTotal.Inc()
+
+		if e.shutdownOnErrorFunc != nil {
+			var exitErr *exec.ExitError
+
+			if errors.As(err, &exitErr) {
+				e.shutdownOnErrorFunc(err)
+			}
+		}
 
 		return
 	}
