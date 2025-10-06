@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/alecthomas/kingpin/v2"
@@ -97,7 +98,7 @@ func run() error {
 
 	slog.SetDefault(logger)
 
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
 	ctx, serverCancel := context.WithCancelCause(ctx)
