@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -32,9 +33,23 @@ const redirectPageTemplate = `<html lang="en">
 <head><title>Nvidia GPU Exporter</title></head>
 <body>
 <h1>Nvidia GPU Exporter</h1>
-<p><a href="%s">Metrics</a></p>
+<p><a href="%s">Metrics</a></p>%s
 </body>
 </html>
+`
+
+const pprofLinksHTML = `
+<h2>Profiling</h2>
+<ul>
+<li><a href="/debug/pprof/">Index</a></li>
+<li><a href="/debug/pprof/goroutine">Goroutines</a></li>
+<li><a href="/debug/pprof/heap">Heap</a></li>
+<li><a href="/debug/pprof/threadcreate">Threads</a></li>
+<li><a href="/debug/pprof/block">Block</a></li>
+<li><a href="/debug/pprof/mutex">Mutex</a></li>
+<li><a href="/debug/pprof/profile">CPU Profile</a></li>
+<li><a href="/debug/pprof/trace">Trace</a></li>
+</ul>
 `
 
 // main is the entrypoint of the application.
@@ -85,6 +100,10 @@ func run() error {
 			"Shut down the exporter if there is an error querying nvidia-smi. "+
 				"When false, exporter will simply log this error and export it as a metric, but will not crash.").
 			Default("false").Bool()
+		enablePprof = kingpin.Flag("web.enable-pprof",
+			"Enable pprof endpoints for profiling under /debug/pprof/. "+
+				"Only enable this on a trusted network, as it exposes runtime internals.").
+			Default("false").Bool()
 	)
 
 	promSlogConfig := &promslog.Config{}
@@ -129,15 +148,14 @@ func run() error {
 		return fmt.Errorf("failed to register client version collector: %w", err)
 	}
 
-	rootHandler := NewRootHandler(logger, *metricsPath)
-	http.Handle("/", rootHandler)
-	http.Handle(*metricsPath, promhttp.Handler())
+	mux := newServeMux(logger, *metricsPath, *enablePprof)
 
 	srv := &http.Server{
 		ReadHeaderTimeout: *readHeaderTimeout,
 		ReadTimeout:       *readTimeout,
 		WriteTimeout:      *writeTimeout,
 		IdleTimeout:       *idleTimeout,
+		Handler:           mux,
 	}
 
 	eg, ctx := errgroup.WithContext(ctx)
@@ -187,11 +205,41 @@ type RootHandler struct {
 	logger   *slog.Logger
 }
 
-func NewRootHandler(logger *slog.Logger, metricsPath string) *RootHandler {
+func NewRootHandler(logger *slog.Logger, metricsPath string, enablePprof bool) *RootHandler {
+	pprofLinks := ""
+	if enablePprof {
+		pprofLinks = pprofLinksHTML
+	}
+
 	return &RootHandler{
-		response: fmt.Appendf(nil, redirectPageTemplate, metricsPath),
+		response: fmt.Appendf(nil, redirectPageTemplate, metricsPath, pprofLinks),
 		logger:   logger,
 	}
+}
+
+// newServeMux builds the HTTP mux serving the root page, metrics and optionally pprof.
+func newServeMux(logger *slog.Logger, metricsPath string, enablePprof bool) *http.ServeMux {
+	mux := http.NewServeMux()
+
+	rootHandler := NewRootHandler(logger, metricsPath, enablePprof)
+	mux.Handle("GET /", rootHandler)
+	mux.Handle("GET "+metricsPath, promhttp.Handler())
+
+	if enablePprof {
+		logger.Info("pprof endpoints enabled")
+		registerPprof(mux)
+	}
+
+	return mux
+}
+
+// registerPprof wires up the net/http/pprof handlers on the given mux.
+func registerPprof(mux *http.ServeMux) {
+	mux.HandleFunc("GET /debug/pprof/", pprof.Index)
+	mux.HandleFunc("GET /debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("GET /debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("GET /debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("GET /debug/pprof/trace", pprof.Trace)
 }
 
 func (r *RootHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
