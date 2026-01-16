@@ -17,6 +17,7 @@ const (
 	driverModelPendingQField QField = "driver_model.pending"
 	vBiosVersionQField       QField = "vbios_version"
 	driverVersionQField      QField = "driver_version"
+	pciBusIdQField           QField = "pci.bus_id"
 	qFieldsAuto                     = "AUTO"
 	DefaultQField                   = qFieldsAuto
 )

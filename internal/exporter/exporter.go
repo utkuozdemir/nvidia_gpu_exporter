@@ -45,6 +45,7 @@ var (
 		{qField: driverModelPendingQField, label: "driver_model_pending"},
 		{qField: vBiosVersionQField, label: "vbios_version"},
 		{qField: driverVersionQField, label: "driver_version"},
+		{qField: pciBusIdQField, label: "pci_bus_id"},
 	}
 
 	//nolint:gochecknoglobals
@@ -234,10 +235,11 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 		driverModelPending := currentRow.QFieldToCells[driverModelPendingQField].RawValue
 		vBiosVersion := currentRow.QFieldToCells[vBiosVersionQField].RawValue
 		driverVersion := currentRow.QFieldToCells[driverVersionQField].RawValue
+		pciBusId := currentRow.QFieldToCells[pciBusIdQField].RawValue
 
 		infoMetric, infoMetricErr := prometheus.NewConstMetric(e.gpuInfoDesc, prometheus.GaugeValue,
 			1, uuid, name, driverModelCurrent,
-			driverModelPending, vBiosVersion, driverVersion)
+			driverModelPending, vBiosVersion, driverVersion, pciBusId)
 		if infoMetricErr != nil {
 			e.logger.Error("failed to create info metric", "err", infoMetricErr)
 
