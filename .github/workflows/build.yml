@@ -33,25 +33,25 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.0
+        uses: actions/checkout@v6.0.2
       - name: Setup Go
-        uses: actions/setup-go@v6.0.0
+        uses: actions/setup-go@v6.3.0
         with:
           go-version-file: go.mod
       - name: Ensure go.mod is already tidied
         run: go mod tidy && git diff --no-patch --exit-code
       - name: Run linters
-        uses: golangci/golangci-lint-action@v9.0.0
+        uses: golangci/golangci-lint-action@v9.2.0
         with:
           # renovate: depName=golangci/golangci-lint datasource=github-releases
-          version: v2.5.0
+          version: v2.10.1
           args: --timeout=3m0s
       - name: Run tests
         run: go test -v -race -coverprofile ./coverage.out -covermode=atomic -timeout 20m ./...
       - name: Print coverage results
         run: go tool cover -func ./coverage.out
       - name: Send coverage
-        uses: codecov/codecov-action@v5.5.1
+        uses: codecov/codecov-action@v5.5.2
         with:
           files: coverage.out
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -59,7 +59,7 @@ jobs:
         uses: goreleaser/goreleaser-action@v7.0.0
         with:
           # renovate: depName=goreleaser/goreleaser datasource=github-releases
-          version: v2.12.7
+          version: v2.14.1
           args: release --snapshot --skip=publish --clean
         env:
           PRIVATE_ACCESS_TOKEN: placeholder
