@@ -54,11 +54,12 @@ archives:
       {{- with .Arm }}v{{ . }}{{ end }}
       {{- with .Mips }}_{{ . }}{{ end }}
       {{- if not (eq .Amd64 "v1") }}{{ .Amd64 }}{{ end }}
-    builds:
+    ids:
       - nvidia_gpu_exporter
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
     files: 
       - LICENSE
 
@@ -108,72 +109,63 @@ checksum:
   name_template: checksums.txt
   algorithm: sha256
 
+git:
+  ignore_tags: # skip prereleases (alpha, beta, rc) on finding previous commit to generate the changelog
+    - "*-*"
+
 changelog:
   sort: asc
+  groups:
+    - title: "New Features"
+      regexp: '^feat(\(.+\))?:'
+      order: 0
+    - title: "Bug Fixes"
+      regexp: '^fix(\(.+\))?:'
+      order: 1
+    - title: "Performance Improvements"
+      regexp: '^perf(\(.+\))?:'
+      order: 2
+    - title: "Documentation"
+      regexp: '^docs(\(.+\))?:'
+      order: 3
+    - title: "Refactors & Internal Changes"
+      regexp: '^refactor(\(.+\))?:'
+      order: 4
+    - title: "Dependency Updates"
+      regexp: '^chore\(deps\):'
+      order: 5
+    - title: "Build, CI & Chores"
+      regexp: '^(build|ci|cd|cicd|docker|test|chore)(\(.+\))?:'
+      order: 6
+    - title: "Other Changes"
+      order: 999
   filters:
     exclude:
-      - '^build(\(.+\))?:'
-      - '^chore(\(.+\))?:'
-      - '^cd(\(.+\))?:'
-      - '^ci(\(.+\))?:'
-      - '^cicd(\(.+\))?:'
-      - '^docker(\(.+\))?:'
-      - '^docs(\(.+\))?:'
-      - '^refactor(\(.+\))?:'
-      - '^test(\(.+\))?:'
       - Merge pull request
       - Merge branch
       - go mod tidy
 
-dockers:
-  - image_templates:
-      - docker.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}-amd64
-      - ghcr.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}-amd64
-    use: buildx
-    dockerfile: Dockerfile
-    build_flag_templates:
-      - --platform=linux/amd64
-  - image_templates:
-      - docker.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}-arm64
-      - ghcr.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}-arm64
-    use: buildx
-    goarch: arm64
-    dockerfile: Dockerfile
-    build_flag_templates:
-      - --platform=linux/arm64
-  - image_templates:
-      - docker.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}-armv7
-      - ghcr.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}-armv7
-    use: buildx
-    goarch: arm
-    goarm: "7"
-    dockerfile: Dockerfile
-    build_flag_templates:
-      - --platform=linux/arm/v7
+dockers_v2:
+  - images:
+      - docker.io/utkuozdemir/nvidia_gpu_exporter
+      - ghcr.io/utkuozdemir/nvidia_gpu_exporter
+    tags:
+      - "{{ .Version }}"
+      - "{{ if not .Prerelease }}latest{{ end }}"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+      - linux/arm/v7
 
-docker_manifests:
-  - name_template: docker.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}
-    image_templates:
-      - docker.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}-amd64
-      - docker.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}-arm64
-      - docker.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}-armv7
-
-  - name_template: ghcr.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}
-    image_templates:
-      - ghcr.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}-amd64
-      - ghcr.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}-arm64
-      - ghcr.io/utkuozdemir/nvidia_gpu_exporter:{{ .Version }}-armv7
-
-# To test docker image push, uncomment the following and run
-# goreleaser release --skip-validate --rm-dist --debug
-#release:
-#  disable: true
+release:
+  prerelease: auto
 
 scoops:
   - repository:
       owner: utkuozdemir
       name: scoop_nvidia_gpu_exporter
       token: "{{ .Env.PRIVATE_ACCESS_TOKEN }}"
+    skip_upload: auto
     commit_author:
       name: Utku Ozdemir
       email: utkuozdemir@gmail.com

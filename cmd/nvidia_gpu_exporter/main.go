@@ -42,9 +42,7 @@ func main() {
 	if err := run(); err != nil {
 		slog.Default().Error("failed to run", "err", err)
 
-		var exitErr *exec.ExitError
-
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			os.Exit(exitErr.ExitCode())
 		}
 
@@ -190,7 +188,7 @@ type RootHandler struct {
 
 func NewRootHandler(logger *slog.Logger, metricsPath string) *RootHandler {
 	return &RootHandler{
-		response: []byte(fmt.Sprintf(redirectPageTemplate, metricsPath)),
+		response: fmt.Appendf(nil, redirectPageTemplate, metricsPath),
 		logger:   logger,
 	}
 }

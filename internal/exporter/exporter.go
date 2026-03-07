@@ -214,9 +214,7 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 		e.failedScrapesTotal.Inc()
 
 		if e.shutdownOnErrorFunc != nil {
-			var exitErr *exec.ExitError
-
-			if errors.As(err, &exitErr) {
+			if _, ok := errors.AsType[*exec.ExitError](err); ok {
 				e.shutdownOnErrorFunc(err)
 			}
 		}
@@ -319,8 +317,7 @@ func scrape(
 	if err != nil {
 		exitCode := -1
 
-		var exitError *exec.ExitError
-		if errors.As(err, &exitError) {
+		if exitError, ok := errors.AsType[*exec.ExitError](err); ok {
 			exitCode = exitError.ExitCode()
 		}
 
