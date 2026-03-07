@@ -24,7 +24,7 @@ const (
 var (
 	fieldRegex = regexp.MustCompile(`(?m)\n\s*\n^"([^"]+)"`)
 
-	//nolint:gochecknoglobals
+	//nolint:gochecknoglobals,gosec
 	fallbackQFieldToRFieldMap = map[QField]RField{
 		"timestamp":                         "timestamp",
 		"driver_version":                    "driver_version",
@@ -167,8 +167,7 @@ func ParseAutoQFields(
 
 	exitCode := -1
 
-	var exitError *exec.ExitError
-	if errors.As(err, &exitError) {
+	if exitError, ok := errors.AsType[*exec.ExitError](err); ok {
 		exitCode = exitError.ExitCode()
 	}
 
