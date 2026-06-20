@@ -182,7 +182,7 @@ Containerized setups require:
 
 In AKS this manifests as:
 
-- The AKS node Ubuntu image already packages the GPU drivers, [here](https://github.com/Azure/AKS/blob/master/vhd-notes/aks-ubuntu/AKSUbuntu-1804/2022.03.03.txt).
+- The AKS node Ubuntu image already packages the GPU drivers, as listed in the [AKS Ubuntu VHD release notes](https://github.com/Azure/AKS/blob/master/vhd-notes/aks-ubuntu/AKSUbuntu-1804/2022.03.03.txt).
 - The [Nvidia Device Plugin](https://docs.microsoft.com/en-us/azure/aks/gpu-cluster#manually-install-the-nvidia-device-plugin) exposes the GPU to containers requesting GPU resources.
 
 Testing locally and within several VMs on Azure confirms that the drivers are packaged with the VM image and do not need to be installed separately.

@@ -24,7 +24,7 @@ const (
 var (
 	fieldRegex = regexp.MustCompile(`(?m)\n\s*\n^"([^"]+)"`)
 
-	//nolint:gochecknoglobals
+	//nolint:gosec // G101: false positive, these are nvidia-smi field names, not credentials
 	fallbackQFieldToRFieldMap = map[QField]RField{
 		"timestamp":                         "timestamp",
 		"driver_version":                    "driver_version",

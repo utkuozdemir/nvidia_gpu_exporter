@@ -37,7 +37,6 @@ const (
 var (
 	numericRegex = regexp.MustCompile(`[+-]?(\d*[.])?\d+`)
 
-	//nolint:gochecknoglobals
 	requiredFields = []requiredField{
 		{qField: uuidQField, label: "uuid"},
 		{qField: nameQField, label: "name"},
@@ -47,7 +46,6 @@ var (
 		{qField: driverVersionQField, label: "driver_version"},
 	}
 
-	//nolint:gochecknoglobals
 	defaultRunCmd = func(cmd *exec.Cmd) error {
 		err := cmd.Run()
 		if err != nil {
@@ -349,8 +347,6 @@ type MetricInfo struct {
 }
 
 // TransformRawValue transforms a raw value into a float64.
-//
-//nolint:mnd
 func TransformRawValue(rawValue string, valueMultiplier float64) (float64, error) {
 	trimmed := strings.TrimSpace(rawValue)
 	if strings.HasPrefix(trimmed, "0x") {
@@ -386,7 +382,7 @@ func parseSanitizedValueWithBestEffort(
 	sanitizedValue string,
 	valueMultiplier float64,
 ) (float64, error) {
-	allNums := numericRegex.FindAllString(sanitizedValue, 2) //nolint:mnd
+	allNums := numericRegex.FindAllString(sanitizedValue, 2)
 	if len(allNums) != 1 {
 		return -1, fmt.Errorf("could not parse number from value: %q", sanitizedValue)
 	}

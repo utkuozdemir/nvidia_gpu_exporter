@@ -140,12 +140,11 @@ func run() error {
 		IdleTimeout:       *idleTimeout,
 	}
 
-	eg, ctx := errgroup.WithContext(ctx) //nolint:varnamelen
+	eg, ctx := errgroup.WithContext(ctx)
 
 	eg.Go(func() error {
 		<-ctx.Done()
 
-		//nolint:mnd
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer shutdownCancel()
 
@@ -190,7 +189,7 @@ type RootHandler struct {
 
 func NewRootHandler(logger *slog.Logger, metricsPath string) *RootHandler {
 	return &RootHandler{
-		response: []byte(fmt.Sprintf(redirectPageTemplate, metricsPath)),
+		response: fmt.Appendf(nil, redirectPageTemplate, metricsPath),
 		logger:   logger,
 	}
 }
