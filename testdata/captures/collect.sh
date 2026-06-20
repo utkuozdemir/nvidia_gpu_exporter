@@ -313,23 +313,30 @@ fi
 # ---- masking ----------------------------------------------------------------
 # Replace fingerprinting identifiers with format-preserving placeholders. One
 # file, so a couple of sed passes. Done last so real values are never written out.
+
+# sed_inplace edits $OUTFILE in place, portably: GNU `sed -i` and BSD/macOS
+# `sed -i ''` disagree on syntax, so use a temp file and mv instead.
+sed_inplace() {
+  sed "$@" "$OUTFILE" > "$OUTFILE.tmp" && mv "$OUTFILE.tmp" "$OUTFILE"
+}
+
 if [ "$MASK" -eq 1 ]; then
   echo ">> masking identifiers"
   i=0
   nv --query-gpu=uuid --format=csv,noheader 2> /dev/null | sed 's/^ *//;s/ *$//' | while IFS= read -r u; do
     [ -n "$u" ] || continue
     ph="$(printf 'GPU-%08d-0000-0000-0000-%012d' "$i" "$i")"
-    sed -i \
+    sed_inplace \
       -e "s/${u}/${ph}/g" \
-      -e "s/$(printf '%s' "$u" | tr '[:upper:]' '[:lower:]')/$(printf '%s' "$ph" | tr '[:upper:]' '[:lower:]')/g" "$OUTFILE"
+      -e "s/$(printf '%s' "$u" | tr '[:upper:]' '[:lower:]')/$(printf '%s' "$ph" | tr '[:upper:]' '[:lower:]')/g"
     i=$((i + 1))
   done
   nv --query-gpu=serial --format=csv,noheader 2> /dev/null | sed 's/^ *//;s/ *$//' | while IFS= read -r s; do
     case "$s" in "" | "[N/A]" | "N/A") continue ;; esac
-    sed -i "s/${s}/0000000000000/g" "$OUTFILE"
+    sed_inplace "s/${s}/0000000000000/g"
   done
   HOSTN="$(hostname 2> /dev/null || uname -n 2> /dev/null)"
-  [ -n "${HOSTN:-}" ] && sed -i "s/${HOSTN}/redacted-host/g" "$OUTFILE"
+  [ -n "${HOSTN:-}" ] && sed_inplace "s/${HOSTN}/redacted-host/g"
 fi
 
 cat << EOF
