@@ -63,6 +63,22 @@ See [METRICS.md](METRICS.md) for details.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
+### Help wanted: contribute a GPU capture
+
+The exporter parses `nvidia-smi` output, which differs across GPU models, driver
+versions and operating systems. If you have hardware that isn't covered yet
+(datacenter cards, MIG, multi-GPU, Windows/WSL2, brand-new drivers...), you can
+help a lot by capturing your `nvidia-smi` output with one command:
+
+```bash
+./testdata/captures/collect.sh          # add --load for an under-load sample too
+```
+
+It only needs `bash` and `nvidia-smi`, runs read-only, and masks identifiers
+(GPU UUID, serial, hostname) by default. It writes one `.txt` file: commit it and
+open a PR, or attach it to an issue. See
+[testdata/captures/README.md](testdata/captures/README.md).
+
 ## Star History
 
 <!-- markdownlint-disable no-inline-html -->

@@ -7,26 +7,46 @@ assignees: ''
 
 ---
 
-**Describe the bug**
+## Describe the bug
+
 A clear and concise description of what the bug is.
 
-**To Reproduce**
+## To reproduce
+
 Steps to reproduce the behavior:
+
 1. Run command '...'
 2. See error
 
-**Expected behavior**
-A clear and concise description of what you expected to happen.
+## Expected behavior
 
-**Console output**
-Add the error logs and/or the output to help us diagnose the problem.
+What you expected to happen.
 
-**Model and Version**
- - GPU Model [e.g. `GeForce RTX 2080 Super`]
- - App version and architecture [e.g. `v0.1.0 - linux_x86_64`]
- - Installation method [e.g. `homebrew`, binary download]
- - Operating System [e.g. `Ubuntu Desktop 20.04`, `Windows 10`]
- - Nvidia GPU driver version [e.g. `Linux driver nvidia-driver-440`, `Windows Game Ready Driver 466.63`]
+## Console output / logs
 
-**Additional context**
-Add any other context about the problem here.
+Any error output or logs that help us diagnose the problem.
+
+## GPU diagnostics
+
+The biggest help for a GPU bug is your actual `nvidia-smi` output. This collector
+grabs it and prints one file to attach here:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/master/testdata/captures/collect.sh
+bash collect.sh        # add --load to also capture an under-load sample
+```
+
+It needs only `bash` and `nvidia-smi`, runs read-only commands (it changes
+nothing), and masks identifiers like GPU UUID, serial and hostname by default. It
+works on Linux, WSL2, and Git-Bash on Windows, writes a single `.txt`, and prints
+its path. Drag that file into this issue.
+
+## Environment
+
+- nvidia_gpu_exporter version + architecture [e.g. `v1.3.2 - linux_x86_64`]
+- Installation method [e.g. binary download, Docker, homebrew, scoop]
+- GPU model [e.g. `GeForce RTX 2080 Super`]
+
+## Additional context
+
+Anything else that might help.
