@@ -75,12 +75,13 @@ type GPUExporter struct {
 }
 
 func New(ctx context.Context, shutdownOnErrorFunc context.CancelCauseFunc, prefix string,
-	nvidiaSmiCommand string, qFieldsRaw string, logger *slog.Logger,
+	nvidiaSmiCommand string, qFieldsRaw string, qFieldsExcludeRaw string, logger *slog.Logger,
 ) (*GPUExporter, error) {
 	qFieldsOrdered, qFieldToRFieldMap, err := buildQFieldToRFieldMap(
 		ctx,
 		logger,
 		qFieldsRaw,
+		qFieldsExcludeRaw,
 		nvidiaSmiCommand,
 		defaultRunCmd,
 	)
@@ -125,6 +126,7 @@ func buildQFieldToRFieldMap(
 	ctx context.Context,
 	logger *slog.Logger,
 	qFieldsRaw string,
+	qFieldsExcludeRaw string,
 	nvidiaSmiCommand string,
 	command runCmd,
 ) ([]QField, map[QField]RField, error) {
@@ -146,13 +148,15 @@ func buildQFieldToRFieldMap(
 				err,
 			)
 
-			keys := slices.Collect(maps.Keys(fallbackQFieldToRFieldMap))
+			keys, rFieldMap := fallbackQFieldToRFieldMapExcluding(qFieldsExcludeRaw, logger)
 
-			return keys, fallbackQFieldToRFieldMap, nil
+			return keys, rFieldMap, nil
 		}
 
 		qFields = parsed
 	}
+
+	qFields = filterExcludedQFields(qFields, qFieldsExcludeRaw, logger)
 
 	_, resultTable, err := scrape(ctx, qFields, nvidiaSmiCommand, command)
 
@@ -489,6 +493,74 @@ func getLabels(reqFields []requiredField) []string {
 	}
 
 	return r
+}
+
+// filterExcludedQFields drops query fields matching any of the exclude patterns.
+// Required fields backing the gpu_info metric are never dropped: excluding one
+// is ignored with a warning so the metric and the uuid label stay intact.
+func filterExcludedQFields(qFields []QField, excludeRaw string, logger *slog.Logger) []QField {
+	patterns := parseFieldExcludePatterns(excludeRaw)
+	if len(patterns) == 0 {
+		return qFields
+	}
+
+	required := make(map[QField]struct{}, len(requiredFields))
+	for _, reqField := range requiredFields {
+		required[reqField.qField] = struct{}{}
+	}
+
+	kept := make([]QField, 0, len(qFields))
+
+	var excluded []string
+
+	for _, qField := range qFields {
+		if !matchesAnyPattern(string(qField), patterns) {
+			kept = append(kept, qField)
+
+			continue
+		}
+
+		if _, isRequired := required[qField]; isRequired {
+			logger.Warn("ignoring exclusion of required query field", "field", qField)
+			kept = append(kept, qField)
+
+			continue
+		}
+
+		excluded = append(excluded, string(qField))
+	}
+
+	if len(excluded) > 0 {
+		logger.Info("excluding query fields", "fields", strings.Join(excluded, ", "))
+	}
+
+	return kept
+}
+
+// fallbackQFieldToRFieldMapExcluding returns the built-in fallback field mapping
+// with the excluded fields removed, used when nvidia-smi cannot be queried for
+// the available fields.
+func fallbackQFieldToRFieldMapExcluding(
+	excludeRaw string,
+	logger *slog.Logger,
+) ([]QField, map[QField]RField) {
+	keys := slices.Collect(maps.Keys(fallbackQFieldToRFieldMap))
+	keys = filterExcludedQFields(keys, excludeRaw, logger)
+
+	return keys, subsetRFieldMap(fallbackQFieldToRFieldMap, keys)
+}
+
+// subsetRFieldMap returns the entries of full whose keys appear in keys.
+func subsetRFieldMap(full map[QField]RField, keys []QField) map[QField]RField {
+	subset := make(map[QField]RField, len(keys))
+
+	for _, key := range keys {
+		if rField, ok := full[key]; ok {
+			subset[key] = rField
+		}
+	}
+
+	return subset
 }
 
 type requiredField struct {

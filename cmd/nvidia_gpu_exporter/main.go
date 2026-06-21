@@ -96,6 +96,12 @@ func run() error {
 				"You can find out possible fields by running `nvidia-smi --help-query-gpu`. "+
 				"The value `%s` will automatically detect the fields to query.", exporter.DefaultQField)).
 			Default(exporter.DefaultQField).String()
+		qFieldsExclude = kingpin.Flag("query-field-names-exclude",
+			"Comma-separated list of query fields to exclude from being queried. "+
+				"Names match literally, with `*` as a wildcard for any sequence of characters "+
+				"(for example `remapped_rows.histogram.*`). Useful to drop fields that are slow "+
+				"or unsupported on a given setup.").
+			Default("").String()
 		shutdownOnErr = kingpin.Flag("shutdown-on-error",
 			"Shut down the exporter if there is an error querying nvidia-smi. "+
 				"When false, exporter will simply log this error and export it as a metric, but will not crash.").
@@ -134,6 +140,7 @@ func run() error {
 		exporter.DefaultPrefix,
 		*nvidiaSmiCommand,
 		*qFields,
+		*qFieldsExclude,
 		logger,
 	)
 	if err != nil {
