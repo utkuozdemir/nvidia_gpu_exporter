@@ -198,6 +198,36 @@ func ParseAutoQFields(
 	return fields, nil
 }
 
+// parseFieldExcludePatterns turns a comma-separated list of field name globs
+// into matchers. Names match literally except for "*", which matches any
+// sequence of characters (for example "remapped_rows.histogram.*").
+func parseFieldExcludePatterns(raw string) []*regexp.Regexp {
+	parts := strings.Split(raw, ",")
+	patterns := make([]*regexp.Regexp, 0, len(parts))
+
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		expr := "^" + strings.ReplaceAll(regexp.QuoteMeta(part), `\*`, ".*") + "$"
+		patterns = append(patterns, regexp.MustCompile(expr))
+	}
+
+	return patterns
+}
+
+func matchesAnyPattern(s string, patterns []*regexp.Regexp) bool {
+	for _, pattern := range patterns {
+		if pattern.MatchString(s) {
+			return true
+		}
+	}
+
+	return false
+}
+
 func ExtractQFields(text string) []QField {
 	found := fieldRegex.FindAllStringSubmatch(text, -1)
 
