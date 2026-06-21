@@ -18,6 +18,10 @@ const (
 	vBiosVersionQField       QField = "vbios_version"
 	driverVersionQField      QField = "driver_version"
 	pciBusIDQField           QField = "pci.bus_id"
+	serialQField             QField = "serial"
+	computeCapQField         QField = "compute_cap"
+	pciSubDeviceIDQField     QField = "pci.sub_device_id"
+	indexQField              QField = "index"
 	qFieldsAuto                     = "AUTO"
 	DefaultQField                   = qFieldsAuto
 )
@@ -74,6 +78,7 @@ var (
 		"memory.used":                                         "memory.used [MiB]",
 		"memory.free":                                         "memory.free [MiB]",
 		"compute_mode":                                        "compute_mode",
+		"compute_cap":                                         "compute_cap",
 		"utilization.gpu":                                     "utilization.gpu [%]",
 		"utilization.memory":                                  "utilization.memory [%]",
 		"encoder.stats.sessionCount":                          "encoder.stats.sessionCount",
