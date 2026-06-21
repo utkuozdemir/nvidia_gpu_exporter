@@ -45,6 +45,10 @@ var (
 		{qField: vBiosVersionQField, label: "vbios_version"},
 		{qField: driverVersionQField, label: "driver_version"},
 		{qField: pciBusIDQField, label: "pci_bus_id"},
+		{qField: serialQField, label: "serial"},
+		{qField: computeCapQField, label: "compute_cap"},
+		{qField: pciSubDeviceIDQField, label: "pci_sub_device_id"},
+		{qField: indexQField, label: "index"},
 	}
 
 	defaultRunCmd = func(cmd *exec.Cmd) error {
@@ -238,10 +242,15 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 		vBiosVersion := currentRow.QFieldToCells[vBiosVersionQField].RawValue
 		driverVersion := currentRow.QFieldToCells[driverVersionQField].RawValue
 		pciBusID := currentRow.QFieldToCells[pciBusIDQField].RawValue
+		serial := currentRow.QFieldToCells[serialQField].RawValue
+		computeCap := currentRow.QFieldToCells[computeCapQField].RawValue
+		pciSubDeviceID := currentRow.QFieldToCells[pciSubDeviceIDQField].RawValue
+		index := currentRow.QFieldToCells[indexQField].RawValue
 
 		infoMetric, infoMetricErr := prometheus.NewConstMetric(e.gpuInfoDesc, prometheus.GaugeValue,
 			1, uuid, name, driverModelCurrent,
-			driverModelPending, vBiosVersion, driverVersion, pciBusID)
+			driverModelPending, vBiosVersion, driverVersion, pciBusID,
+			serial, computeCap, pciSubDeviceID, index)
 		if infoMetricErr != nil {
 			e.logger.Error("failed to create info metric", "err", infoMetricErr)
 

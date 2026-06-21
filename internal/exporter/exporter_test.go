@@ -269,18 +269,10 @@ end:
 	slices.Sort(descStrs)
 
 	expectedMetrics := []string{
-		"fan_speed_ratio",
-		"memory_used_bytes",
-		"failed_scrapes_total",
-		"gpu_info",
-		"uuid",
-		"name",
-		"driver_model_current",
-		"driver_model_pending",
-		"vbios_version",
-		"driver_version",
-		"pci_bus_id",
-		"command_exit_code",
+		"fan_speed_ratio", "memory_used_bytes", "failed_scrapes_total", "gpu_info",
+		"uuid", "name", "driver_model_current", "driver_model_pending",
+		"vbios_version", "driver_version", "pci_bus_id", "serial",
+		"compute_cap", "pci_sub_device_id", "index", "command_exit_code",
 	}
 
 	slices.Sort(expectedMetrics)
@@ -344,12 +336,16 @@ end:
 
 	metricsJoined := strings.Join(metrics, "\n")
 
-	assert.Len(t, metrics, 10)
+	assert.Len(t, metrics, 16)
 	assert.Contains(t, metricsJoined, "aaa_gpu_info")
 	assert.Contains(t, metricsJoined, "command_exit_code")
 	assert.Contains(t, metricsJoined, "aaa_name")
 	assert.Contains(t, metricsJoined, "aaa_fan_speed_ratio")
 	assert.Contains(t, metricsJoined, "aaa_memory_used_bytes")
+	assert.Contains(t, metricsJoined, "aaa_compute_cap")
+	assert.Contains(t, metricsJoined, "serial")
+	assert.Contains(t, metricsJoined, "pci_sub_device_id")
+	assert.Contains(t, metricsJoined, "index")
 }
 
 func TestCollectError(t *testing.T) {
