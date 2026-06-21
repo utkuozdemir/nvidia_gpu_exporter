@@ -1,10 +1,10 @@
 # nvidia_gpu_exporter
 
 [![build](https://github.com/utkuozdemir/nvidia_gpu_exporter/actions/workflows/build.yml/badge.svg)](https://github.com/utkuozdemir/nvidia_gpu_exporter/actions/workflows/build.yml)
-[![codecov](https://codecov.io/gh/utkuozdemir/nvidia_gpu_exporter/branch/master/graph/badge.svg?token=JEWV818FCZ)](https://codecov.io/gh/utkuozdemir/nvidia_gpu_exporter)
+[![codecov](https://codecov.io/gh/utkuozdemir/nvidia_gpu_exporter/branch/main/graph/badge.svg?token=JEWV818FCZ)](https://codecov.io/gh/utkuozdemir/nvidia_gpu_exporter)
 [![Go Report Card](https://goreportcard.com/badge/github.com/utkuozdemir/nvidia_gpu_exporter?kill_cache=1)](https://goreportcard.com/report/github.com/utkuozdemir/nvidia_gpu_exporter)
 ![Latest GitHub release](https://img.shields.io/github/release/utkuozdemir/nvidia_gpu_exporter.svg)
-[![GitHub license](https://img.shields.io/github/license/utkuozdemir/nvidia_gpu_exporter)](https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/master/LICENSE)
+[![GitHub license](https://img.shields.io/github/license/utkuozdemir/nvidia_gpu_exporter)](https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/LICENSE)
 ![GitHub all releases](https://img.shields.io/github/downloads/utkuozdemir/nvidia_gpu_exporter/total)
 ![Docker Pulls](https://img.shields.io/docker/pulls/utkuozdemir/nvidia_gpu_exporter)
 
@@ -45,7 +45,7 @@ You can use the official [Grafana dashboard](https://grafana.com/grafana/dashboa
 to see your GPU metrics in a nicely visualized way.
 
 Here's how it looks like:
-![Grafana dashboard](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/master/grafana/dashboard.png)
+![Grafana dashboard](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/grafana/dashboard.png)
 
 ## Installation
 
