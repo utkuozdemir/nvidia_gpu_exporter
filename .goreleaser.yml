@@ -23,24 +23,12 @@ builds:
       - windows
     goarch:
       - amd64
-      - arm
       - arm64
-      - "386"
-    goarm:
-     - "7"
     ignore:
       - goos: windows
-        goarch: arm
-      - goos: windows
         goarch: arm64
       - goos: darwin
-        goarch: arm
-      - goos: darwin
         goarch: arm64
-      - goos: darwin
-        goarch: "386"
-      - goos: linux
-        goarch: "386"
 
 archives:
   - id: nvidia_gpu_exporter-archive
@@ -155,7 +143,6 @@ dockers_v2:
     platforms:
       - linux/amd64
       - linux/arm64
-      - linux/arm/v7
 
 scoops:
   - repository:
