@@ -279,6 +279,7 @@ end:
 		"driver_model_pending",
 		"vbios_version",
 		"driver_version",
+		"pci_bus_id",
 		"command_exit_code",
 	}
 
@@ -307,7 +308,7 @@ func TestCollect(t *testing.T) {
 		"aaa",
 		"bbb",
 		"uuid,name,driver_model.current,driver_model.pending,"+
-			"vbios_version,driver_version,fan.speed,memory.used",
+			"vbios_version,driver_version,fan.speed,memory.used,pci.bus_id",
 		logger,
 	)
 
