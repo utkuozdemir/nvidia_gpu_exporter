@@ -111,7 +111,7 @@ BANNER
 
 # ---- preflight: make sure the tools we need are present ---------------------
 missing=
-for t in awk sed find tr paste head; do have "$t" || missing="$missing $t"; done
+for t in awk sed tr paste head; do have "$t" || missing="$missing $t"; done
 if [ -n "$missing" ]; then
   cat >&2 << EOF
 

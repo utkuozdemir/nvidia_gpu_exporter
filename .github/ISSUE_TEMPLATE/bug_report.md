@@ -36,10 +36,11 @@ curl -fsSLO https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/ma
 bash collect.sh        # add --load to also capture an under-load sample
 ```
 
-It needs only `bash` and `nvidia-smi`, runs read-only commands (it changes
-nothing), and masks identifiers like GPU UUID, serial and hostname by default. It
-works on Linux, WSL2, and Git-Bash on Windows, writes a single `.txt`, and prints
-its path. Drag that file into this issue.
+It needs only `nvidia-smi`, `bash`, and the standard core utilities (`awk`,
+`sed`, ...), runs read-only commands (it changes nothing), and masks identifiers
+like GPU UUID, serial and hostname by default. It works on Linux, WSL2, and
+Git-Bash on Windows, writes a single `.txt`, and prints its path. Drag that file
+into this issue.
 
 ## Environment
 

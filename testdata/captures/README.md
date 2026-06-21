@@ -83,8 +83,9 @@ not recommended for anything you publish.
 
 ## How to contribute (I have a cool GPU)
 
-Requirements are tiny: `bash`, `awk`, `sed`, and `nvidia-smi`. That covers Linux,
-WSL2, and Git-Bash on Windows. `ffmpeg` is optional, for the under-load capture.
+Requirements are tiny: `nvidia-smi`, `bash`, and the standard core utilities it
+uses (`awk`, `sed`, `tr`, `paste`, `head`). That covers Linux, WSL2, and Git-Bash
+on Windows. `ffmpeg` is optional, for the under-load capture.
 
 ```bash
 # from a clone of the repo:

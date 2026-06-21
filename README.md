@@ -74,10 +74,10 @@ help a lot by capturing your `nvidia-smi` output with one command:
 ./testdata/captures/collect.sh          # add --load for an under-load sample too
 ```
 
-It only needs `bash` and `nvidia-smi`, runs read-only, and masks identifiers
-(GPU UUID, serial, hostname) by default. It writes one `.txt` file: commit it and
-open a PR, or attach it to an issue. See
-[testdata/captures/README.md](testdata/captures/README.md).
+It needs only `nvidia-smi`, `bash`, and the standard core utilities (`awk`,
+`sed`, ...), runs read-only, and masks identifiers (GPU UUID, serial, hostname)
+by default. It writes one `.txt` file: commit it and open a PR, or attach it to
+an issue. See [testdata/captures/README.md](testdata/captures/README.md).
 
 ## Star History
 
