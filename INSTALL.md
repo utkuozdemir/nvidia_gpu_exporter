@@ -10,7 +10,7 @@ Prometheus and Grafana installed on the same machine.
 
 Follow the steps below:
 
-1. Download [the installation script](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/master/install/windows.ps1) (save it with `.ps1` extension)
+1. Download [the installation script](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/install/windows.ps1) (save it with `.ps1` extension)
 2. Open an administrative PowerShell prompt (search for PowerShell in the start menu - right-click - Run as Administrator)
 3. In the prompt, execute the script you have downloaded. For example, `C:\Users\<YOUR_USERNAME>\Downloads\windows.ps1`
 4. Verify that you have Prometheus running by opening [http://localhost:9090](http://localhost:9090) in your browser.
