@@ -36,7 +36,8 @@
     {
       "customType": "regex",
       "managerFilePatterns": [
-        "/\\.github\\/workflows\\/.*/"
+        "/\\.github\\/workflows\\/.*/",
+        "/Taskfile\\.yml/"
       ],
       "matchStrings": [
         "# renovate: depName=(?<depName>[^\\s]+)( datasource=(?<datasource>[^\\s]+))?( registryUrl=(?<registryUrl>\\S+))?\\n[^\\n]*?(?<currentValue>v?\\d+\\.\\d+\\.\\d+(-[\\S]+)?)"
@@ -54,7 +55,8 @@
         "(#|\\/\\/) renovate: go\\n[^\\n]*?(?<currentValue>v?\\d+\\.\\d+(\\.\\d+(-[\\S]+)?)?)"
       ],
       "depNameTemplate": "golang/go",
-      "datasourceTemplate": "golang-version"
+      "datasourceTemplate": "github-tags",
+      "extractVersionTemplate": "^go(?<version>\\d+\\.\\d+\\.\\d+)$"
     }
   ]
 }

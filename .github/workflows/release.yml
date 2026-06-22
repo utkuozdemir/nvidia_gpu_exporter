@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - "v*.*.*"
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -euox pipefail {0}
+
 jobs:
   release:
     runs-on: ubuntu-24.04
