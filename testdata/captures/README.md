@@ -101,6 +101,27 @@ it.
 You can also run it outside a clone (for example downloaded on its own). It just
 writes the file next to itself and prints the path.
 
+### On Windows
+
+The script just needs a `bash` with the standard core utilities (`awk`, `sed`,
+`tr`, `paste`, `head`) and `nvidia-smi` on `PATH`. We recommend **Git Bash** (it
+ships with [Git for Windows](https://git-scm.com/download/win)) because it has all
+of that out of the box and still calls the native `nvidia-smi.exe`. MSYS2, Cygwin
+or WSL2 work too; plain PowerShell or CMD do not, since they have no `bash`. Open
+your shell, `cd` into the repo, and run the same command. The capture is labelled
+`windows` automatically (under WSL2 it is labelled `linux`).
+
+For the optional `--load` capture you also need `ffmpeg` with NVENC. The simplest
+way to get it is winget, from PowerShell:
+
+```powershell
+winget install Gyan.FFmpeg
+```
+
+Then reopen your shell so the new `ffmpeg` is on `PATH`. NVENC works on essentially
+all NVIDIA GPUs (AV1 encode needs an RTX 40-series or newer, but the collector
+falls back to H.264/HEVC on its own).
+
 ## How developers/tests use this
 
 - Replay any captured CSV by pointing a fake `nvidia-smi` at the relevant section.

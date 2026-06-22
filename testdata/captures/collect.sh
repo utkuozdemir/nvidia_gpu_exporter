@@ -25,7 +25,9 @@
 #                      script runs, so prefer running it on the GPU host.
 #   --load             Also capture an "under load" state. Needs ffmpeg; spins up
 #                      NVENC encode jobs, samples mid-load, then stops them.
-#   --load-seconds N   Max load duration (default: 25).
+#   --load-seconds N   Safety cap on load duration, in seconds (default: 45).
+#                      Normally the load is stopped right after the load capture;
+#                      this cap only matters if the script is interrupted.
 #   --load-jobs N      Concurrent NVENC jobs, for multiple processes (default: 2).
 #   --no-mask          Do NOT mask identifiers. NOT recommended for public sharing.
 #   -h, --help         Show this help.
@@ -49,7 +51,7 @@ else
 fi
 NVSMI="nvidia-smi"
 WITH_LOAD=0
-LOAD_SECONDS=25
+LOAD_SECONDS=45
 LOAD_JOBS=2
 MASK=1
 
@@ -204,15 +206,31 @@ OS_KERNEL="$(uname -s | tr '[:upper:]' '[:lower:]')"
 ARCH="$(uname -m)"
 KERNEL_REL="$(uname -r 2> /dev/null || echo unknown)"
 OS_PRETTY="unknown"
-if [ -r /etc/os-release ]; then
-  # shellcheck disable=SC1091
-  OS_PRETTY="$(
-    . /etc/os-release 2> /dev/null
-    printf '%s' "${PRETTY_NAME:-$NAME}"
-  )"
-elif [ "$OS_KERNEL" = "darwin" ]; then
-  OS_PRETTY="macOS $(sw_vers -productVersion 2> /dev/null)"
-fi
+case "$OS_KERNEL" in
+  mingw* | msys* | cygwin*)
+    # Git-Bash / MSYS2 / Cygwin all run on Windows but uname reports a kernel
+    # like "mingw64_nt-10.0-22621" and an MSYS runtime version. Normalize to a
+    # clean "windows" label and read the real Windows version via cmd's `ver`.
+    OS_KERNEL="windows"
+    WIN_VER="$(cmd //c ver 2> /dev/null | tr -d '\r' | tr '\n' ' ' | tr -s ' ' | sed -e 's/^ *//' -e 's/ *$//')"
+    KERNEL_REL="$(printf '%s' "$WIN_VER" | sed -n 's/.*\[Version \([0-9.]*\)\].*/\1/p')"
+    [ -n "$KERNEL_REL" ] || KERNEL_REL="unknown"
+    OS_PRETTY="$(printf '%s' "$WIN_VER" | sed -e 's/ *\[Version[^]]*\]//')"
+    [ -n "$OS_PRETTY" ] || OS_PRETTY="Windows"
+    ;;
+  darwin)
+    OS_PRETTY="macOS $(sw_vers -productVersion 2> /dev/null)"
+    ;;
+  *)
+    if [ -r /etc/os-release ]; then
+      # shellcheck disable=SC1091
+      OS_PRETTY="$(
+        . /etc/os-release 2> /dev/null
+        printf '%s' "${PRETTY_NAME:-$NAME}"
+      )"
+    fi
+    ;;
+esac
 
 VER_RAW="$(nv --version 2> /dev/null)"
 SMI_VER="$(printf '%s' "$VER_RAW" | awk -F': *' '/NVIDIA-SMI version/ {print $2; exit}')"
@@ -234,21 +252,17 @@ CA_FIELDS="timestamp,gpu_name,gpu_bus_id,gpu_serial,gpu_uuid,pid,process_name,us
 AA_FIELDS="timestamp,gpu_name,gpu_bus_id,gpu_serial,gpu_uuid,pid,gpu_util,mem_util,max_memory_usage,time"
 RP_FIELDS="$(derive_fields --help-query-retired-pages | paste -sd, -)"
 
-# ---- load (started before the header so we can record the method) -----------
+# ---- load plan --------------------------------------------------------------
+# Only work out the description string here; the jobs themselves are started
+# later, right before the load capture, so they cannot bleed into the idle
+# capture that comes first.
 LOAD_METHOD="none"
 load_pids=""
 if [ "$WITH_LOAD" -eq 1 ]; then
-  echo ">> starting $LOAD_JOBS NVENC load job(s) for ${LOAD_SECONDS}s"
-  i=0
-  for codec in hevc_nvenc h264_nvenc av1_nvenc; do
-    [ "$i" -ge "$LOAD_JOBS" ] && break
-    ffmpeg -hide_banner -loglevel error \
-      -f lavfi -i "testsrc2=size=1920x1080:rate=120" \
-      -t "$LOAD_SECONDS" -c:v "$codec" -preset p7 -f null - > /dev/null 2>&1 &
-    load_pids="$load_pids $!"
-    i=$((i + 1))
-  done
-  LOAD_METHOD="ffmpeg NVENC x${i} (1080p120 testsrc2)"
+  # The codec loop below tries at most three codecs, so the job count caps at 3.
+  load_njobs="$LOAD_JOBS"
+  [ "$load_njobs" -gt 3 ] && load_njobs=3
+  LOAD_METHOD="ffmpeg NVENC x${load_njobs} (1080p120 testsrc2)"
 fi
 
 # ---- header -----------------------------------------------------------------
@@ -302,11 +316,33 @@ echo ">> capturing idle state"
 emit_state "idle"
 
 if [ "$WITH_LOAD" -eq 1 ]; then
+  echo ">> starting $LOAD_JOBS NVENC load job(s)"
+  i=0
+  for codec in hevc_nvenc h264_nvenc av1_nvenc; do
+    [ "$i" -ge "$LOAD_JOBS" ] && break
+    # No -t: encode until killed, so the GPU stays busy for the whole load
+    # capture no matter how fast this card's NVENC is (a fast card would finish
+    # a fixed-length clip long before the capture is done).
+    ffmpeg -hide_banner -loglevel error \
+      -f lavfi -i "testsrc2=size=1920x1080:rate=120" \
+      -c:v "$codec" -preset p7 -f null - > /dev/null 2>&1 &
+    load_pids="$load_pids $!"
+    i=$((i + 1))
+  done
+  # Watchdog: stop the load after the safety cap even if this script is
+  # interrupted, so a stray ffmpeg can never run forever. It is detached, so it
+  # survives the parent and still fires.
+  # shellcheck disable=SC2086
+  (sleep "$LOAD_SECONDS" && kill $load_pids 2> /dev/null) &
+  watchdog_pid=$!
+
   sleep 6 # let clocks/power/encoder ramp before sampling
   echo ">> capturing load state"
   emit_state "load"
+
   # shellcheck disable=SC2086
   kill $load_pids 2> /dev/null
+  kill "$watchdog_pid" 2> /dev/null
   wait 2> /dev/null
 fi
 
