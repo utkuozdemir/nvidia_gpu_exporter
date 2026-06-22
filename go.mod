@@ -1,6 +1,6 @@
 module github.com/utkuozdemir/nvidia_gpu_exporter
 
-go 1.25.0
+go 1.26.4
 
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
