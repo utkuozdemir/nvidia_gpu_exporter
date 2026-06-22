@@ -2,6 +2,7 @@
 name: build
 
 on:
+  workflow_dispatch: {}
   push:
     branches:
       - main
@@ -12,7 +13,7 @@ on:
       - "samples/**"
       - "grafana/**"
       - "systemd/**"
-      - "renovate.json"
+      - ".renovaterc.json"
   pull_request:
     branches:
       - main
@@ -22,11 +23,15 @@ on:
       - "samples/**"
       - "grafana/**"
       - "systemd/**"
-      - "renovate.json"
+      - ".renovaterc.json"
 
 concurrency:
   group: build-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -euox pipefail {0}
 
 jobs:
   build:
@@ -38,14 +43,15 @@ jobs:
         uses: actions/setup-go@v6.4.0
         with:
           go-version-file: go.mod
-      - name: Ensure go.mod is already tidied
-        run: go mod tidy && git diff --no-patch --exit-code
+      - name: Tidy go.mod
+        run: go mod tidy
       - name: Run linters
         uses: golangci/golangci-lint-action@v9.2.1
         with:
           # renovate: depName=golangci/golangci-lint datasource=github-releases
           version: v2.12.2
           args: --timeout=3m0s
+          install-mode: goinstall
       - name: Run tests
         run: go test -v -race -coverprofile ./coverage.out -covermode=atomic -timeout 20m ./...
       - name: Print coverage results
@@ -63,3 +69,5 @@ jobs:
           args: build --snapshot --clean --single-target
         env:
           PRIVATE_ACCESS_TOKEN: placeholder
+      - name: Check for dirty files
+        run: git diff --exit-code
