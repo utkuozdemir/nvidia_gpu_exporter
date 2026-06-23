@@ -56,38 +56,84 @@ nvidia_gpu_exporter --help
 
 ## Installing as a Windows Service
 
-To install the exporter as a Windows service, follow the steps below:
+The exporter speaks the Windows Service Control Manager protocol natively, so it
+runs as a normal Windows service registered with its own `install` command. No
+third-party service wrapper (such as NSSM) is required.
 
-1. Open a PowerShell prompt (as a regular user):
-2. Run the following commands:
+Get the binary with [Scoop](https://scoop.sh) (recommended) or download it by
+hand.
+
+> [!NOTE]
+> Earlier versions of this guide used [NSSM](https://nssm.cc) to run the exporter
+> as a service. If you installed it that way before, remove the old service first
+> from an administrator PowerShell prompt, then follow the steps below:
+>
+> ```PowerShell
+> Stop-Service nvidia_gpu_exporter
+> nssm remove nvidia_gpu_exporter confirm
+> ```
+>
+> NSSM is no longer needed. If nothing else on the machine uses it, you can drop
+> it too with `scoop uninstall nssm`.
+
+1. If you don't have Scoop yet, open a regular PowerShell prompt and install it:
 
    ```PowerShell
    Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
    Invoke-Expression (New-Object System.Net.WebClient).DownloadString('https://get.scoop.sh')
    ```
 
-3. Open a privileged PowerShell prompt (right click - Run as administrator)
-4. Run the following commands:
+2. Open a PowerShell prompt as Administrator (right-click - Run as administrator).
+3. Install the exporter and register it as a service:
+
+   ```PowerShell
+   # Install the binary with Scoop (globally, so the path is stable across updates).
+   scoop install git
+   scoop bucket add nvidia_gpu_exporter https://github.com/utkuozdemir/scoop_nvidia_gpu_exporter.git
+   scoop install nvidia_gpu_exporter/nvidia_gpu_exporter --global
+
+   # Register the service. It starts automatically on boot and restarts on failure.
+   & 'C:\ProgramData\scoop\apps\nvidia_gpu_exporter\current\nvidia_gpu_exporter.exe' install
+
+   # Allow the metrics port through the firewall.
+   New-NetFirewallRule -DisplayName "Nvidia GPU Exporter" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 9835
+
+   # Start it.
+   Start-Service nvidia_gpu_exporter
+   ```
+
+If you prefer not to use Scoop, download the Windows archive from the
+[releases](https://github.com/utkuozdemir/nvidia_gpu_exporter/releases), extract
+`nvidia_gpu_exporter.exe` somewhere stable (for example
+`C:\Program Files\nvidia_gpu_exporter\`), and run the same `install` and
+`Start-Service` commands using that path instead.
+
+Any flags you pass to `install` are baked into the service command line, so you
+configure the service exactly like you would when running it interactively. With
+no flags it listens on `:9835`. For example, to use a different port:
 
 ```PowerShell
-scoop install git
-scoop install nssm --global
-scoop bucket add nvidia_gpu_exporter https://github.com/utkuozdemir/scoop_nvidia_gpu_exporter.git
-scoop install nvidia_gpu_exporter/nvidia_gpu_exporter --global
-New-NetFirewallRule -DisplayName "Nvidia GPU Exporter" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 9835
-nssm install nvidia_gpu_exporter "C:\ProgramData\scoop\apps\nvidia_gpu_exporter\current\nvidia_gpu_exporter.exe"
-Start-Service nvidia_gpu_exporter
+& 'C:\ProgramData\scoop\apps\nvidia_gpu_exporter\current\nvidia_gpu_exporter.exe' install --web.listen-address=:9836
 ```
 
-These steps do the following:
+Running `install` again reconfigures the existing service in place, so to change
+the flags later just re-run it with the new ones (no need to uninstall first).
 
-- Installs [Scoop package manager](https://scoop.sh)
-- Installs git using Scoop (required for [Buckets](https://github.com/ScoopInstaller/Scoop/wiki/Buckets))
-- Installs [NSSM - a service manager](https://nssm.cc/download) using Scoop
-- Installs the exporter using Scoop
-- Exposes app's TCP port (`9835`) to be accessible from Windows Firewall
-- Installs the exporter as a Windows service using NSSM
-- Starts the installed service
+The service writes its logs to the Windows Event Log (the `Application` log,
+under the source `nvidia_gpu_exporter`).
+
+Manage and remove the service with the usual tooling:
+
+```PowerShell
+# Status, stop, start
+Get-Service nvidia_gpu_exporter
+Stop-Service nvidia_gpu_exporter
+Start-Service nvidia_gpu_exporter
+
+# Uninstall (stop it first)
+Stop-Service nvidia_gpu_exporter
+& 'C:\ProgramData\scoop\apps\nvidia_gpu_exporter\current\nvidia_gpu_exporter.exe' uninstall
+```
 
 ## Installing as a Linux (Systemd) Service
 
