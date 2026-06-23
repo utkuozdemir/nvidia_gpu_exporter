@@ -54,7 +54,7 @@ const pprofLinksHTML = `
 
 // main is the entrypoint of the application.
 func main() {
-	if err := run(); err != nil {
+	if err := dispatch(); err != nil {
 		slog.Default().Error("failed to run", "err", err)
 
 		var exitErr *exec.ExitError
@@ -67,8 +67,22 @@ func main() {
 	}
 }
 
+// runInteractive runs the exporter in the foreground, cancelling on SIGINT or
+// SIGTERM. This is the only mode on non-Windows platforms, and the mode used on
+// Windows when not started by the service control manager.
+func runInteractive() error {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	return run(ctx, nil)
+}
+
+// run wires up the exporter and serves metrics until ctx is cancelled. When
+// extraHandler is non-nil its records are tee'd alongside the configured logger
+// (used to mirror logs into the Windows event log when running as a service).
+//
 //nolint:funlen
-func run() error {
+func run(ctx context.Context, extraHandler slog.Handler) error {
 	var (
 		webConfig = webflag.AddFlags(kingpin.CommandLine, ":9835")
 		network   = kingpin.Flag("web.network",
@@ -119,12 +133,9 @@ func run() error {
 	kingpin.HelpFlag.Short('h')
 	kingpin.Parse()
 
-	logger := promslog.New(promSlogConfig)
+	logger := buildLogger(promSlogConfig, extraHandler)
 
 	slog.SetDefault(logger)
-
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
 
 	ctx, serverCancel := context.WithCancelCause(ctx)
 	defer serverCancel(nil)
@@ -253,6 +264,103 @@ func (r *RootHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 	if _, err := w.Write(r.response); err != nil {
 		r.logger.Error("failed to write redirect", "err", err)
 	}
+}
+
+// buildLogger creates the application logger, optionally tee'ing records into an
+// additional handler. The extra handler mirrors logs into the Windows event log
+// when running as a service.
+func buildLogger(cfg *promslog.Config, extraHandler slog.Handler) *slog.Logger {
+	logger := promslog.New(cfg)
+	if extraHandler == nil {
+		return logger
+	}
+
+	// Mirror records into the extra handler (the Windows event log) at the same
+	// level as the primary logger, so --log.level applies to both sinks instead
+	// of the event log keeping its own fixed level.
+	mirrored := &leveledHandler{leveler: cfg.Level, handler: extraHandler}
+
+	return slog.New(newMultiHandler(logger.Handler(), mirrored))
+}
+
+// leveledHandler gates an inner handler at a shared level. It lets a tee'd sink
+// follow a configured level (the same Leveler the primary logger uses) rather
+// than deciding its own.
+type leveledHandler struct {
+	leveler slog.Leveler
+	handler slog.Handler
+}
+
+func (h *leveledHandler) Enabled(_ context.Context, level slog.Level) bool {
+	return level >= h.leveler.Level()
+}
+
+func (h *leveledHandler) Handle(ctx context.Context, record slog.Record) error {
+	//nolint:wrapcheck // delegates to the wrapped handler, which wraps its own errors.
+	return h.handler.Handle(ctx, record)
+}
+
+func (h *leveledHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &leveledHandler{leveler: h.leveler, handler: h.handler.WithAttrs(attrs)}
+}
+
+func (h *leveledHandler) WithGroup(name string) slog.Handler {
+	return &leveledHandler{leveler: h.leveler, handler: h.handler.WithGroup(name)}
+}
+
+// multiHandler fans a slog record out to several handlers. It lets the exporter
+// keep logging to its configured output while also mirroring records into the
+// Windows event log when running as a service.
+type multiHandler struct {
+	handlers []slog.Handler
+}
+
+func newMultiHandler(handlers ...slog.Handler) *multiHandler {
+	return &multiHandler{handlers: handlers}
+}
+
+func (m *multiHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	for _, h := range m.handlers {
+		if h.Enabled(ctx, level) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (m *multiHandler) Handle(ctx context.Context, record slog.Record) error {
+	var err error
+
+	for _, h := range m.handlers {
+		if !h.Enabled(ctx, record.Level) {
+			continue
+		}
+
+		if handleErr := h.Handle(ctx, record.Clone()); handleErr != nil {
+			err = errors.Join(err, handleErr)
+		}
+	}
+
+	return err
+}
+
+func (m *multiHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	handlers := make([]slog.Handler, len(m.handlers))
+	for i, h := range m.handlers {
+		handlers[i] = h.WithAttrs(attrs)
+	}
+
+	return &multiHandler{handlers: handlers}
+}
+
+func (m *multiHandler) WithGroup(name string) slog.Handler {
+	handlers := make([]slog.Handler, len(m.handlers))
+	for i, h := range m.handlers {
+		handlers[i] = h.WithGroup(name)
+	}
+
+	return &multiHandler{handlers: handlers}
 }
 
 // listenAndServe is the same as web.ListenAndServe but supports passing network stack as an argument.
