@@ -28,8 +28,12 @@ e.g. testdata/captures/linux-x86_64__nvidia-geforce-rtx-2080-super__595.71.05.tx
 That one file is the whole unit: you attach it to a bug report, and you commit it
 in a pull request. The same file in both places.
 
-Inside, it's a metadata header followed by one clearly separated section per
-command:
+Inside, it's a short metadata header followed by one clearly separated section
+per command. The header is deliberately minimal: the GPU model and driver are in
+the filename, and every other value nvidia-smi reports lives in the raw sections
+below. The header only records what nvidia-smi does not tell you (collection
+time, whether it was masked, the host OS, and the synthetic load), so there is no
+re-parsing of nvidia-smi output that could drift when a driver renames a field.
 
 ```text
 ################################################################################
@@ -37,8 +41,7 @@ command:
 ################################################################################
 collected_at:   ...
 masked:         yes
-os / kernel / arch / nvidia_smi / nvml / driver / cuda / load
-gpu[0]: name / uuid / serial / pci_bus_id / vbios / memory_total / compute_cap
+os / kernel / arch / load
 
 
 ################################################################################

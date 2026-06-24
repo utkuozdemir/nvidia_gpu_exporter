@@ -2,24 +2,16 @@
 # nvidia_gpu_exporter GPU capture
 # https://github.com/utkuozdemir/nvidia_gpu_exporter - see testdata/captures/README.md
 ################################################################################
+# The GPU model and driver are in the filename. Every other nvidia-smi
+# value is in the raw sections below, not re-parsed here. This header only
+# carries what nvidia-smi does not report: collection time, mask status,
+# host OS (from uname), and the synthetic load used.
 collected_at:   2026-06-20T21:57:57Z
 masked:         yes
 os:             linux (Fedora Linux 44 (Workstation Edition))
 kernel:         7.0.12-201.fc44.x86_64
 arch:           x86_64
-nvidia_smi:     595.71.05
-nvml:           595.71
-driver:         595.71.05
-cuda:           13.2
 load:           ffmpeg NVENC x2 (1080p120 testsrc2)
-gpu[0]:
-  name:         NVIDIA GeForce RTX 2080 SUPER
-  uuid:         GPU-00000000-0000-0000-0000-000000000000
-  serial:       [N/A]
-  pci_bus_id:   00000000:0C:00.0
-  vbios:        90.04.7A.40.73
-  memory_total: 8192 MiB
-  compute_cap:  7.5
 
 
 ################################################################################

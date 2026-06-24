@@ -232,10 +232,10 @@ case "$OS_KERNEL" in
     ;;
 esac
 
-VER_RAW="$(nv --version 2> /dev/null)"
-SMI_VER="$(printf '%s' "$VER_RAW" | awk -F': *' '/NVIDIA-SMI version/ {print $2; exit}')"
-NVML_VER="$(printf '%s' "$VER_RAW" | awk -F': *' '/NVML version/        {print $2; exit}')"
-CUDA_VER="$(printf '%s' "$VER_RAW" | awk -F': *' '/CUDA Version/        {print $2; exit}')"
+# The model and driver are the only values derived from nvidia-smi, and only
+# because the output filename is built from them. Everything else nvidia-smi
+# reports stays in the raw sections below instead of being re-parsed into the
+# header: re-parsing is what drifts and breaks when a driver renames a field.
 DRIVER_VER="$(q1 driver_version)"
 [ -n "$DRIVER_VER" ] || DRIVER_VER="unknown"
 GPU_NAME="$(q1 name)"
@@ -271,27 +271,16 @@ fi
   echo "# nvidia_gpu_exporter GPU capture"
   echo "# https://github.com/utkuozdemir/nvidia_gpu_exporter - see testdata/captures/README.md"
   echo "################################################################################"
+  echo "# The GPU model and driver are in the filename. Every other nvidia-smi"
+  echo "# value is in the raw sections below, not re-parsed here. This header only"
+  echo "# carries what nvidia-smi does not report: collection time, mask status,"
+  echo "# host OS (from uname), and the synthetic load used."
   echo "collected_at:   $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "masked:         $([ "$MASK" -eq 1 ] && echo yes || echo 'NO - review before sharing!')"
   echo "os:             $OS_KERNEL ($OS_PRETTY)"
   echo "kernel:         $KERNEL_REL"
   echo "arch:           $ARCH"
-  echo "nvidia_smi:     $SMI_VER"
-  echo "nvml:           $NVML_VER"
-  echo "driver:         $DRIVER_VER"
-  echo "cuda:           $CUDA_VER"
   echo "load:           $LOAD_METHOD"
-  nv --query-gpu=index,name,uuid,serial,pci.bus_id,vbios_version,memory.total,compute_cap \
-    --format=csv,noheader 2> /dev/null | while IFS= read -r line; do
-    echo "gpu[$(echo "$line" | awk -F', ' '{print $1}')]:"
-    echo "  name:         $(echo "$line" | awk -F', ' '{print $2}')"
-    echo "  uuid:         $(echo "$line" | awk -F', ' '{print $3}')"
-    echo "  serial:       $(echo "$line" | awk -F', ' '{print $4}')"
-    echo "  pci_bus_id:   $(echo "$line" | awk -F', ' '{print $5}')"
-    echo "  vbios:        $(echo "$line" | awk -F', ' '{print $6}')"
-    echo "  memory_total: $(echo "$line" | awk -F', ' '{print $7}')"
-    echo "  compute_cap:  $(echo "$line" | awk -F', ' '{print $8}')"
-  done
 } > "$OUTFILE"
 
 # ---- capabilities (state-independent, depend on driver/model) ---------------
