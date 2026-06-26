@@ -34,6 +34,7 @@ However, this one is written in Go to produce a single, static binary.
 ## Highlights
 
 - Will work on any system that has `nvidia-smi(.exe)?` binary - Windows, Linux, MacOS... No C bindings required
+- Native Windows Service support — install, start and stop with a single flag (`--service install`), no NSSM or third-party wrapper needed
 - Doesn't even need to run the monitored machine: can be configured to execute `nvidia-smi` command remotely
 - No need for a Docker or Kubernetes environment
 - Auto-discovery of the metric fields `nvidia-smi` can expose (future-compatible)

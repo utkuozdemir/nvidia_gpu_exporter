@@ -5,17 +5,15 @@ if (-Not(Get-Command "scoop" -errorAction SilentlyContinue))
 }
 scoop bucket add extras
 
-# NSSM
-scoop install nssm --global
-
-# Exporter
+# Exporter (native Windows Service — no NSSM required)
 scoop bucket add nvidia_gpu_exporter https://github.com/utkuozdemir/scoop_nvidia_gpu_exporter.git
 scoop install nvidia_gpu_exporter/nvidia_gpu_exporter --global
-If (-Not(Get-Service "nvidia_gpu_exporter" -ErrorAction SilentlyContinue))
+$exporterExe = "C:\ProgramData\scoop\apps\nvidia_gpu_exporter\current\nvidia_gpu_exporter.exe"
+If (-Not(Get-Service "NvidiaGPUExporter" -ErrorAction SilentlyContinue))
 {
-    nssm install nvidia_gpu_exporter "C:\ProgramData\scoop\apps\nvidia_gpu_exporter\current\nvidia_gpu_exporter.exe"
+    & $exporterExe --service install
 }
-Start-Service nvidia_gpu_exporter
+Start-Service NvidiaGPUExporter
 
 # Prometheus
 $PrometheusConfig = @"
@@ -30,6 +28,7 @@ scrape_configs:
     static_configs:
     - targets: ['localhost:9835']
 "@
+scoop install nssm --global
 scoop install prometheus --global
 Set-Content -Path C:\ProgramData\scoop\apps\prometheus\current\prometheus.yml -Value $PrometheusConfig
 If (-Not(Get-Service "prometheus" -ErrorAction SilentlyContinue))

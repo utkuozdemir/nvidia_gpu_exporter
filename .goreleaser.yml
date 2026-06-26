@@ -156,3 +156,6 @@ scoops:
     homepage: https://github.com/utkuozdemir/nvidia_gpu_exporter
     description: Nvidia GPU exporter for prometheus using nvidia-smi binary
     license: MIT
+    post_install:
+      - "nvidia_gpu_exporter.exe --service install"
+      - "Start-Service NvidiaGPUExporter"
