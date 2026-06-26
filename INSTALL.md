@@ -56,38 +56,64 @@ nvidia_gpu_exporter --help
 
 ## Installing as a Windows Service
 
-To install the exporter as a Windows service, follow the steps below:
+The exporter has native Windows Service support built in — no NSSM or any third-party wrapper required.
 
-1. Open a PowerShell prompt (as a regular user):
-2. Run the following commands:
+Open a **PowerShell prompt as Administrator** and follow the steps below.
 
-   ```PowerShell
-   Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
-   Invoke-Expression (New-Object System.Net.WebClient).DownloadString('https://get.scoop.sh')
-   ```
+### 1. Place the binary in a permanent location
 
-3. Open a privileged PowerShell prompt (right click - Run as administrator)
-4. Run the following commands:
+Download the `.exe` from the [releases page](https://github.com/utkuozdemir/nvidia_gpu_exporter/releases),
+then copy it somewhere it won't be moved:
 
-```PowerShell
-scoop install git
-scoop install nssm --global
-scoop bucket add nvidia_gpu_exporter https://github.com/utkuozdemir/scoop_nvidia_gpu_exporter.git
-scoop install nvidia_gpu_exporter/nvidia_gpu_exporter --global
-New-NetFirewallRule -DisplayName "Nvidia GPU Exporter" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 9835
-nssm install nvidia_gpu_exporter "C:\ProgramData\scoop\apps\nvidia_gpu_exporter\current\nvidia_gpu_exporter.exe"
-Start-Service nvidia_gpu_exporter
+```powershell
+New-Item -ItemType Directory -Force -Path "C:\Program Files\nvidia_gpu_exporter"
+Copy-Item nvidia_gpu_exporter.exe "C:\Program Files\nvidia_gpu_exporter\"
 ```
 
-These steps do the following:
+### 2. Install and start the service
 
-- Installs [Scoop package manager](https://scoop.sh)
-- Installs git using Scoop (required for [Buckets](https://github.com/ScoopInstaller/Scoop/wiki/Buckets))
-- Installs [NSSM - a service manager](https://nssm.cc/download) using Scoop
-- Installs the exporter using Scoop
-- Exposes app's TCP port (`9835`) to be accessible from Windows Firewall
-- Installs the exporter as a Windows service using NSSM
-- Starts the installed service
+```powershell
+& "C:\Program Files\nvidia_gpu_exporter\nvidia_gpu_exporter.exe" --service install
+Start-Service NvidiaGPUExporter
+```
+
+To customise the port or other flags, pass them at install time — they are saved and replayed automatically on every start:
+
+```powershell
+& "C:\Program Files\nvidia_gpu_exporter\nvidia_gpu_exporter.exe" --service install --web.listen-address=:9836
+```
+
+### 3. Allow through Windows Firewall
+
+```powershell
+New-NetFirewallRule -DisplayName "Nvidia GPU Exporter" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 9835
+```
+
+### Managing the service
+
+```powershell
+Start-Service   NvidiaGPUExporter   # start
+Stop-Service    NvidiaGPUExporter   # stop
+Restart-Service NvidiaGPUExporter   # restart
+Get-Service     NvidiaGPUExporter   # check status
+```
+
+Or using the binary directly (useful for scripting):
+
+```powershell
+nvidia_gpu_exporter.exe --service start
+nvidia_gpu_exporter.exe --service stop
+nvidia_gpu_exporter.exe --service restart
+nvidia_gpu_exporter.exe --service status
+```
+
+### Uninstalling
+
+```powershell
+Stop-Service NvidiaGPUExporter
+& "C:\Program Files\nvidia_gpu_exporter\nvidia_gpu_exporter.exe" --service uninstall
+Remove-Item -Recurse -Force "C:\Program Files\nvidia_gpu_exporter"
+```
 
 ## Installing as a Linux (Systemd) Service
 
