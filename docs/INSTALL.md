@@ -10,21 +10,22 @@ Prometheus and Grafana installed on the same machine.
 
 Follow the steps below:
 
-1. Download [the installation script](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/install/windows.ps1) (save it with `.ps1` extension)
+1. Download [the installation script](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/install/windows-all-in-one.ps1) (save it with `.ps1` extension)
 2. Open an administrative PowerShell prompt (search for PowerShell in the start menu - right-click - Run as Administrator)
-3. In the prompt, execute the script you have downloaded. For example, `C:\Users\<YOUR_USERNAME>\Downloads\windows.ps1`
+3. In the prompt, run the script with the execution policy bypassed for this one run (a downloaded script is otherwise blocked by the default policy): `powershell -NoProfile -ExecutionPolicy Bypass -File "C:\Users\<YOUR_USERNAME>\Downloads\windows-all-in-one.ps1"`
 4. Verify that you have Prometheus running by opening [http://localhost:9090](http://localhost:9090) in your browser.
 5. Verify that you have Grafana running by opening [http://localhost:3000](http://localhost:3000) in your browser.
 6. Login to Grafana using the initial credentials: `admin` - `admin`. Set a new password if you like.
-7. On Grafana, choose the option "Create - Import" from the top-left (big plus sign).
-8. Enter `14574` to the ID field and click "Load".
-9. Hit "Import". The dashboard picks your Prometheus data source automatically.
-   If you have more than one, use the "Data source" dropdown at the top of the
-   dashboard.
-10. Enjoy the dashboard! If the machine has more than one GPU, also import
-    [the overview dashboard](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/docs/grafana/dashboard-overview.json)
-    (copy the JSON into the "Import via dashboard JSON model" field) to
-    compare all GPUs side by side.
+7. The Prometheus datasource and the "Nvidia GPU Metrics" and "Nvidia GPU Overview" dashboards are already provisioned. Open them from the Dashboards list and enjoy!
+
+> [!NOTE]
+> If you installed via an earlier version of this script (based on scoop and
+> nssm), or want to remove everything the script installed, run
+> [the uninstall script](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/install/windows-all-in-one-uninstall.ps1)
+> first, the same way as the install script. It removes the services and
+> program files but never deletes collected data (it prints the kept locations).
+> A new installation starts with a fresh Prometheus database, data from an old
+> scoop-based setup is not carried over.
 
 ## Using .deb or .rpm packages
 
