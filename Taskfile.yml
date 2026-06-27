@@ -26,6 +26,6 @@ tasks:
       NEXT:
         sh: svu next
     cmds:
-      - git tag -a {{.NEXT}} -m "Release {{.NEXT}}"
+      - git tag -a {{.NEXT}} -m "{{.NEXT}}"
       - echo {{.NEXT}}
       - git push origin {{.NEXT}}
