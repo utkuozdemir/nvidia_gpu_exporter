@@ -156,3 +156,39 @@ scoops:
     homepage: https://github.com/utkuozdemir/nvidia_gpu_exporter
     description: Nvidia GPU exporter for prometheus using nvidia-smi binary
     license: MIT
+
+winget:
+  - name: nvidia_gpu_exporter
+    publisher: utkuozdemir
+    package_identifier: utkuozdemir.nvidia_gpu_exporter
+    package_name: Nvidia GPU Exporter
+    short_description: Nvidia GPU exporter for prometheus using nvidia-smi binary
+    description: >-
+      Nvidia GPU exporter for prometheus, using the nvidia-smi binary to collect,
+      parse and export GPU metrics. Supports running as a native Windows service.
+    license: MIT
+    license_url: https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/LICENSE
+    homepage: https://github.com/utkuozdemir/nvidia_gpu_exporter
+    publisher_url: https://github.com/utkuozdemir
+    publisher_support_url: https://github.com/utkuozdemir/nvidia_gpu_exporter/issues
+    # Built from the Windows zip archive (nested portable exe).
+    ids:
+      - nvidia_gpu_exporter-archive
+    release_notes: "{{ .Changelog }}"
+    tags:
+      - prometheus
+      - nvidia
+      - gpu
+      - exporter
+      - monitoring
+    repository:
+      owner: utkuozdemir
+      name: winget-pkgs
+      branch: "nvidia_gpu_exporter-{{ .Version }}"
+      token: "{{ .Env.PRIVATE_ACCESS_TOKEN }}"
+      pull_request:
+        enabled: true
+        base:
+          owner: microsoft
+          name: winget-pkgs
+          branch: master

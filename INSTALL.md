@@ -54,14 +54,38 @@ mv nvidia_gpu_exporter /usr/bin
 nvidia_gpu_exporter --help
 ```
 
+## Installing with winget (Windows)
+
+On Windows the exporter is also available through
+[winget](https://learn.microsoft.com/windows/package-manager/):
+
+```PowerShell
+winget install utkuozdemir.nvidia_gpu_exporter
+```
+
+That puts `nvidia_gpu_exporter` on your `PATH`, so you can run it directly.
+
+If you instead want to run it as a service, use the machine-wide install (not the
+per-user one above, so the service account can reach the binary and it keeps
+working across upgrades), then register it as shown in
+[Installing as a Windows Service](#installing-as-a-windows-service):
+
+```PowerShell
+winget install --scope machine utkuozdemir.nvidia_gpu_exporter
+nvidia_gpu_exporter install
+```
+
+Use one or the other, not both.
+
 ## Installing as a Windows Service
 
 The exporter speaks the Windows Service Control Manager protocol natively, so it
 runs as a normal Windows service registered with its own `install` command. No
 third-party service wrapper (such as NSSM) is required.
 
-Get the binary with [Scoop](https://scoop.sh) (recommended) or download it by
-hand.
+Get the binary with [Scoop](https://scoop.sh) or
+[winget](#installing-with-winget-windows), or download it by hand. The steps
+below use Scoop.
 
 > [!NOTE]
 > Earlier versions of this guide used [NSSM](https://nssm.cc) to run the exporter
@@ -95,8 +119,11 @@ hand.
    # Register the service. It starts automatically on boot and restarts on failure.
    & 'C:\ProgramData\scoop\apps\nvidia_gpu_exporter\current\nvidia_gpu_exporter.exe' install
 
-   # Allow the metrics port through the firewall.
-   New-NetFirewallRule -DisplayName "Nvidia GPU Exporter" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 9835
+   # Allow the metrics port through the firewall, scoped to the local network.
+   # Only needed if Prometheus scrapes from another machine. If Prometheus runs
+   # on this same box, loopback is never firewalled and you can skip this.
+   # Drop -RemoteAddress (or widen it) if your Prometheus is on another subnet.
+   New-NetFirewallRule -DisplayName "Nvidia GPU Exporter" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 9835 -Profile Private,Domain -RemoteAddress LocalSubnet
 
    # Start it.
    Start-Service nvidia_gpu_exporter
@@ -118,6 +145,11 @@ no flags it listens on `:9835`. For example, to use a different port:
 
 Running `install` again reconfigures the existing service in place, so to change
 the flags later just re-run it with the new ones (no need to uninstall first).
+Restart the service afterwards for the new command line to take effect:
+
+```PowerShell
+Restart-Service nvidia_gpu_exporter
+```
 
 The service writes its logs to the Windows Event Log (the `Application` log,
 under the source `nvidia_gpu_exporter`).
@@ -130,10 +162,21 @@ Get-Service nvidia_gpu_exporter
 Stop-Service nvidia_gpu_exporter
 Start-Service nvidia_gpu_exporter
 
-# Uninstall (stop it first)
+# Uninstall the service (stop it first). When the binary is on your PATH
+# (Scoop or winget both put it there) you can call it by name; if you
+# installed it by hand and it is not on your PATH, use the full path instead
+# (for example .\nvidia_gpu_exporter.exe uninstall).
 Stop-Service nvidia_gpu_exporter
-& 'C:\ProgramData\scoop\apps\nvidia_gpu_exporter\current\nvidia_gpu_exporter.exe' uninstall
+nvidia_gpu_exporter uninstall
+
+# Remove the firewall rule if you added one.
+Remove-NetFirewallRule -DisplayName "Nvidia GPU Exporter"
 ```
+
+If you installed the binary with winget, remove it afterwards with
+`winget uninstall utkuozdemir.nvidia_gpu_exporter`. With Scoop, use
+`scoop uninstall nvidia_gpu_exporter --global` (the same `--global` scope it
+was installed with).
 
 ## Installing as a Linux (Systemd) Service
 
