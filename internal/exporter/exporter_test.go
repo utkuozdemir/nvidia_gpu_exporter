@@ -365,3 +365,40 @@ func TestCollectError(t *testing.T) {
 	require.True(t, ok)
 	assertFloat(t, 2, failed.GetMetric()[0].GetCounter().GetValue())
 }
+
+// TestCollectDeliversMetricsOnFatalError pins the shutdown-on-error contract:
+// the collection that triggers the shutdown cancels the exporter context
+// before rendering, and the final scrape must still carry the health metrics
+// that explain what happened.
+func TestCollectDeliversMetricsOnFatalError(t *testing.T) {
+	t.Parallel()
+
+	logger := slogt.New(t)
+
+	ctx, cancel := context.WithCancelCause(t.Context())
+	t.Cleanup(func() { cancel(nil) })
+
+	resolved, err := nvidiasmi.ResolveFields(ctx, "bbb", "fan.speed", "", 0, nvidiasmi.DefaultRunFunc, logger)
+	require.NoError(t, err)
+
+	// a real non-zero exit, so the shutdown callback fires
+	query := func(queryCtx context.Context) (*nvidiasmi.Table, int, error) {
+		runErr := exec.CommandContext(queryCtx, "sh", "-c", "exit 3").Run()
+
+		return nil, 3, fmt.Errorf("query failed: %w", runErr)
+	}
+
+	source := collect.NewLive(query, 0, func(fatalErr error) { cancel(fatalErr) }, logger)
+	exp := exporter.New(ctx, "aaa", resolved, source, logger)
+
+	families := gatherFamilies(t, exp)
+
+	// the context is cancelled by now, and the metrics still made it out
+	require.Error(t, context.Cause(ctx))
+
+	failed, ok := families["aaa_failed_scrapes_total"]
+	require.True(t, ok)
+	assertFloat(t, 1, failed.GetMetric()[0].GetCounter().GetValue())
+	assertFloat(t, 0, gaugeValue(t, families, "aaa_last_collect_success"))
+	assertFloat(t, 3, gaugeValue(t, families, "aaa_command_exit_code"))
+}

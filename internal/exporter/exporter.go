@@ -120,8 +120,10 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 }
 
 // renderHealth emits the collection health metrics from the snapshot's
-// explicit state. Values that would be meaningless before the first collection
-// attempt or the first success are omitted rather than reported as zero.
+// explicit state. The failure counter and the success gauge are always
+// emitted (the gauge reads 0 before the first attempt); the exit code and
+// duration are omitted until a first collection completes, and the success
+// timestamp until a first success, rather than reporting meaningless zeros.
 func (e *GPUExporter) renderHealth(metricCh chan<- prometheus.Metric, snapshot collect.Snapshot) {
 	e.sendConst(metricCh, e.failedScrapesDesc, prometheus.CounterValue, float64(snapshot.Failures))
 
@@ -219,24 +221,17 @@ func (e *GPUExporter) renderRow(metricCh chan<- prometheus.Metric, row nvidiasmi
 	}
 }
 
+// sendMetric delivers unconditionally: the Prometheus registry drains the
+// channel until Collect returns, and delivery must not depend on the process
+// context. With shutdown-on-error, the fatal collection cancels that context
+// before rendering, and the final scrape still has to carry the health
+// metrics that explain the shutdown.
 func (e *GPUExporter) sendMetric(metricCh chan<- prometheus.Metric, metric prometheus.Metric) {
-	select {
-	case <-e.ctx.Done():
-		e.logger.Info("context done, return")
-
-		return
-	case metricCh <- metric:
-	}
+	metricCh <- metric
 }
 
 func (e *GPUExporter) sendDesc(descCh chan<- *prometheus.Desc, desc *prometheus.Desc) {
-	select {
-	case <-e.ctx.Done():
-		e.logger.Info("context done, return")
-
-		return
-	case descCh <- desc:
-	}
+	descCh <- desc
 }
 
 type MetricInfo struct {
