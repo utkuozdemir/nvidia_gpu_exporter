@@ -143,6 +143,8 @@ Every `nvidia-smi` run, including the field discovery runs at startup, is
 bounded by `--collect.timeout` (default `10s`). A run that exceeds it counts
 as a failed collection instead of hanging the scrape or the exporter startup.
 This matters on setups where `nvidia-smi` can wedge on a driver issue.
+Cleaning up a killed process that refuses to die can take a couple of seconds
+on top of the timeout itself.
 
 Set `--collect.timeout 0` to restore the old unbounded behavior. The bound is
 best-effort: it reliably kills a normal `nvidia-smi`, but it cannot interrupt
@@ -151,5 +153,7 @@ a process stuck in an uninterruptible kernel wait, and with a wrapper command
 
 If you raise `--collect.timeout` in synchronous mode, keep it below
 `--web.write-timeout` and below the Prometheus `scrape_timeout`, otherwise
-a slow run fails at the HTTP or Prometheus layer first. In background mode
-this does not matter, since scrapes only read the cached result.
+a slow run fails at the HTTP or Prometheus layer first. Background mode is
+mostly unaffected since scrapes only read the cached result, with one
+exception: a scrape arriving before the very first collection completes
+waits for it, so it can take up to `--collect.timeout` once at startup.
