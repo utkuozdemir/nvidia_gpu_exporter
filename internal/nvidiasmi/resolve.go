@@ -67,7 +67,8 @@ func ResolveFields(
 
 	qFields = removeDuplicates(qFields)
 
-	if len(qFieldsSeparated) == 1 && qFieldsSeparated[0] == qFieldsAuto {
+	auto := len(qFieldsSeparated) == 1 && qFieldsSeparated[0] == qFieldsAuto
+	if auto {
 		parsed, err := autoQFields(ctx, command, timeout, run)
 		if err != nil {
 			logger.Warn(
@@ -76,13 +77,7 @@ func ResolveFields(
 				err,
 			)
 
-			keys, rFieldMap := fallbackQFieldToRFieldMapExcluding(qFieldsExcludeRaw, logger)
-
-			return ResolvedFields{
-				Query:    keys,
-				Returned: rFieldMap,
-				Info:     slices.Clone(infoFields),
-			}, nil
+			return builtinResolvedFields(qFieldsExcludeRaw, logger), nil
 		}
 
 		qFields = parsed
@@ -92,6 +87,18 @@ func ResolveFields(
 
 	rFields, err := queryRFields(ctx, command, qFields, timeout, run, logger)
 	if err != nil {
+		// In auto mode the discovered list may contain fields newer than the
+		// built-in mapping knows, so mapping the discovered list would fail
+		// startup. Fall back to the built-in list wholesale instead: auto mode
+		// must always come up. An explicit user-provided list keeps failing on
+		// fields the built-in mapping cannot cover, so it is never silently
+		// replaced.
+		if auto {
+			logger.Warn("falling back to the built-in field list", "err", err)
+
+			return builtinResolvedFields(qFieldsExcludeRaw, logger), nil
+		}
+
 		return ResolvedFields{}, err
 	}
 
@@ -105,6 +112,18 @@ func ResolveFields(
 		Returned: returned,
 		Info:     slices.Clone(infoFields),
 	}, nil
+}
+
+// builtinResolvedFields resolves from the built-in field mapping, used in auto
+// mode whenever nvidia-smi cannot be queried during startup.
+func builtinResolvedFields(qFieldsExcludeRaw string, logger *slog.Logger) ResolvedFields {
+	keys, rFieldMap := fallbackQFieldToRFieldMapExcluding(qFieldsExcludeRaw, logger)
+
+	return ResolvedFields{
+		Query:    keys,
+		Returned: rFieldMap,
+		Info:     slices.Clone(infoFields),
+	}
 }
 
 // autoQFields discovers the queryable fields from nvidia-smi --help-query-gpu,
