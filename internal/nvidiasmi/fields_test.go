@@ -1,21 +1,24 @@
-package exporter_test
+package nvidiasmi_test
 
 import (
 	_ "embed"
+	"fmt"
+	"os"
 	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvidiasmi"
 )
 
 var (
 	//go:embed testdata/fields.txt
 	fieldsTest string
 
-	expectedQFields = []exporter.QField{
+	expectedQFields = []nvidiasmi.QField{
 		"timestamp",
 		"driver_version",
 		"count",
@@ -137,7 +140,7 @@ var (
 func TestExtractQFields(t *testing.T) {
 	t.Parallel()
 
-	fields := exporter.ExtractQFields(fieldsTest)
+	fields := nvidiasmi.ExtractQFields(fieldsTest)
 
 	assert.Equal(t, expectedQFields, fields)
 }
@@ -154,7 +157,7 @@ func TestParseAutoQFields(t *testing.T) {
 		return nil
 	}
 
-	fields, err := exporter.ParseAutoQFields(t.Context(), "nvidia-smi", command)
+	fields, err := nvidiasmi.ParseAutoQFields(t.Context(), "nvidia-smi", command)
 
 	if assert.Len(t, capturedCmd.Args, 2) {
 		assert.Equal(t, "nvidia-smi", capturedCmd.Args[0])
@@ -163,4 +166,24 @@ func TestParseAutoQFields(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, expectedQFields, fields)
+}
+
+// TestParseQueryFields must be run manually.
+//
+//nolint:forbidigo
+func TestParseQueryFields(t *testing.T) {
+	t.SkipNow()
+	t.Parallel()
+
+	nvidiaSmiCommand := "nvidia-smi"
+
+	qFields, err := nvidiasmi.ParseAutoQFields(t.Context(), nvidiaSmiCommand, nvidiasmi.DefaultRunFunc)
+	if err != nil {
+		fmt.Printf("error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fields := nvidiasmi.QFieldSliceToStringSlice(qFields)
+
+	fmt.Printf("Fields:\n\n%s\n", strings.Join(fields, "\n"))
 }

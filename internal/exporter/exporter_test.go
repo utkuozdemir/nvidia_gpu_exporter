@@ -5,7 +5,6 @@ import (
 	_ "embed"
 	"fmt"
 	"log/slog"
-	"os"
 	"os/exec"
 	"slices"
 	"strings"
@@ -19,6 +18,7 @@ import (
 	"github.com/thejerf/slogassert"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvidiasmi"
 )
 
 const delta = 1e-9
@@ -30,61 +30,6 @@ func assertFloat(t *testing.T, expected, actual float64) {
 	t.Helper()
 
 	assert.InDelta(t, expected, actual, delta)
-}
-
-func TestTransformRawValueValidValues(t *testing.T) {
-	t.Parallel()
-
-	expectedConversions := map[string]float64{
-		"disabled":          0,
-		"enabled":           1,
-		"EnAbLeD":           1,
-		"  enabled  ":       1,
-		"default":           0,
-		"exclusive_thread":  1,
-		"prohibited":        2,
-		"exclusive_process": 3,
-		"0x1E240":           123456,
-		"0x1e240":           123456,
-		"P15":               15,
-		"aaa1234.56bbb":     1234.56,
-	}
-
-	for raw, expected := range expectedConversions {
-		val, err := exporter.TransformRawValue(raw, 1)
-		require.NoError(t, err)
-		assertFloat(t, expected, val)
-	}
-}
-
-func TestTransformRawValueInvalidValues(t *testing.T) {
-	t.Parallel()
-
-	rawValues := []string{
-		"aaaaa", "0X1234", "aa111aa111", "123.456.789",
-	}
-
-	for _, raw := range rawValues {
-		_, err := exporter.TransformRawValue(raw, 1)
-		require.Error(t, err)
-	}
-}
-
-func TestTransformRawMultiplier(t *testing.T) {
-	t.Parallel()
-
-	val, err := exporter.TransformRawValue("11", 2)
-
-	require.NoError(t, err)
-	assertFloat(t, 22, val)
-
-	val, err = exporter.TransformRawValue("10", 0.5)
-	require.NoError(t, err)
-	assertFloat(t, 5, val)
-
-	val, err = exporter.TransformRawValue("enabled", 42)
-	require.NoError(t, err)
-	assertFloat(t, 1, val)
 }
 
 func TestBuildFQNameAndMultiplierRegular(t *testing.T) {
@@ -203,7 +148,7 @@ func TestBuildQFieldToMetricInfoMap(t *testing.T) {
 	logger := slogt.New(t)
 	qFieldToMetricInfoMap := exporter.BuildQFieldToMetricInfoMap(
 		"prefix",
-		map[exporter.QField]exporter.RField{"aaa": "AAA", "bbb": "BBB"},
+		map[nvidiasmi.QField]nvidiasmi.RField{"aaa": "AAA", "bbb": "BBB"},
 		logger,
 	)
 
@@ -386,24 +331,4 @@ end:
 
 	assert.Contains(t, metricsJoined, "aaa_failed_scrapes_total")
 	assert.Contains(t, metricsJoined, "aaa_command_exit_code")
-}
-
-// TestParseQueryFields must be run manually.
-//
-//nolint:forbidigo
-func TestParseQueryFields(t *testing.T) {
-	t.SkipNow()
-	t.Parallel()
-
-	nvidiaSmiCommand := "nvidia-smi"
-
-	qFields, err := exporter.ParseAutoQFields(t.Context(), nvidiaSmiCommand, nil)
-	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
-	}
-
-	fields := exporter.QFieldSliceToStringSlice(qFields)
-
-	fmt.Printf("Fields:\n\n%s\n", strings.Join(fields, "\n"))
 }

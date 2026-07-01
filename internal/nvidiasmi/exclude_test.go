@@ -1,5 +1,5 @@
 //nolint:testpackage // exercises unexported field-exclusion helpers directly
-package exporter
+package nvidiasmi
 
 import (
 	"log/slog"
@@ -50,10 +50,10 @@ func TestMatchesAnyPattern(t *testing.T) {
 func TestFilterExcludedQFields(t *testing.T) {
 	t.Parallel()
 
-	// uuidQField/nameQField/driverVersionQField are required fields (they back the
+	// UUIDQField/nameQField/driverVersionQField are required fields (they back the
 	// gpu_info metric) and must never be dropped. The rest are arbitrary.
 	in := []QField{
-		uuidQField, nameQField, driverVersionQField,
+		UUIDQField, nameQField, driverVersionQField,
 		"alpha.one", "alpha.two",
 		"beta.histogram.max", "beta.histogram.low",
 	}
@@ -72,7 +72,7 @@ func TestFilterExcludedQFields(t *testing.T) {
 			name:    "exact field removed",
 			exclude: "alpha.one",
 			want: []QField{
-				uuidQField, nameQField, driverVersionQField,
+				UUIDQField, nameQField, driverVersionQField,
 				"alpha.two",
 				"beta.histogram.max", "beta.histogram.low",
 			},
@@ -81,19 +81,19 @@ func TestFilterExcludedQFields(t *testing.T) {
 			name:    "wildcard removes whole family",
 			exclude: "beta.histogram.*",
 			want: []QField{
-				uuidQField, nameQField, driverVersionQField,
+				UUIDQField, nameQField, driverVersionQField,
 				"alpha.one", "alpha.two",
 			},
 		},
 		{
 			name:    "required fields are never excluded",
-			exclude: string(uuidQField) + "," + string(nameQField) + "," + string(driverVersionQField),
+			exclude: string(UUIDQField) + "," + string(nameQField) + "," + string(driverVersionQField),
 			want:    in,
 		},
 		{
 			name:    "wildcard does not drop protected fields it happens to match",
 			exclude: "*",
-			want:    []QField{uuidQField, nameQField, driverVersionQField},
+			want:    []QField{UUIDQField, nameQField, driverVersionQField},
 		},
 	}
 

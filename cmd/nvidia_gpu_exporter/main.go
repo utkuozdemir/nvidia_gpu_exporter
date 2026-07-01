@@ -27,6 +27,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvidiasmi"
 )
 
 const redirectPageTemplate = `<html lang="en">
@@ -104,12 +105,12 @@ func run(ctx context.Context, extraHandler slog.Handler) error {
 				Default("/metrics").String()
 		nvidiaSmiCommand = kingpin.Flag("nvidia-smi-command",
 			"Path or command to be used for the nvidia-smi executable").
-			Default(exporter.DefaultNvidiaSmiCommand).String()
+			Default(nvidiasmi.DefaultCommand).String()
 		qFields = kingpin.Flag("query-field-names",
 			fmt.Sprintf("Comma-separated list of the query fields. "+
 				"You can find out possible fields by running `nvidia-smi --help-query-gpu`. "+
-				"The value `%s` will automatically detect the fields to query.", exporter.DefaultQField)).
-			Default(exporter.DefaultQField).String()
+				"The value `%s` will automatically detect the fields to query.", nvidiasmi.DefaultQField)).
+			Default(nvidiasmi.DefaultQField).String()
 		qFieldsExclude = kingpin.Flag("query-field-names-exclude",
 			"Comma-separated list of query fields to exclude from being queried. "+
 				"Names match literally, with `*` as a wildcard for any sequence of characters "+
