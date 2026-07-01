@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os/exec"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -200,19 +201,23 @@ func TestLiveOnFatalNotFiredOnTimeout(t *testing.T) {
 func TestLiveSerializesConcurrentCalls(t *testing.T) {
 	t.Parallel()
 
-	var inFlight, maxInFlight int
+	var inFlight, overlaps atomic.Int32
 
-	block := make(chan struct{})
+	firstIn := make(chan struct{}, 1)
+	release := make(chan struct{})
 	query := func(_ context.Context) (*nvidiasmi.Table, int, error) {
-		// no synchronization needed: Live's lock serializes these
-		inFlight++
-		if inFlight > maxInFlight {
-			maxInFlight = inFlight
+		if inFlight.Add(1) > 1 {
+			overlaps.Add(1)
 		}
 
-		<-block
+		select {
+		case firstIn <- struct{}{}:
+		default:
+		}
 
-		inFlight--
+		<-release
+
+		inFlight.Add(-1)
 
 		return &nvidiasmi.Table{}, 0, nil
 	}
@@ -229,11 +234,17 @@ func TestLiveSerializesConcurrentCalls(t *testing.T) {
 		}()
 	}
 
-	close(block)
+	// one query is now definitely in flight and holding; give the other two
+	// callers time to reach Latest, where a broken implementation would enter
+	// the query concurrently and be counted as an overlap
+	<-firstIn
+	time.Sleep(100 * time.Millisecond)
+
+	close(release)
 
 	for range 3 {
 		<-done
 	}
 
-	assert.Equal(t, 1, maxInFlight)
+	assert.Equal(t, int32(0), overlaps.Load())
 }
