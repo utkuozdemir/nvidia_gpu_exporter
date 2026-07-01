@@ -10,16 +10,13 @@ Prometheus and Grafana installed on the same machine.
 
 Follow the steps below:
 
-1. Download [the installation script](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/install/windows.ps1) (save it with `.ps1` extension)
+1. Download [the installation script](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/install/windows-all-in-one.ps1) (save it with `.ps1` extension)
 2. Open an administrative PowerShell prompt (search for PowerShell in the start menu - right-click - Run as Administrator)
-3. In the prompt, execute the script you have downloaded. For example, `C:\Users\<YOUR_USERNAME>\Downloads\windows.ps1`
+3. In the prompt, execute the script you have downloaded. For example, `C:\Users\<YOUR_USERNAME>\Downloads\windows-all-in-one.ps1`
 4. Verify that you have Prometheus running by opening [http://localhost:9090](http://localhost:9090) in your browser.
 5. Verify that you have Grafana running by opening [http://localhost:3000](http://localhost:3000) in your browser.
 6. Login to Grafana using the initial credentials: `admin` - `admin`. Set a new password if you like.
-7. On Grafana, choose the option "Create - Import" from the top-left (big plus sign).
-8. Enter `14574` to the ID field and click "Load".
-9. Finally, choose "Prometheus" as data source from the dropdown. Hit "import".
-10. Enjoy the dashboard!
+7. The Prometheus datasource and the "Nvidia GPU Metrics" dashboard are already provisioned. Open the dashboard from the Dashboards list and enjoy!
 
 ## Using .deb or .rpm packages
 
