@@ -7,10 +7,17 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // DefaultCommand is the default command used to reach nvidia-smi.
 const DefaultCommand = "nvidia-smi"
+
+// waitDelay bounds how long a killed process can keep the run blocked after
+// its context fires, covering processes that ignore the kill signal or keep
+// their output pipes open. Without it a wedged nvidia-smi would hold the
+// collection forever despite the timeout.
+const waitDelay = 2 * time.Second
 
 // RunFunc runs a prepared nvidia-smi command. It is the injectable seam that
 // lets tests substitute canned output for a real process.
@@ -39,6 +46,7 @@ func Query(ctx context.Context, command string, qFields []QField, run RunFunc) (
 	var stderr bytes.Buffer
 
 	cmd := exec.CommandContext(ctx, cmdAndArgs[0], cmdAndArgs[1:]...) //nolint:gosec
+	cmd.WaitDelay = waitDelay
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 

@@ -166,6 +166,7 @@ func ParseAutoQFields(
 	cmdAndArgs := strings.Fields(nvidiaSmiCommand)
 	cmdAndArgs = append(cmdAndArgs, "--help-query-gpu")
 	cmd := exec.CommandContext(ctx, cmdAndArgs[0], cmdAndArgs[1:]...) //nolint:gosec
+	cmd.WaitDelay = waitDelay
 
 	var stdout bytes.Buffer
 

@@ -118,6 +118,14 @@ func run(ctx context.Context, extraHandler slog.Handler) error {
 				"(for example `remapped_rows.histogram.*`). Useful to drop fields that are slow "+
 				"or unsupported on a given setup.").
 			Default("").String()
+		collectInterval = kingpin.Flag("collect.interval",
+			"Interval at which nvidia-smi runs in the background, with scrapes serving the most "+
+				"recent result. When 0, nvidia-smi runs synchronously on each scrape instead.").
+			Default("0").Duration()
+		collectTimeout = kingpin.Flag("collect.timeout",
+			"Maximum duration a single nvidia-smi run may take, including the runs at startup. "+
+				"0 disables the bound.").
+			Default("10s").Duration()
 		shutdownOnErr = kingpin.Flag("shutdown-on-error",
 			"Shut down the exporter if there is an error querying nvidia-smi. "+
 				"When false, exporter will simply log this error and export it as a metric, but will not crash.").
@@ -139,6 +147,14 @@ func run(ctx context.Context, extraHandler slog.Handler) error {
 
 	slog.SetDefault(logger)
 
+	if *collectInterval < 0 {
+		return fmt.Errorf("collect.interval must not be negative, got %s", *collectInterval)
+	}
+
+	if *collectTimeout < 0 {
+		return fmt.Errorf("collect.timeout must not be negative, got %s", *collectTimeout)
+	}
+
 	ctx, serverCancel := context.WithCancelCause(ctx)
 	defer serverCancel(nil)
 
@@ -147,33 +163,20 @@ func run(ctx context.Context, extraHandler slog.Handler) error {
 		onFatal = serverCancel
 	}
 
-	resolved, err := nvidiasmi.ResolveFields(
-		ctx,
-		*nvidiaSmiCommand,
-		*qFields,
-		*qFieldsExclude,
-		0,
-		nvidiasmi.DefaultRunFunc,
-		logger,
-	)
+	eg, ctx := errgroup.WithContext(ctx)
+
+	collectCfg := collectConfig{
+		nvidiaSmiCommand: *nvidiaSmiCommand,
+		qFieldsRaw:       *qFields,
+		qFieldsExclude:   *qFieldsExclude,
+		interval:         *collectInterval,
+		timeout:          *collectTimeout,
+		onFatal:          onFatal,
+	}
+
+	err := setupExporter(ctx, eg, collectCfg, logger)
 	if err != nil {
-		return fmt.Errorf("failed to resolve query fields: %w", err)
-	}
-
-	query := func(queryCtx context.Context) (*nvidiasmi.Table, int, error) {
-		return nvidiasmi.Query(queryCtx, *nvidiaSmiCommand, resolved.Query, nvidiasmi.DefaultRunFunc)
-	}
-
-	src := collect.NewLive(query, 0, onFatal, logger)
-
-	exp := exporter.New(ctx, exporter.DefaultPrefix, resolved, src, logger)
-
-	if err = prometheus.Register(exp); err != nil {
-		return fmt.Errorf("failed to register exporter: %w", err)
-	}
-
-	if err = prometheus.Register(clientversion.NewCollector("nvidia_gpu_exporter")); err != nil {
-		return fmt.Errorf("failed to register client version collector: %w", err)
+		return err
 	}
 
 	mux := newServeMux(logger, *metricsPath, *enablePprof)
@@ -185,8 +188,6 @@ func run(ctx context.Context, extraHandler slog.Handler) error {
 		IdleTimeout:       *idleTimeout,
 		Handler:           mux,
 	}
-
-	eg, ctx := errgroup.WithContext(ctx)
 
 	eg.Go(func() error {
 		<-ctx.Done()
@@ -223,6 +224,69 @@ func run(ctx context.Context, extraHandler slog.Handler) error {
 
 	if err = eg.Wait(); err != nil {
 		return fmt.Errorf("failed to run: %w", err)
+	}
+
+	return nil
+}
+
+// collectConfig carries the collection-related settings from the flags to the
+// exporter setup.
+type collectConfig struct {
+	nvidiaSmiCommand string
+	qFieldsRaw       string
+	qFieldsExclude   string
+	interval         time.Duration
+	timeout          time.Duration
+	onFatal          func(error)
+}
+
+// setupExporter resolves the query fields, builds the collection source (adding
+// the background collector to the errgroup when an interval is set), and
+// registers the exporter.
+func setupExporter(
+	ctx context.Context,
+	eg *errgroup.Group,
+	cfg collectConfig,
+	logger *slog.Logger,
+) error {
+	resolved, err := nvidiasmi.ResolveFields(
+		ctx,
+		cfg.nvidiaSmiCommand,
+		cfg.qFieldsRaw,
+		cfg.qFieldsExclude,
+		cfg.timeout,
+		nvidiasmi.DefaultRunFunc,
+		logger,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to resolve query fields: %w", err)
+	}
+
+	query := func(queryCtx context.Context) (*nvidiasmi.Table, int, error) {
+		return nvidiasmi.Query(queryCtx, cfg.nvidiaSmiCommand, resolved.Query, nvidiasmi.DefaultRunFunc)
+	}
+
+	var src collect.Source
+
+	switch {
+	case cfg.interval > 0:
+		cached := collect.NewCached(query, cfg.interval, cfg.timeout, cfg.onFatal, logger)
+
+		eg.Go(func() error { return cached.Run(ctx) })
+
+		src = cached
+	default:
+		src = collect.NewLive(query, cfg.timeout, cfg.onFatal, logger)
+	}
+
+	exp := exporter.New(ctx, exporter.DefaultPrefix, resolved, src, logger)
+
+	if err = prometheus.Register(exp); err != nil {
+		return fmt.Errorf("failed to register exporter: %w", err)
+	}
+
+	if err = prometheus.Register(clientversion.NewCollector("nvidia_gpu_exporter")); err != nil {
+		return fmt.Errorf("failed to register client version collector: %w", err)
 	}
 
 	return nil
