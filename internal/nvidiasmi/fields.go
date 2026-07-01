@@ -1,4 +1,4 @@
-package exporter
+package nvidiasmi
 
 import (
 	"bytes"
@@ -10,8 +10,16 @@ import (
 	"strings"
 )
 
+// QField stands for query field - the field name before the query.
+type QField string
+
+// RField stands for returned field - the field name as returned by the nvidia-smi.
+type RField string
+
 const (
-	uuidQField               QField = "uuid"
+	// UUIDQField is the query field holding the GPU identity used as the metric label.
+	UUIDQField QField = "uuid"
+
 	nameQField               QField = "name"
 	driverModelCurrentQField QField = "driver_model.current"
 	driverModelPendingQField QField = "driver_model.pending"
@@ -153,11 +161,12 @@ var (
 func ParseAutoQFields(
 	ctx context.Context,
 	nvidiaSmiCommand string,
-	command runCmd,
+	run RunFunc,
 ) ([]QField, error) {
 	cmdAndArgs := strings.Fields(nvidiaSmiCommand)
 	cmdAndArgs = append(cmdAndArgs, "--help-query-gpu")
 	cmd := exec.CommandContext(ctx, cmdAndArgs[0], cmdAndArgs[1:]...) //nolint:gosec
+	cmd.WaitDelay = waitDelay
 
 	var stdout bytes.Buffer
 
@@ -166,7 +175,7 @@ func ParseAutoQFields(
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	err := command(cmd)
+	err := run(cmd)
 
 	outStr := stdout.String()
 	errStr := stderr.String()
@@ -201,36 +210,6 @@ func ParseAutoQFields(
 	}
 
 	return fields, nil
-}
-
-// parseFieldExcludePatterns turns a comma-separated list of field name globs
-// into matchers. Names match literally except for "*", which matches any
-// sequence of characters (for example "remapped_rows.histogram.*").
-func parseFieldExcludePatterns(raw string) []*regexp.Regexp {
-	parts := strings.Split(raw, ",")
-	patterns := make([]*regexp.Regexp, 0, len(parts))
-
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-
-		expr := "^" + strings.ReplaceAll(regexp.QuoteMeta(part), `\*`, ".*") + "$"
-		patterns = append(patterns, regexp.MustCompile(expr))
-	}
-
-	return patterns
-}
-
-func matchesAnyPattern(s string, patterns []*regexp.Regexp) bool {
-	for _, pattern := range patterns {
-		if pattern.MatchString(s) {
-			return true
-		}
-	}
-
-	return false
 }
 
 func ExtractQFields(text string) []QField {

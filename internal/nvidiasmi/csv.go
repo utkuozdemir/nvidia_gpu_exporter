@@ -1,4 +1,4 @@
-package exporter
+package nvidiasmi
 
 import (
 	"fmt"

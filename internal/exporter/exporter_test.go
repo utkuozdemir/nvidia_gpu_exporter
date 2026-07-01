@@ -5,20 +5,21 @@ import (
 	_ "embed"
 	"fmt"
 	"log/slog"
-	"os"
 	"os/exec"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/neilotoole/slogt/v2"
 	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/thejerf/slogassert"
 
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/collect"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvidiasmi"
 )
 
 const delta = 1e-9
@@ -30,61 +31,6 @@ func assertFloat(t *testing.T, expected, actual float64) {
 	t.Helper()
 
 	assert.InDelta(t, expected, actual, delta)
-}
-
-func TestTransformRawValueValidValues(t *testing.T) {
-	t.Parallel()
-
-	expectedConversions := map[string]float64{
-		"disabled":          0,
-		"enabled":           1,
-		"EnAbLeD":           1,
-		"  enabled  ":       1,
-		"default":           0,
-		"exclusive_thread":  1,
-		"prohibited":        2,
-		"exclusive_process": 3,
-		"0x1E240":           123456,
-		"0x1e240":           123456,
-		"P15":               15,
-		"aaa1234.56bbb":     1234.56,
-	}
-
-	for raw, expected := range expectedConversions {
-		val, err := exporter.TransformRawValue(raw, 1)
-		require.NoError(t, err)
-		assertFloat(t, expected, val)
-	}
-}
-
-func TestTransformRawValueInvalidValues(t *testing.T) {
-	t.Parallel()
-
-	rawValues := []string{
-		"aaaaa", "0X1234", "aa111aa111", "123.456.789",
-	}
-
-	for _, raw := range rawValues {
-		_, err := exporter.TransformRawValue(raw, 1)
-		require.Error(t, err)
-	}
-}
-
-func TestTransformRawMultiplier(t *testing.T) {
-	t.Parallel()
-
-	val, err := exporter.TransformRawValue("11", 2)
-
-	require.NoError(t, err)
-	assertFloat(t, 22, val)
-
-	val, err = exporter.TransformRawValue("10", 0.5)
-	require.NoError(t, err)
-	assertFloat(t, 5, val)
-
-	val, err = exporter.TransformRawValue("enabled", 42)
-	require.NoError(t, err)
-	assertFloat(t, 1, val)
 }
 
 func TestBuildFQNameAndMultiplierRegular(t *testing.T) {
@@ -203,7 +149,7 @@ func TestBuildQFieldToMetricInfoMap(t *testing.T) {
 	logger := slogt.New(t)
 	qFieldToMetricInfoMap := exporter.BuildQFieldToMetricInfoMap(
 		"prefix",
-		map[exporter.QField]exporter.RField{"aaa": "AAA", "bbb": "BBB"},
+		map[nvidiasmi.QField]nvidiasmi.RField{"aaa": "AAA", "bbb": "BBB"},
 		logger,
 	)
 
@@ -218,32 +164,40 @@ func TestBuildQFieldToMetricInfoMap(t *testing.T) {
 	assert.Equal(t, prometheus.GaugeValue, metricInfo2.MType)
 }
 
-func TestNewUnknownField(t *testing.T) {
-	t.Parallel()
+// newTestExporter resolves fields against a nonexistent nvidia-smi command
+// (falling back to the built-in mapping) and wires the exporter to a live
+// source whose query is backed by the given run function.
+func newTestExporter(
+	t *testing.T,
+	prefix string,
+	qFieldsRaw string,
+	run nvidiasmi.RunFunc,
+) *exporter.GPUExporter {
+	t.Helper()
 
 	logger := slogt.New(t)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	t.Cleanup(cancel)
 
-	_, err := exporter.New(ctx, nil, "aaa", "bbb", "a", "", logger)
+	resolved, err := nvidiasmi.ResolveFields(ctx, "bbb", qFieldsRaw, "", 0, nvidiasmi.DefaultRunFunc, logger)
+	require.NoError(t, err)
 
-	require.Error(t, err)
+	query := func(queryCtx context.Context) (*nvidiasmi.Table, int, error) {
+		return nvidiasmi.Query(queryCtx, "bbb", resolved.Query, run)
+	}
+
+	source := collect.NewLive(query, 0, nil, logger)
+
+	return exporter.New(ctx, prefix, resolved, source, logger)
 }
 
 func TestDescribe(t *testing.T) {
 	t.Parallel()
 
-	logger := slogt.New(t)
-
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	t.Cleanup(cancel)
-
 	const prefix = "aaa"
 
-	exp, err := exporter.New(ctx, nil, prefix, "bbb", "fan.speed,memory.used", "", logger)
-
-	require.NoError(t, err)
+	exp := newTestExporter(t, prefix, "fan.speed,memory.used", nvidiasmi.DefaultRunFunc)
 
 	doneCh := make(chan bool)
 	descCh := make(chan *prometheus.Desc)
@@ -273,6 +227,8 @@ end:
 		"uuid", "name", "driver_model_current", "driver_model_pending",
 		"vbios_version", "driver_version", "pci_bus_id", "serial",
 		"compute_cap", "pci_sub_device_id", "index", "command_exit_code",
+		"last_collect_success", "last_collect_success_timestamp_seconds",
+		"last_collect_duration_seconds",
 	}
 
 	slices.Sort(expectedMetrics)
@@ -286,124 +242,163 @@ end:
 	}
 }
 
+// gatherFamilies scrapes the exporter through a pedantic registry and returns
+// the metric families by name.
+func gatherFamilies(t *testing.T, exp *exporter.GPUExporter) map[string]*dto.MetricFamily {
+	t.Helper()
+
+	registry := prometheus.NewPedanticRegistry()
+	require.NoError(t, registry.Register(exp))
+
+	families, err := registry.Gather()
+	require.NoError(t, err)
+
+	byName := make(map[string]*dto.MetricFamily, len(families))
+	for _, family := range families {
+		byName[family.GetName()] = family
+	}
+
+	return byName
+}
+
+func gaugeValue(t *testing.T, families map[string]*dto.MetricFamily, name string) float64 {
+	t.Helper()
+
+	family, ok := families[name]
+	require.True(t, ok, "metric family %q not found", name)
+	require.Len(t, family.GetMetric(), 1)
+
+	return family.GetMetric()[0].GetGauge().GetValue()
+}
+
 func TestCollect(t *testing.T) {
 	t.Parallel()
 
-	logger := slogt.New(t)
-
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	t.Cleanup(cancel)
-
-	exp, err := exporter.New(
-		ctx,
-		nil,
+	exp := newTestExporter(
+		t,
 		"aaa",
-		"bbb",
 		"uuid,name,driver_model.current,driver_model.pending,"+
 			"vbios_version,driver_version,fan.speed,memory.used,pci.bus_id",
-		"",
-		logger,
+		func(cmd *exec.Cmd) error {
+			_, _ = cmd.Stdout.Write([]byte(queryTest))
+
+			return nil
+		},
 	)
 
-	exp.Command = func(cmd *exec.Cmd) error {
-		_, _ = cmd.Stdout.Write([]byte(queryTest))
+	families := gatherFamilies(t, exp)
 
-		return nil
+	// collection health: one successful collection, nothing failed
+	failed, ok := families["aaa_failed_scrapes_total"]
+	require.True(t, ok)
+	assertFloat(t, 0, failed.GetMetric()[0].GetCounter().GetValue())
+	assertFloat(t, 1, gaugeValue(t, families, "aaa_last_collect_success"))
+	assertFloat(t, 0, gaugeValue(t, families, "aaa_command_exit_code"))
+	assert.Positive(t, gaugeValue(t, families, "aaa_last_collect_success_timestamp_seconds"))
+	assert.GreaterOrEqual(t, gaugeValue(t, families, "aaa_last_collect_duration_seconds"), 0.0)
+
+	const rtxUUID = "df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"
+
+	// GPU data: both rows from the canned nvidia-smi output
+	info, ok := families["aaa_gpu_info"]
+	require.True(t, ok)
+	require.Len(t, info.GetMetric(), 2)
+
+	infoLabels := make(map[string]string)
+	for _, labelPair := range metricByUUID(t, info, rtxUUID).GetLabel() {
+		infoLabels[labelPair.GetName()] = labelPair.GetValue()
 	}
 
-	require.NoError(t, err)
+	assert.Equal(t, "NVIDIA GeForce RTX 2080 SUPER", infoLabels["name"])
+	assert.Equal(t, "7.5", infoLabels["compute_cap"])
 
-	doneCh := make(chan bool)
-	metricCh := make(chan prometheus.Metric)
+	fanSpeed, ok := families["aaa_fan_speed_ratio"]
+	require.True(t, ok)
+	require.Len(t, fanSpeed.GetMetric(), 2)
+	assertFloat(t, 0.38, metricByUUID(t, fanSpeed, rtxUUID).GetGauge().GetValue())
 
-	go func() {
-		exp.Collect(metricCh)
+	memoryUsed, ok := families["aaa_memory_used_bytes"]
+	require.True(t, ok)
+	assertFloat(t, 575*1048576, metricByUUID(t, memoryUsed, rtxUUID).GetGauge().GetValue())
+}
 
-		doneCh <- true
-	}()
+// metricByUUID returns the metric in the family carrying the given uuid label.
+func metricByUUID(t *testing.T, family *dto.MetricFamily, uuid string) *dto.Metric {
+	t.Helper()
 
-	var metrics []string
-
-end:
-	for {
-		select {
-		case metric := <-metricCh:
-			metrics = append(metrics, metric.Desc().String())
-		case <-doneCh:
-			break end
+	for _, metric := range family.GetMetric() {
+		for _, labelPair := range metric.GetLabel() {
+			if labelPair.GetName() == "uuid" && labelPair.GetValue() == uuid {
+				return metric
+			}
 		}
 	}
 
-	metricsJoined := strings.Join(metrics, "\n")
+	t.Fatalf("no metric with uuid %q in family %q", uuid, family.GetName())
 
-	assert.Len(t, metrics, 16)
-	assert.Contains(t, metricsJoined, "aaa_gpu_info")
-	assert.Contains(t, metricsJoined, "command_exit_code")
-	assert.Contains(t, metricsJoined, "aaa_name")
-	assert.Contains(t, metricsJoined, "aaa_fan_speed_ratio")
-	assert.Contains(t, metricsJoined, "aaa_memory_used_bytes")
-	assert.Contains(t, metricsJoined, "aaa_compute_cap")
-	assert.Contains(t, metricsJoined, "serial")
-	assert.Contains(t, metricsJoined, "pci_sub_device_id")
-	assert.Contains(t, metricsJoined, "index")
+	return nil
 }
 
 func TestCollectError(t *testing.T) {
 	t.Parallel()
 
-	logger := slogt.New(t)
+	exp := newTestExporter(t, "aaa", "fan.speed,memory.used", nvidiasmi.DefaultRunFunc)
 
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	t.Cleanup(cancel)
+	families := gatherFamilies(t, exp)
 
-	exp, err := exporter.New(ctx, nil, "aaa", "bbb", "fan.speed,memory.used", "", logger)
+	// one failed collection, never a successful one
+	failed, ok := families["aaa_failed_scrapes_total"]
+	require.True(t, ok)
+	assertFloat(t, 1, failed.GetMetric()[0].GetCounter().GetValue())
+	assertFloat(t, 0, gaugeValue(t, families, "aaa_last_collect_success"))
+	assertFloat(t, -1, gaugeValue(t, families, "aaa_command_exit_code"))
+	assert.GreaterOrEqual(t, gaugeValue(t, families, "aaa_last_collect_duration_seconds"), 0.0)
 
-	require.NoError(t, err)
+	// no success yet: the timestamp and all GPU series must be absent
+	assert.NotContains(t, families, "aaa_last_collect_success_timestamp_seconds")
+	assert.NotContains(t, families, "aaa_gpu_info")
+	assert.NotContains(t, families, "aaa_fan_speed_ratio")
 
-	doneCh := make(chan bool)
-	metricCh := make(chan prometheus.Metric)
-
-	go func() {
-		exp.Collect(metricCh)
-
-		doneCh <- true
-	}()
-
-	var metrics []string
-
-end:
-	for {
-		select {
-		case metric := <-metricCh:
-			metrics = append(metrics, metric.Desc().String())
-		case <-doneCh:
-			break end
-		}
-	}
-
-	assert.Len(t, metrics, 2)
-	metricsJoined := strings.Join(metrics, "\n")
-
-	assert.Contains(t, metricsJoined, "aaa_failed_scrapes_total")
-	assert.Contains(t, metricsJoined, "aaa_command_exit_code")
+	// the failure counter advances per collection
+	families = gatherFamilies(t, exp)
+	failed, ok = families["aaa_failed_scrapes_total"]
+	require.True(t, ok)
+	assertFloat(t, 2, failed.GetMetric()[0].GetCounter().GetValue())
 }
 
-// TestParseQueryFields must be run manually.
-//
-//nolint:forbidigo
-func TestParseQueryFields(t *testing.T) {
-	t.SkipNow()
+// TestCollectDeliversMetricsOnFatalError pins the shutdown-on-error contract:
+// the collection that triggers the shutdown cancels the exporter context
+// before rendering, and the final scrape must still carry the health metrics
+// that explain what happened.
+func TestCollectDeliversMetricsOnFatalError(t *testing.T) {
 	t.Parallel()
 
-	nvidiaSmiCommand := "nvidia-smi"
+	logger := slogt.New(t)
 
-	qFields, err := exporter.ParseAutoQFields(t.Context(), nvidiaSmiCommand, nil)
-	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+	ctx, cancel := context.WithCancelCause(t.Context())
+	t.Cleanup(func() { cancel(nil) })
+
+	resolved, err := nvidiasmi.ResolveFields(ctx, "bbb", "fan.speed", "", 0, nvidiasmi.DefaultRunFunc, logger)
+	require.NoError(t, err)
+
+	// a real non-zero exit, so the shutdown callback fires
+	query := func(queryCtx context.Context) (*nvidiasmi.Table, int, error) {
+		runErr := exec.CommandContext(queryCtx, "sh", "-c", "exit 3").Run()
+
+		return nil, 3, fmt.Errorf("query failed: %w", runErr)
 	}
 
-	fields := exporter.QFieldSliceToStringSlice(qFields)
+	source := collect.NewLive(query, 0, func(fatalErr error) { cancel(fatalErr) }, logger)
+	exp := exporter.New(ctx, "aaa", resolved, source, logger)
 
-	fmt.Printf("Fields:\n\n%s\n", strings.Join(fields, "\n"))
+	families := gatherFamilies(t, exp)
+
+	// the context is cancelled by now, and the metrics still made it out
+	require.Error(t, context.Cause(ctx))
+
+	failed, ok := families["aaa_failed_scrapes_total"]
+	require.True(t, ok)
+	assertFloat(t, 1, failed.GetMetric()[0].GetCounter().GetValue())
+	assertFloat(t, 0, gaugeValue(t, families, "aaa_last_collect_success"))
+	assertFloat(t, 3, gaugeValue(t, families, "aaa_command_exit_code"))
 }
