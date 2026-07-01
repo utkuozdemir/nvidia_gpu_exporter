@@ -156,6 +156,9 @@ nvidia_smi_clocks_event_reasons_sw_thermal_slowdown{uuid="df6e7a7c-7314-46f8-abc
 # HELP nvidia_smi_clocks_event_reasons_sync_boost clocks_event_reasons.sync_boost
 # TYPE nvidia_smi_clocks_event_reasons_sync_boost gauge
 nvidia_smi_clocks_event_reasons_sync_boost{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 0
+# HELP nvidia_smi_command_exit_code Exit code of the most recent nvidia-smi run
+# TYPE nvidia_smi_command_exit_code gauge
+nvidia_smi_command_exit_code 0
 # HELP nvidia_smi_compute_mode compute_mode
 # TYPE nvidia_smi_compute_mode gauge
 nvidia_smi_compute_mode{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 0
@@ -183,6 +186,9 @@ nvidia_smi_encoder_stats_session_count{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3a
 # HELP nvidia_smi_enforced_power_limit_watts enforced.power.limit [W]
 # TYPE nvidia_smi_enforced_power_limit_watts gauge
 nvidia_smi_enforced_power_limit_watts{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 250
+# HELP nvidia_smi_failed_scrapes_total Number of failed collections
+# TYPE nvidia_smi_failed_scrapes_total counter
+nvidia_smi_failed_scrapes_total 0
 # HELP nvidia_smi_fan_speed_ratio fan.speed [%]
 # TYPE nvidia_smi_fan_speed_ratio gauge
 nvidia_smi_fan_speed_ratio{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 0.38
@@ -195,6 +201,15 @@ nvidia_smi_index{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 0
 # HELP nvidia_smi_inforom_oem inforom.oem
 # TYPE nvidia_smi_inforom_oem gauge
 nvidia_smi_inforom_oem{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 1.1
+# HELP nvidia_smi_last_collect_duration_seconds Duration of the most recent collection
+# TYPE nvidia_smi_last_collect_duration_seconds gauge
+nvidia_smi_last_collect_duration_seconds 0.055694458
+# HELP nvidia_smi_last_collect_success Whether the most recent collection succeeded (1) or not (0)
+# TYPE nvidia_smi_last_collect_success gauge
+nvidia_smi_last_collect_success 1
+# HELP nvidia_smi_last_collect_success_timestamp_seconds Unix timestamp of the most recent successful collection
+# TYPE nvidia_smi_last_collect_success_timestamp_seconds gauge
+nvidia_smi_last_collect_success_timestamp_seconds 1.751475457e+09
 # HELP nvidia_smi_memory_free_bytes memory.free [MiB]
 # TYPE nvidia_smi_memory_free_bytes gauge
 nvidia_smi_memory_free_bytes{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 7.883194368e+09
