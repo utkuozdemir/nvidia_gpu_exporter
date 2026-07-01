@@ -2,54 +2,41 @@ package exporter
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
-	"os/exec"
 	"strings"
-	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/collect"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvidiasmi"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/util"
 )
 
 const DefaultPrefix = "nvidia_smi"
 
-// GPUExporter collects stats and exports them using
-// the prometheus metrics package.
+// GPUExporter renders the latest collection as Prometheus metrics. It is
+// agnostic to how the reading is produced: the source may collect inline on
+// each scrape or serve a cached result from background collection.
 type GPUExporter struct {
-	mutex                 sync.RWMutex
 	prefix                string
 	fields                nvidiasmi.ResolvedFields
 	qFieldToMetricInfoMap map[nvidiasmi.QField]MetricInfo
-	nvidiaSmiCommand      string
+	source                collect.Source
 	failedScrapesTotal    prometheus.Counter
 	exitCode              prometheus.Gauge
 	gpuInfoDesc           *prometheus.Desc
 	logger                *slog.Logger
-	Command               nvidiasmi.RunFunc
 	ctx                   context.Context //nolint:containedctx
-	shutdownOnErrorFunc   context.CancelCauseFunc
 }
 
-func New(ctx context.Context, shutdownOnErrorFunc context.CancelCauseFunc, prefix string,
-	nvidiaSmiCommand string, qFieldsRaw string, qFieldsExcludeRaw string, logger *slog.Logger,
-) (*GPUExporter, error) {
-	fields, err := nvidiasmi.ResolveFields(
-		ctx,
-		nvidiaSmiCommand,
-		qFieldsRaw,
-		qFieldsExcludeRaw,
-		0,
-		nvidiasmi.DefaultRunFunc,
-		logger,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve query fields: %w", err)
-	}
-
+func New(
+	ctx context.Context,
+	prefix string,
+	fields nvidiasmi.ResolvedFields,
+	source collect.Source,
+	logger *slog.Logger,
+) *GPUExporter {
 	qFieldToMetricInfoMap := BuildQFieldToMetricInfoMap(prefix, fields.Returned, logger)
 
 	infoLabels := make([]string, len(fields.Info))
@@ -57,13 +44,12 @@ func New(ctx context.Context, shutdownOnErrorFunc context.CancelCauseFunc, prefi
 		infoLabels[i] = infoField.Label
 	}
 
-	exporter := GPUExporter{
+	return &GPUExporter{
 		ctx:                   ctx,
-		shutdownOnErrorFunc:   shutdownOnErrorFunc,
 		prefix:                prefix,
-		nvidiaSmiCommand:      nvidiaSmiCommand,
 		fields:                fields,
 		qFieldToMetricInfoMap: qFieldToMetricInfoMap,
+		source:                source,
 		logger:                logger,
 		failedScrapesTotal: prometheus.NewCounter(prometheus.CounterOpts{
 			Namespace: prefix,
@@ -81,10 +67,7 @@ func New(ctx context.Context, shutdownOnErrorFunc context.CancelCauseFunc, prefi
 				strings.Join(infoLabels, ", ")),
 			infoLabels,
 			nil),
-		Command: nvidiasmi.DefaultRunFunc,
 	}
-
-	return &exporter, nil
 }
 
 // Describe describes all the metrics ever exported by the exporter. It
@@ -99,35 +82,23 @@ func (e *GPUExporter) Describe(descCh chan<- *prometheus.Desc) {
 	e.sendDesc(descCh, e.gpuInfoDesc)
 }
 
-// Collect fetches the stats and delivers them as Prometheus metrics. It implements prometheus.Collector.
+// Collect fetches the latest reading from the source and delivers it as
+// Prometheus metrics. It implements prometheus.Collector.
 func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
-	e.mutex.Lock()
-	defer e.mutex.Unlock()
+	snapshot := e.source.Latest(e.ctx)
 
-	currentTable, exitCode, err := nvidiasmi.Query(e.ctx, e.nvidiaSmiCommand, e.fields.Query, e.Command)
-	e.exitCode.Set(float64(exitCode))
-
+	e.exitCode.Set(float64(snapshot.ExitCode))
 	e.sendMetric(metricCh, e.exitCode)
 
-	if err != nil {
-		e.logger.Error("failed to collect metrics", "err", err)
-
+	if !snapshot.Success {
 		metricCh <- e.failedScrapesTotal
 
 		e.failedScrapesTotal.Inc()
 
-		if e.shutdownOnErrorFunc != nil {
-			var exitErr *exec.ExitError
-
-			if errors.As(err, &exitErr) {
-				e.shutdownOnErrorFunc(err)
-			}
-		}
-
 		return
 	}
 
-	for _, currentRow := range currentTable.Rows {
+	for _, currentRow := range snapshot.Table.Rows {
 		e.renderRow(metricCh, currentRow)
 	}
 }

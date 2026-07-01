@@ -26,6 +26,7 @@ import (
 	webflag "github.com/prometheus/exporter-toolkit/web/kingpinflag"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/collect"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvidiasmi"
 )
@@ -141,23 +142,31 @@ func run(ctx context.Context, extraHandler slog.Handler) error {
 	ctx, serverCancel := context.WithCancelCause(ctx)
 	defer serverCancel(nil)
 
-	var shutdownOnErrFunc context.CancelCauseFunc
+	var onFatal func(error)
 	if *shutdownOnErr {
-		shutdownOnErrFunc = serverCancel
+		onFatal = serverCancel
 	}
 
-	exp, err := exporter.New(
+	resolved, err := nvidiasmi.ResolveFields(
 		ctx,
-		shutdownOnErrFunc,
-		exporter.DefaultPrefix,
 		*nvidiaSmiCommand,
 		*qFields,
 		*qFieldsExclude,
+		0,
+		nvidiasmi.DefaultRunFunc,
 		logger,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to create exporter: %w", err)
+		return fmt.Errorf("failed to resolve query fields: %w", err)
 	}
+
+	query := func(queryCtx context.Context) (*nvidiasmi.Table, int, error) {
+		return nvidiasmi.Query(queryCtx, *nvidiaSmiCommand, resolved.Query, nvidiasmi.DefaultRunFunc)
+	}
+
+	src := collect.NewLive(query, 0, onFatal, logger)
+
+	exp := exporter.New(ctx, exporter.DefaultPrefix, resolved, src, logger)
 
 	if err = prometheus.Register(exp); err != nil {
 		return fmt.Errorf("failed to register exporter: %w", err)

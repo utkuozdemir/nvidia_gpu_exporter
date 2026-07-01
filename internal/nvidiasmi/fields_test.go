@@ -1,13 +1,16 @@
 package nvidiasmi_test
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/neilotoole/slogt/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -186,4 +189,15 @@ func TestParseQueryFields(t *testing.T) {
 	fields := nvidiasmi.QFieldSliceToStringSlice(qFields)
 
 	fmt.Printf("Fields:\n\n%s\n", strings.Join(fields, "\n"))
+}
+
+func TestResolveFieldsUnknownField(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	t.Cleanup(cancel)
+
+	_, err := nvidiasmi.ResolveFields(ctx, "bbb", "a", "", 0, nvidiasmi.DefaultRunFunc, slogt.New(t))
+
+	require.Error(t, err)
 }

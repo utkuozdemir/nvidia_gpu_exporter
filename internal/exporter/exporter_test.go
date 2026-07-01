@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/thejerf/slogassert"
 
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/collect"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvidiasmi"
 )
@@ -163,32 +164,40 @@ func TestBuildQFieldToMetricInfoMap(t *testing.T) {
 	assert.Equal(t, prometheus.GaugeValue, metricInfo2.MType)
 }
 
-func TestNewUnknownField(t *testing.T) {
-	t.Parallel()
+// newTestExporter resolves fields against a nonexistent nvidia-smi command
+// (falling back to the built-in mapping) and wires the exporter to a live
+// source whose query is backed by the given run function.
+func newTestExporter(
+	t *testing.T,
+	prefix string,
+	qFieldsRaw string,
+	run nvidiasmi.RunFunc,
+) *exporter.GPUExporter {
+	t.Helper()
 
 	logger := slogt.New(t)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	t.Cleanup(cancel)
 
-	_, err := exporter.New(ctx, nil, "aaa", "bbb", "a", "", logger)
+	resolved, err := nvidiasmi.ResolveFields(ctx, "bbb", qFieldsRaw, "", 0, nvidiasmi.DefaultRunFunc, logger)
+	require.NoError(t, err)
 
-	require.Error(t, err)
+	query := func(queryCtx context.Context) (*nvidiasmi.Table, int, error) {
+		return nvidiasmi.Query(queryCtx, "bbb", resolved.Query, run)
+	}
+
+	source := collect.NewLive(query, 0, nil, logger)
+
+	return exporter.New(ctx, prefix, resolved, source, logger)
 }
 
 func TestDescribe(t *testing.T) {
 	t.Parallel()
 
-	logger := slogt.New(t)
-
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	t.Cleanup(cancel)
-
 	const prefix = "aaa"
 
-	exp, err := exporter.New(ctx, nil, prefix, "bbb", "fan.speed,memory.used", "", logger)
-
-	require.NoError(t, err)
+	exp := newTestExporter(t, prefix, "fan.speed,memory.used", nvidiasmi.DefaultRunFunc)
 
 	doneCh := make(chan bool)
 	descCh := make(chan *prometheus.Desc)
@@ -234,29 +243,17 @@ end:
 func TestCollect(t *testing.T) {
 	t.Parallel()
 
-	logger := slogt.New(t)
-
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	t.Cleanup(cancel)
-
-	exp, err := exporter.New(
-		ctx,
-		nil,
+	exp := newTestExporter(
+		t,
 		"aaa",
-		"bbb",
 		"uuid,name,driver_model.current,driver_model.pending,"+
 			"vbios_version,driver_version,fan.speed,memory.used,pci.bus_id",
-		"",
-		logger,
+		func(cmd *exec.Cmd) error {
+			_, _ = cmd.Stdout.Write([]byte(queryTest))
+
+			return nil
+		},
 	)
-
-	exp.Command = func(cmd *exec.Cmd) error {
-		_, _ = cmd.Stdout.Write([]byte(queryTest))
-
-		return nil
-	}
-
-	require.NoError(t, err)
 
 	doneCh := make(chan bool)
 	metricCh := make(chan prometheus.Metric)
@@ -296,14 +293,7 @@ end:
 func TestCollectError(t *testing.T) {
 	t.Parallel()
 
-	logger := slogt.New(t)
-
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	t.Cleanup(cancel)
-
-	exp, err := exporter.New(ctx, nil, "aaa", "bbb", "fan.speed,memory.used", "", logger)
-
-	require.NoError(t, err)
+	exp := newTestExporter(t, "aaa", "fan.speed,memory.used", nvidiasmi.DefaultRunFunc)
 
 	doneCh := make(chan bool)
 	metricCh := make(chan prometheus.Metric)
