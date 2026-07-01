@@ -7,12 +7,12 @@ import (
 	"log/slog"
 	"os/exec"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/neilotoole/slogt/v2"
 	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/thejerf/slogassert"
@@ -227,6 +227,8 @@ end:
 		"uuid", "name", "driver_model_current", "driver_model_pending",
 		"vbios_version", "driver_version", "pci_bus_id", "serial",
 		"compute_cap", "pci_sub_device_id", "index", "command_exit_code",
+		"last_collect_success", "last_collect_success_timestamp_seconds",
+		"last_collect_duration_seconds",
 	}
 
 	slices.Sort(expectedMetrics)
@@ -238,6 +240,35 @@ end:
 
 		assert.Contains(t, descStr, fmt.Sprintf(`"%s_%s"`, prefix, metric))
 	}
+}
+
+// gatherFamilies scrapes the exporter through a pedantic registry and returns
+// the metric families by name.
+func gatherFamilies(t *testing.T, exp *exporter.GPUExporter) map[string]*dto.MetricFamily {
+	t.Helper()
+
+	registry := prometheus.NewPedanticRegistry()
+	require.NoError(t, registry.Register(exp))
+
+	families, err := registry.Gather()
+	require.NoError(t, err)
+
+	byName := make(map[string]*dto.MetricFamily, len(families))
+	for _, family := range families {
+		byName[family.GetName()] = family
+	}
+
+	return byName
+}
+
+func gaugeValue(t *testing.T, families map[string]*dto.MetricFamily, name string) float64 {
+	t.Helper()
+
+	family, ok := families[name]
+	require.True(t, ok, "metric family %q not found", name)
+	require.Len(t, family.GetMetric(), 1)
+
+	return family.GetMetric()[0].GetGauge().GetValue()
 }
 
 func TestCollect(t *testing.T) {
@@ -255,39 +286,57 @@ func TestCollect(t *testing.T) {
 		},
 	)
 
-	doneCh := make(chan bool)
-	metricCh := make(chan prometheus.Metric)
+	families := gatherFamilies(t, exp)
 
-	go func() {
-		exp.Collect(metricCh)
+	// collection health: one successful collection, nothing failed
+	failed, ok := families["aaa_failed_scrapes_total"]
+	require.True(t, ok)
+	assertFloat(t, 0, failed.GetMetric()[0].GetCounter().GetValue())
+	assertFloat(t, 1, gaugeValue(t, families, "aaa_last_collect_success"))
+	assertFloat(t, 0, gaugeValue(t, families, "aaa_command_exit_code"))
+	assert.Positive(t, gaugeValue(t, families, "aaa_last_collect_success_timestamp_seconds"))
+	assert.GreaterOrEqual(t, gaugeValue(t, families, "aaa_last_collect_duration_seconds"), 0.0)
 
-		doneCh <- true
-	}()
+	const rtxUUID = "df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"
 
-	var metrics []string
+	// GPU data: both rows from the canned nvidia-smi output
+	info, ok := families["aaa_gpu_info"]
+	require.True(t, ok)
+	require.Len(t, info.GetMetric(), 2)
 
-end:
-	for {
-		select {
-		case metric := <-metricCh:
-			metrics = append(metrics, metric.Desc().String())
-		case <-doneCh:
-			break end
+	infoLabels := make(map[string]string)
+	for _, labelPair := range metricByUUID(t, info, rtxUUID).GetLabel() {
+		infoLabels[labelPair.GetName()] = labelPair.GetValue()
+	}
+
+	assert.Equal(t, "NVIDIA GeForce RTX 2080 SUPER", infoLabels["name"])
+	assert.Equal(t, "7.5", infoLabels["compute_cap"])
+
+	fanSpeed, ok := families["aaa_fan_speed_ratio"]
+	require.True(t, ok)
+	require.Len(t, fanSpeed.GetMetric(), 2)
+	assertFloat(t, 0.38, metricByUUID(t, fanSpeed, rtxUUID).GetGauge().GetValue())
+
+	memoryUsed, ok := families["aaa_memory_used_bytes"]
+	require.True(t, ok)
+	assertFloat(t, 575*1048576, metricByUUID(t, memoryUsed, rtxUUID).GetGauge().GetValue())
+}
+
+// metricByUUID returns the metric in the family carrying the given uuid label.
+func metricByUUID(t *testing.T, family *dto.MetricFamily, uuid string) *dto.Metric {
+	t.Helper()
+
+	for _, metric := range family.GetMetric() {
+		for _, labelPair := range metric.GetLabel() {
+			if labelPair.GetName() == "uuid" && labelPair.GetValue() == uuid {
+				return metric
+			}
 		}
 	}
 
-	metricsJoined := strings.Join(metrics, "\n")
+	t.Fatalf("no metric with uuid %q in family %q", uuid, family.GetName())
 
-	assert.Len(t, metrics, 16)
-	assert.Contains(t, metricsJoined, "aaa_gpu_info")
-	assert.Contains(t, metricsJoined, "command_exit_code")
-	assert.Contains(t, metricsJoined, "aaa_name")
-	assert.Contains(t, metricsJoined, "aaa_fan_speed_ratio")
-	assert.Contains(t, metricsJoined, "aaa_memory_used_bytes")
-	assert.Contains(t, metricsJoined, "aaa_compute_cap")
-	assert.Contains(t, metricsJoined, "serial")
-	assert.Contains(t, metricsJoined, "pci_sub_device_id")
-	assert.Contains(t, metricsJoined, "index")
+	return nil
 }
 
 func TestCollectError(t *testing.T) {
@@ -295,30 +344,24 @@ func TestCollectError(t *testing.T) {
 
 	exp := newTestExporter(t, "aaa", "fan.speed,memory.used", nvidiasmi.DefaultRunFunc)
 
-	doneCh := make(chan bool)
-	metricCh := make(chan prometheus.Metric)
+	families := gatherFamilies(t, exp)
 
-	go func() {
-		exp.Collect(metricCh)
+	// one failed collection, never a successful one
+	failed, ok := families["aaa_failed_scrapes_total"]
+	require.True(t, ok)
+	assertFloat(t, 1, failed.GetMetric()[0].GetCounter().GetValue())
+	assertFloat(t, 0, gaugeValue(t, families, "aaa_last_collect_success"))
+	assertFloat(t, -1, gaugeValue(t, families, "aaa_command_exit_code"))
+	assert.GreaterOrEqual(t, gaugeValue(t, families, "aaa_last_collect_duration_seconds"), 0.0)
 
-		doneCh <- true
-	}()
+	// no success yet: the timestamp and all GPU series must be absent
+	assert.NotContains(t, families, "aaa_last_collect_success_timestamp_seconds")
+	assert.NotContains(t, families, "aaa_gpu_info")
+	assert.NotContains(t, families, "aaa_fan_speed_ratio")
 
-	var metrics []string
-
-end:
-	for {
-		select {
-		case metric := <-metricCh:
-			metrics = append(metrics, metric.Desc().String())
-		case <-doneCh:
-			break end
-		}
-	}
-
-	assert.Len(t, metrics, 2)
-	metricsJoined := strings.Join(metrics, "\n")
-
-	assert.Contains(t, metricsJoined, "aaa_failed_scrapes_total")
-	assert.Contains(t, metricsJoined, "aaa_command_exit_code")
+	// the failure counter advances per collection
+	families = gatherFamilies(t, exp)
+	failed, ok = families["aaa_failed_scrapes_total"]
+	require.True(t, ok)
+	assertFloat(t, 2, failed.GetMetric()[0].GetCounter().GetValue())
 }

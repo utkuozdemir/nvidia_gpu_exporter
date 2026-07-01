@@ -23,8 +23,11 @@ type GPUExporter struct {
 	fields                nvidiasmi.ResolvedFields
 	qFieldToMetricInfoMap map[nvidiasmi.QField]MetricInfo
 	source                collect.Source
-	failedScrapesTotal    prometheus.Counter
-	exitCode              prometheus.Gauge
+	failedScrapesDesc     *prometheus.Desc
+	exitCodeDesc          *prometheus.Desc
+	collectSuccessDesc    *prometheus.Desc
+	collectTimestampDesc  *prometheus.Desc
+	collectDurationDesc   *prometheus.Desc
 	gpuInfoDesc           *prometheus.Desc
 	logger                *slog.Logger
 	ctx                   context.Context //nolint:containedctx
@@ -51,16 +54,31 @@ func New(
 		qFieldToMetricInfoMap: qFieldToMetricInfoMap,
 		source:                source,
 		logger:                logger,
-		failedScrapesTotal: prometheus.NewCounter(prometheus.CounterOpts{
-			Namespace: prefix,
-			Name:      "failed_scrapes_total",
-			Help:      "Number of failed scrapes",
-		}),
-		exitCode: prometheus.NewGauge(prometheus.GaugeOpts{
-			Namespace: prefix,
-			Name:      "command_exit_code",
-			Help:      "Exit code of the last scrape command",
-		}),
+		failedScrapesDesc: prometheus.NewDesc(
+			prometheus.BuildFQName(prefix, "", "failed_scrapes_total"),
+			"Number of failed collections",
+			nil,
+			nil),
+		exitCodeDesc: prometheus.NewDesc(
+			prometheus.BuildFQName(prefix, "", "command_exit_code"),
+			"Exit code of the most recent nvidia-smi run",
+			nil,
+			nil),
+		collectSuccessDesc: prometheus.NewDesc(
+			prometheus.BuildFQName(prefix, "", "last_collect_success"),
+			"Whether the most recent collection succeeded (1) or not (0)",
+			nil,
+			nil),
+		collectTimestampDesc: prometheus.NewDesc(
+			prometheus.BuildFQName(prefix, "", "last_collect_success_timestamp_seconds"),
+			"Unix timestamp of the most recent successful collection",
+			nil,
+			nil),
+		collectDurationDesc: prometheus.NewDesc(
+			prometheus.BuildFQName(prefix, "", "last_collect_duration_seconds"),
+			"Duration of the most recent collection",
+			nil,
+			nil),
 		gpuInfoDesc: prometheus.NewDesc(
 			prometheus.BuildFQName(prefix, "", "gpu_info"),
 			fmt.Sprintf("A metric with a constant '1' value labeled by gpu %s.",
@@ -77,8 +95,11 @@ func (e *GPUExporter) Describe(descCh chan<- *prometheus.Desc) {
 		e.sendDesc(descCh, m.desc)
 	}
 
-	e.sendDesc(descCh, e.failedScrapesTotal.Desc())
-	e.sendDesc(descCh, e.exitCode.Desc())
+	e.sendDesc(descCh, e.failedScrapesDesc)
+	e.sendDesc(descCh, e.exitCodeDesc)
+	e.sendDesc(descCh, e.collectSuccessDesc)
+	e.sendDesc(descCh, e.collectTimestampDesc)
+	e.sendDesc(descCh, e.collectDurationDesc)
 	e.sendDesc(descCh, e.gpuInfoDesc)
 }
 
@@ -87,20 +108,57 @@ func (e *GPUExporter) Describe(descCh chan<- *prometheus.Desc) {
 func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 	snapshot := e.source.Latest(e.ctx)
 
-	e.exitCode.Set(float64(snapshot.ExitCode))
-	e.sendMetric(metricCh, e.exitCode)
+	e.renderHealth(metricCh, snapshot)
 
-	if !snapshot.Success {
-		metricCh <- e.failedScrapesTotal
-
-		e.failedScrapesTotal.Inc()
-
+	if snapshot.Table == nil {
 		return
 	}
 
 	for _, currentRow := range snapshot.Table.Rows {
 		e.renderRow(metricCh, currentRow)
 	}
+}
+
+// renderHealth emits the collection health metrics from the snapshot's
+// explicit state. Values that would be meaningless before the first collection
+// attempt or the first success are omitted rather than reported as zero.
+func (e *GPUExporter) renderHealth(metricCh chan<- prometheus.Metric, snapshot collect.Snapshot) {
+	e.sendConst(metricCh, e.failedScrapesDesc, prometheus.CounterValue, float64(snapshot.Failures))
+
+	success := 0.0
+	if snapshot.Success {
+		success = 1
+	}
+
+	e.sendConst(metricCh, e.collectSuccessDesc, prometheus.GaugeValue, success)
+
+	if snapshot.Attempted {
+		e.sendConst(metricCh, e.exitCodeDesc, prometheus.GaugeValue, float64(snapshot.ExitCode))
+		e.sendConst(metricCh, e.collectDurationDesc, prometheus.GaugeValue, snapshot.Duration.Seconds())
+	}
+
+	if !snapshot.LastSuccess.IsZero() {
+		e.sendConst(metricCh, e.collectTimestampDesc, prometheus.GaugeValue,
+			float64(snapshot.LastSuccess.Unix()))
+	}
+}
+
+// sendConst emits one constant metric, logging instead of failing if it cannot
+// be built.
+func (e *GPUExporter) sendConst(
+	metricCh chan<- prometheus.Metric,
+	desc *prometheus.Desc,
+	valueType prometheus.ValueType,
+	value float64,
+) {
+	metric, err := prometheus.NewConstMetric(desc, valueType, value)
+	if err != nil {
+		e.logger.Error("failed to create metric", "err", err, "desc", desc.String())
+
+		return
+	}
+
+	e.sendMetric(metricCh, metric)
 }
 
 // renderRow emits the gpu_info metric and one metric per queried field for a
