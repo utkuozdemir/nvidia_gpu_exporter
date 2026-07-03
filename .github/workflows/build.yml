@@ -71,3 +71,23 @@ jobs:
           PRIVATE_ACCESS_TOKEN: placeholder
       - name: Check for dirty files
         run: git diff --exit-code
+
+  chart:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.0
+        with:
+          fetch-depth: 0
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2.8.0
+      - name: Lint chart
+        run: ct lint --config .ct.yaml --all
+      - name: Check that the chart README is current
+        run: |
+          docker run --rm -v "$(pwd):/helm-docs" -u "$(id -u)" jnorwood/helm-docs:v1.14.2
+          git diff --exit-code charts/
+      - name: Create kind cluster
+        uses: helm/kind-action@v1.12.0
+      - name: Install chart
+        run: ct install --config .ct.yaml --all
