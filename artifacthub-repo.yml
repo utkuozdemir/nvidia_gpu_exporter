@@ -1,0 +1,5 @@
+# Artifact Hub repository metadata. Published to the root of the Helm
+# repository (gh-pages) by the release workflow.
+owners:
+  - name: utkuozdemir
+    email: utkuozdemir@gmail.com
