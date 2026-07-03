@@ -1,0 +1,14 @@
+# Values used by chart-testing installs in CI. The CI cluster has no GPU, so
+# the exporter serves only its health metrics there, which is enough for the
+# install and the connection test to pass. The image tag is pinned because the
+# in-repo appVersion is a placeholder.
+image:
+  tag: "1.7.0"
+serviceMonitor:
+  enabled: false
+podMonitor:
+  enabled: false
+prometheusRule:
+  enabled: false
+grafanaDashboard:
+  enabled: true
