@@ -123,9 +123,15 @@ func run(ctx context.Context, extraHandler slog.Handler) error {
 				"recent result. When 0, nvidia-smi runs synchronously on each scrape instead.").
 			Default("0").Duration()
 		collectTimeout = kingpin.Flag("collect.timeout",
-			"Maximum duration a single nvidia-smi run may take, including the runs at startup. "+
-				"0 disables the bound.").
+			"Maximum duration a single collection cycle may take, including all nvidia-smi runs "+
+				"within it and the runs at startup. 0 disables the bound.").
 			Default("10s").Duration()
+		collectComputeApps = kingpin.Flag("collect.compute-apps",
+			"Also export per-process GPU metrics from `nvidia-smi --query-compute-apps`. "+
+				"Adds one nvidia-smi run per collection cycle. When the exporter runs in a "+
+				"container, seeing other workloads' processes requires sharing the host PID "+
+				"namespace (hostPID in Kubernetes, --pid=host in Docker).").
+			Default("false").Bool()
 		shutdownOnErr = kingpin.Flag("shutdown-on-error",
 			"Shut down the exporter if there is an error querying nvidia-smi. "+
 				"When false, exporter will simply log this error and export it as a metric, but will not crash.").
@@ -171,6 +177,7 @@ func run(ctx context.Context, extraHandler slog.Handler) error {
 		qFieldsExclude:   *qFieldsExclude,
 		interval:         *collectInterval,
 		timeout:          *collectTimeout,
+		computeApps:      *collectComputeApps,
 		onFatal:          onFatal,
 	}
 
@@ -237,6 +244,7 @@ type collectConfig struct {
 	qFieldsExclude   string
 	interval         time.Duration
 	timeout          time.Duration
+	computeApps      bool
 	onFatal          func(error)
 }
 
@@ -262,9 +270,7 @@ func setupExporter(
 		return fmt.Errorf("failed to resolve query fields: %w", err)
 	}
 
-	query := func(queryCtx context.Context) (*nvidiasmi.Table, int, error) {
-		return nvidiasmi.Query(queryCtx, cfg.nvidiaSmiCommand, resolved.Query, nvidiasmi.DefaultRunFunc)
-	}
+	query := buildQueryFunc(cfg, resolved, logger)
 
 	var src collect.Source
 
@@ -279,7 +285,7 @@ func setupExporter(
 		src = collect.NewLive(query, cfg.timeout, cfg.onFatal, logger)
 	}
 
-	exp := exporter.New(ctx, exporter.DefaultPrefix, resolved, src, logger)
+	exp := exporter.New(ctx, exporter.DefaultPrefix, resolved, src, cfg.computeApps, logger)
 
 	if err = prometheus.Register(exp); err != nil {
 		return fmt.Errorf("failed to register exporter: %w", err)
@@ -290,6 +296,41 @@ func setupExporter(
 	}
 
 	return nil
+}
+
+// buildQueryFunc builds the collection cycle: the GPU query, plus the
+// per-process query when enabled. The returned error and exit code describe
+// the GPU query alone; the per-process query fails softly inside the Reading,
+// per the contract on collect.QueryFunc.
+func buildQueryFunc(
+	cfg collectConfig,
+	resolved nvidiasmi.ResolvedFields,
+	logger *slog.Logger,
+) collect.QueryFunc {
+	return func(queryCtx context.Context) (collect.Reading, int, error) {
+		table, exitCode, err := nvidiasmi.Query(
+			queryCtx, cfg.nvidiaSmiCommand, resolved.Query, nvidiasmi.DefaultRunFunc)
+		if err != nil {
+			return collect.Reading{}, exitCode, fmt.Errorf("failed to query gpus: %w", err)
+		}
+
+		reading := collect.Reading{Table: table}
+
+		if cfg.computeApps {
+			reading.AppsAttempted = true
+
+			apps, appsErr := nvidiasmi.QueryComputeApps(
+				queryCtx, cfg.nvidiaSmiCommand, nvidiasmi.DefaultRunFunc, logger)
+			if appsErr != nil {
+				reading.AppsErr = appsErr
+			} else {
+				reading.Apps = apps
+				reading.AppsSuccess = true
+			}
+		}
+
+		return reading, exitCode, nil
+	}
 }
 
 type RootHandler struct {

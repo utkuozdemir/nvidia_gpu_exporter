@@ -61,6 +61,9 @@ spec:
             - --query-field-names-exclude
             - {{ join "," . }}
             {{- end }}
+            {{- if .Values.computeApps.enabled }}
+            - --collect.compute-apps
+            {{- end }}
             - --log.level
             - {{ .Values.log.level }}
             - --log.format
@@ -108,3 +111,4 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       hostNetwork: {{ .Values.hostNetwork }}
+      hostPID: {{ .Values.hostPID }}

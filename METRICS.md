@@ -288,3 +288,27 @@ promhttp_metric_handler_requests_total{code="200"} 0
 promhttp_metric_handler_requests_total{code="500"} 0
 promhttp_metric_handler_requests_total{code="503"} 0
 ```
+
+## Per-process metrics (opt-in)
+
+With `--collect.compute-apps` enabled, the exporter additionally emits one set
+of series per process holding a compute context on a GPU (see the
+[configuration reference](CONFIGURE.md#per-process-gpu-metrics) for the
+caveats around containers, Windows and MIG):
+
+```text
+# HELP nvidia_smi_compute_app_info A metric with a constant '1' value labeled by the identity of a process with a compute context on a GPU.
+# TYPE nvidia_smi_compute_app_info gauge
+nvidia_smi_compute_app_info{pid="10291",process_name="/root/tools/memhog",uuid="00000000-0000-0000-0000-000000000000"} 1
+nvidia_smi_compute_app_info{pid="10309",process_name="./gpu_burn",uuid="00000000-0000-0000-0000-000000000000"} 1
+# HELP nvidia_smi_compute_app_used_memory_bytes GPU memory used by the process. Absent when the driver cannot report it (e.g. Windows WDDM).
+# TYPE nvidia_smi_compute_app_used_memory_bytes gauge
+nvidia_smi_compute_app_used_memory_bytes{pid="10291",process_name="/root/tools/memhog",uuid="00000000-0000-0000-0000-000000000000"} 2.690646016e+09
+nvidia_smi_compute_app_used_memory_bytes{pid="10309",process_name="./gpu_burn",uuid="00000000-0000-0000-0000-000000000000"} 2.9605494784e+10
+# HELP nvidia_smi_compute_apps Number of processes with a compute context on the GPU.
+# TYPE nvidia_smi_compute_apps gauge
+nvidia_smi_compute_apps{uuid="00000000-0000-0000-0000-000000000000"} 2
+# HELP nvidia_smi_compute_apps_last_collect_success Whether the most recent per-process collection succeeded (1) or not (0)
+# TYPE nvidia_smi_compute_apps_last_collect_success gauge
+nvidia_smi_compute_apps_last_collect_success 1
+```

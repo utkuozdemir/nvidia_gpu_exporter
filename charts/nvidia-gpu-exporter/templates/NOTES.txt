@@ -17,6 +17,14 @@ NVIDIA runtime:
   nvidia_smi_last_collect_success 0.
 {{- end }}
 
+{{- if and .Values.computeApps.enabled (not .Values.hostPID) }}
+
+WARNING: computeApps is enabled but hostPID is not. Without the host PID
+namespace the exporter only sees GPU processes visible inside its own
+container, so it will normally not report the processes of other pods and
+containers. Set hostPID=true to see them.
+{{- end }}
+
 Check the metrics:
 
   kubectl port-forward -n {{ .Release.Namespace }} ds/{{ include "nvidia-gpu-exporter.fullname" . }} {{ .Values.port }}:{{ .Values.port }}

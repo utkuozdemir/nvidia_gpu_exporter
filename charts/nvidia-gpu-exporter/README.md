@@ -30,6 +30,28 @@ helm install nvidia-gpu-exporter nvidia-gpu-exporter/nvidia-gpu-exporter \
   --set runtimeClassName=nvidia
 ```
 
+## Per-process GPU metrics
+
+Enable `computeApps.enabled` to also export per-process GPU metrics
+(`nvidia_smi_compute_app_*`). Process visibility follows the PID namespace:
+without `hostPID` the exporter only sees GPU processes visible inside its own
+container, so it normally will not report processes from other pods or
+containers. Enable `hostPID` along with it. Note that `hostPID` lets the
+exporter pod see all host process names, which some security policies forbid.
+
+```bash
+helm upgrade nvidia-gpu-exporter oci://ghcr.io/utkuozdemir/charts/nvidia-gpu-exporter \
+  --set runtimeClassName=nvidia \
+  --set computeApps.enabled=true \
+  --set hostPID=true
+```
+
+On MIG-enabled GPUs the requirements are steeper: the exporter container must
+run privileged with the `NVIDIA_MIG_MONITOR_DEVICES=all` environment variable
+(via `securityContext` and `extraEnv`) on top of `hostPID`, otherwise even
+GPU-level memory fields read `[Insufficient Permissions]`. Processes are
+attributed to the parent GPU's UUID, not to individual MIG instances.
+
 ## Upgrading from chart 1.x
 
 Chart 1.x lived in a [separate repository](https://github.com/utkuozdemir/helm-charts)
@@ -65,6 +87,7 @@ as a ConfigMap labeled for the Grafana sidecar.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | affinity | object | `{}` | Affinity for the pods |
+| computeApps.enabled | bool | `false` | Also export per-process GPU metrics (`nvidia_smi_compute_app_*`). To see processes of other pods and containers, the exporter must share the host PID namespace: enable `hostPID` along with this. Note that the pid label churns with the processes, creating short-lived series. |
 | extraArgs | list | `[]` | Extra command line arguments for the exporter, e.g. `--collect.interval=30s` |
 | extraEnv | list | `[]` | Extra environment variables for the exporter container |
 | fullnameOverride | string | `""` | Override the fully qualified app name |
@@ -73,6 +96,7 @@ as a ConfigMap labeled for the Grafana sidecar.
 | grafanaDashboard.label | string | `"grafana_dashboard"` | Label that the Grafana sidecar watches for |
 | grafanaDashboard.labelValue | string | `"1"` | Value of the sidecar label |
 | hostNetwork | bool | `false` | Use the host network for the pods |
+| hostPID | bool | `false` | Share the host PID namespace with the pods. Required for computeApps to see processes of other pods and containers, but it also lets the exporter pod see all host process names, which some security policies forbid. |
 | hostPort.enabled | bool | `false` | Expose the metrics port on the host |
 | hostPort.port | int | `9835` | The host port to expose the metrics on |
 | image.pullPolicy | string | `"IfNotPresent"` | Image pull policy |

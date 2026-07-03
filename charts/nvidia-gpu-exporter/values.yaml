@@ -41,6 +41,13 @@ queryFieldNames:
 # with `*` as a wildcard for any sequence of characters.
 queryFieldNamesExclude: []
 
+computeApps:
+  # -- Also export per-process GPU metrics (`nvidia_smi_compute_app_*`). To
+  # see processes of other pods and containers, the exporter must share the
+  # host PID namespace: enable `hostPID` along with this. Note that the pid
+  # label churns with the processes, creating short-lived series.
+  enabled: false
+
 log:
   # -- Log level: debug, info, warn, error
   level: info
@@ -52,6 +59,11 @@ extraArgs: []
 
 # -- Use the host network for the pods
 hostNetwork: false
+
+# -- Share the host PID namespace with the pods. Required for computeApps to
+# see processes of other pods and containers, but it also lets the exporter
+# pod see all host process names, which some security policies forbid.
+hostPID: false
 
 hostPort:
   # -- Expose the metrics port on the host

@@ -21,6 +21,13 @@ type Snapshot struct {
 	Success bool
 	// Table holds the GPU data of the most recent collection, nil on failure.
 	Table *nvidiasmi.Table
+	// Apps holds the per-process data, nil when disabled or failed.
+	Apps []nvidiasmi.ComputeApp
+	// AppsAttempted reports whether the collection included a per-process query.
+	AppsAttempted bool
+	// AppsSuccess reports whether that per-process query succeeded, valid only
+	// when AppsAttempted.
+	AppsSuccess bool
 	// ExitCode is the exit code of the most recent attempt, valid only when Attempted.
 	ExitCode int
 	// Duration is how long the most recent attempt took, valid only when Attempted.
@@ -38,9 +45,30 @@ type Source interface {
 	Latest(ctx context.Context) Snapshot
 }
 
-// QueryFunc runs nvidia-smi once. It is injected so the timing and staleness
-// logic can be tested without spawning a process or parsing CSV.
-type QueryFunc func(ctx context.Context) (*nvidiasmi.Table, int, error)
+// Reading is what one collection cycle produced. The GPU table is the primary
+// result: the error and exit code returned alongside a Reading belong to the
+// GPU query alone and drive all collection health (failure counting, exit
+// code, shutdown-on-error). The per-process query is secondary and fails
+// softly: its outcome lives in the Apps fields and must never fail the
+// collection.
+type Reading struct {
+	// Table holds the GPU data.
+	Table *nvidiasmi.Table
+	// Apps holds the per-process data, nil when disabled or failed.
+	Apps []nvidiasmi.ComputeApp
+	// AppsAttempted reports whether a per-process query ran (the feature is on).
+	AppsAttempted bool
+	// AppsSuccess reports whether that query succeeded, valid only when AppsAttempted.
+	AppsSuccess bool
+	// AppsErr is the per-process query's error, for source-owned logging only.
+	AppsErr error
+}
+
+// QueryFunc runs one collection cycle: the nvidia-smi GPU query, plus the
+// per-process query when enabled. It is injected so the timing and staleness
+// logic can be tested without spawning a process or parsing CSV. The returned
+// error and exit code describe the GPU query only, per the Reading contract.
+type QueryFunc func(ctx context.Context) (Reading, int, error)
 
 // collectOnce runs one collection bounded by timeout and folds the outcome
 // into a Snapshot, updating the cumulative failure count and last-success
@@ -61,7 +89,7 @@ func collectOnce(
 	defer cancel()
 
 	start := time.Now()
-	table, exitCode, err := query(callCtx)
+	reading, exitCode, err := query(callCtx)
 	now := time.Now()
 
 	snapshot := Snapshot{
@@ -89,10 +117,20 @@ func collectOnce(
 		return snapshot
 	}
 
+	// The per-process query fails softly: it is logged here (once per attempt,
+	// like a primary failure), but it does not count as a failed collection
+	// and never triggers shutdown-on-error.
+	if reading.AppsAttempted && !reading.AppsSuccess {
+		logger.Warn("failed to collect per-process data", "err", reading.AppsErr)
+	}
+
 	*lastOK = now
 
 	snapshot.Success = true
-	snapshot.Table = table
+	snapshot.Table = reading.Table
+	snapshot.Apps = reading.Apps
+	snapshot.AppsAttempted = reading.AppsAttempted
+	snapshot.AppsSuccess = reading.AppsSuccess
 	snapshot.LastSuccess = now
 	snapshot.Failures = *failures
 

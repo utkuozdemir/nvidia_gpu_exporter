@@ -30,6 +30,28 @@ helm install nvidia-gpu-exporter nvidia-gpu-exporter/nvidia-gpu-exporter \
   --set runtimeClassName=nvidia
 ```
 
+## Per-process GPU metrics
+
+Enable `computeApps.enabled` to also export per-process GPU metrics
+(`nvidia_smi_compute_app_*`). Process visibility follows the PID namespace:
+without `hostPID` the exporter only sees GPU processes visible inside its own
+container, so it normally will not report processes from other pods or
+containers. Enable `hostPID` along with it. Note that `hostPID` lets the
+exporter pod see all host process names, which some security policies forbid.
+
+```bash
+helm upgrade nvidia-gpu-exporter oci://ghcr.io/utkuozdemir/charts/nvidia-gpu-exporter \
+  --set runtimeClassName=nvidia \
+  --set computeApps.enabled=true \
+  --set hostPID=true
+```
+
+On MIG-enabled GPUs the requirements are steeper: the exporter container must
+run privileged with the `NVIDIA_MIG_MONITOR_DEVICES=all` environment variable
+(via `securityContext` and `extraEnv`) on top of `hostPID`, otherwise even
+GPU-level memory fields read `[Insufficient Permissions]`. Processes are
+attributed to the parent GPU's UUID, not to individual MIG instances.
+
 ## Upgrading from chart 1.x
 
 Chart 1.x lived in a [separate repository](https://github.com/utkuozdemir/helm-charts)
