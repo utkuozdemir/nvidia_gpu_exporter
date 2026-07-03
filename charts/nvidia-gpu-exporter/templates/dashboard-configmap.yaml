@@ -1,0 +1,16 @@
+{{- if .Values.grafanaDashboard.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "nvidia-gpu-exporter.fullname" . }}-dashboard
+  labels:
+    {{- include "nvidia-gpu-exporter.labels" . | nindent 4 }}
+    {{ .Values.grafanaDashboard.label }}: {{ .Values.grafanaDashboard.labelValue | quote }}
+  {{- with .Values.grafanaDashboard.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  nvidia-gpu-metrics.json: |-
+    {{- .Files.Get "dashboards/nvidia-gpu-metrics.json" | nindent 4 }}
+{{- end }}

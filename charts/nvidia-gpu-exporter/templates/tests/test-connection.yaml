@@ -1,0 +1,23 @@
+{{- if .Values.service.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "nvidia-gpu-exporter.fullname" . }}-test-connection
+  labels:
+    # deliberately NOT the shared chart labels: they match the DaemonSet's
+    # selector, and the DaemonSet controller deletes foreign pods matching it
+    helm.sh/chart: {{ include "nvidia-gpu-exporter.chart" . }}
+    app.kubernetes.io/component: test
+  annotations:
+    helm.sh/hook: test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command:
+        - wget
+      args:
+        - -qO-
+        - http://{{ include "nvidia-gpu-exporter.fullname" . }}:{{ .Values.service.port }}{{ .Values.telemetryPath }}
+  restartPolicy: Never
+{{- end }}

@@ -1,0 +1,65 @@
+{{ template "chart.header" . }}
+
+{{ template "chart.description" . }}
+
+The exporter runs as a DaemonSet. GPU access is injected by the NVIDIA
+container runtime: the nodes need the NVIDIA driver and the
+[NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html),
+and the pods must run with the NVIDIA runtime. Either the runtime is the
+default on your nodes, or you set `runtimeClassName` (usually to `nvidia`)
+and make sure that RuntimeClass exists.
+
+The exporter deliberately requests no `nvidia.com/gpu` resource. The device
+plugin allocates whole GPUs exclusively, so a monitoring pod that requested
+one would take that GPU away from real workloads. The runtime environment
+variable approach gives visibility of all GPUs on the node without reserving
+any of them.
+
+## Installing
+
+```bash
+helm install nvidia-gpu-exporter oci://ghcr.io/utkuozdemir/charts/nvidia-gpu-exporter \
+  --set runtimeClassName=nvidia
+```
+
+Or from the classic repository:
+
+```bash
+helm repo add nvidia-gpu-exporter https://utkuozdemir.github.io/nvidia_gpu_exporter
+helm install nvidia-gpu-exporter nvidia-gpu-exporter/nvidia-gpu-exporter \
+  --set runtimeClassName=nvidia
+```
+
+## Upgrading from chart 1.x
+
+Chart 1.x lived in a [separate repository](https://github.com/utkuozdemir/helm-charts)
+and mounted GPU device files, the `nvidia-smi` binary, and driver libraries
+from the host into the pod, running privileged. That approach broke on driver
+upgrades and non-x86 nodes. Starting with chart 2.x, GPU access comes from
+the NVIDIA container runtime and the pod runs unprivileged.
+
+What to do when upgrading:
+
+- Make sure the nodes have the NVIDIA Container Toolkit and set
+  `runtimeClassName` as described above.
+- Drop any custom `volumes`, `volumeMounts`, or `securityContext` values you
+  carried for the old hand-mounted setup.
+- The `ingress` values were removed. Use your own Ingress resource if you
+  need one, though for an internal metrics endpoint you usually do not.
+- The chart version scheme changed: the chart major is the app major plus
+  one, so chart `2.8.x` ships app `1.8.x`.
+
+## Monitoring extras
+
+All optional resources are off by default. `serviceMonitor` and `podMonitor`
+require the Prometheus Operator CRDs (enable one of them, not both).
+`prometheusRule` adds alerts on the exporter's collection health metrics: if
+the exporter also runs on nodes without GPUs, restrict the DaemonSet to GPU
+nodes via `nodeSelector` or `affinity` before enabling it, otherwise the
+alerts fire for nodes that cannot collect GPU metrics by design.
+`grafanaDashboard` ships the [Grafana dashboard](https://grafana.com/grafana/dashboards/14574)
+as a ConfigMap labeled for the Grafana sidecar.
+
+{{ template "chart.valuesSection" . }}
+
+{{ template "helm-docs.versionFooter" . }}

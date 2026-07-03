@@ -1,0 +1,327 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "image": {
+      "type": "object",
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
+        },
+        "tag": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "runtimeClassName": {
+      "type": "string"
+    },
+    "nvidiaVisibleDevices": {
+      "type": "string",
+      "minLength": 1
+    },
+    "nvidiaDriverCapabilities": {
+      "type": "string",
+      "minLength": 1
+    },
+    "extraEnv": {
+      "type": "array"
+    },
+    "port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "telemetryPath": {
+      "type": "string",
+      "pattern": "^/"
+    },
+    "nvidiaSmiCommand": {
+      "type": "string",
+      "minLength": 1
+    },
+    "queryFieldNames": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "queryFieldNamesExclude": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "log": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ]
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "logfmt",
+            "json"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "extraArgs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "hostNetwork": {
+      "type": "boolean"
+    },
+    "hostPort": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        }
+      },
+      "additionalProperties": false
+    },
+    "service": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "ClusterIP",
+            "NodePort",
+            "LoadBalancer"
+          ]
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "nodePort": {
+          "oneOf": [
+            {
+              "const": ""
+            },
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "serviceAccount": {
+      "type": "object",
+      "properties": {
+        "create": {
+          "type": "boolean"
+        },
+        "annotations": {
+          "type": "object"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "serviceMonitor": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "interval": {
+          "type": "string"
+        },
+        "scrapeTimeout": {
+          "type": "string"
+        },
+        "scheme": {
+          "type": "string",
+          "enum": [
+            "http",
+            "https"
+          ]
+        },
+        "bearerTokenFile": {
+          "type": "string"
+        },
+        "tlsConfig": {
+          "type": "object"
+        },
+        "additionalLabels": {
+          "type": "object"
+        },
+        "relabelings": {
+          "type": "array"
+        },
+        "metricRelabelings": {
+          "type": "array"
+        }
+      },
+      "additionalProperties": false
+    },
+    "podMonitor": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "interval": {
+          "type": "string"
+        },
+        "scrapeTimeout": {
+          "type": "string"
+        },
+        "additionalLabels": {
+          "type": "object"
+        },
+        "relabelings": {
+          "type": "array"
+        },
+        "metricRelabelings": {
+          "type": "array"
+        }
+      },
+      "additionalProperties": false
+    },
+    "prometheusRule": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "additionalLabels": {
+          "type": "object"
+        },
+        "collectionFailing": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "for": {
+              "type": "string"
+            },
+            "severity": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "collectionStale": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "thresholdSeconds": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "severity": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "grafanaDashboard": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "labelValue": {
+          "type": "string"
+        },
+        "annotations": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    "podAnnotations": {
+      "type": "object"
+    },
+    "podSecurityContext": {
+      "type": "object"
+    },
+    "securityContext": {
+      "type": "object"
+    },
+    "resources": {
+      "type": "object"
+    },
+    "volumes": {
+      "type": "array"
+    },
+    "volumeMounts": {
+      "type": "array"
+    },
+    "nodeSelector": {
+      "type": "object"
+    },
+    "tolerations": {
+      "type": "array"
+    },
+    "affinity": {
+      "type": "object"
+    },
+    "priorityClassName": {
+      "type": "string"
+    },
+    "imagePullSecrets": {
+      "type": "array"
+    },
+    "nameOverride": {
+      "type": "string"
+    },
+    "fullnameOverride": {
+      "type": "string"
+    },
+    "global": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}

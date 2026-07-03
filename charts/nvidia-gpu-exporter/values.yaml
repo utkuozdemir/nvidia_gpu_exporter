@@ -1,0 +1,189 @@
+image:
+  # -- Image repository
+  repository: docker.io/utkuozdemir/nvidia_gpu_exporter
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
+  # -- Image tag (if not specified, defaults to the chart's appVersion)
+  tag: ""
+
+# -- Name of the RuntimeClass to run the pods with. GPU access is injected by
+# the NVIDIA container runtime, so the pods must run with it: either set this
+# to the name of your NVIDIA RuntimeClass (usually `nvidia`), or leave it
+# empty if the NVIDIA runtime is the default runtime of your nodes. If
+# neither is the case, the exporter will come up but serve no GPU metrics,
+# reporting `nvidia_smi_last_collect_success 0`.
+runtimeClassName: ""
+
+# -- Which GPUs to make visible to the exporter. `all` monitors every GPU on the node.
+nvidiaVisibleDevices: all
+
+# -- NVIDIA driver capability tier to request. `utility` is the
+# nvidia-smi/NVML tier, which is all the exporter needs.
+nvidiaDriverCapabilities: utility
+
+# -- Extra environment variables for the exporter container
+extraEnv: []
+
+# -- Port to listen on
+port: 9835
+
+# -- The path to expose the metrics from
+telemetryPath: /metrics
+
+# -- The command to run to get `nvidia-smi` compatible output. Can be a custom path and/or args.
+nvidiaSmiCommand: nvidia-smi
+
+# -- `nvidia-smi` fields to be queried by the exporter. `AUTO` auto-detects them.
+queryFieldNames:
+  - AUTO
+
+# -- `nvidia-smi` fields to exclude from being queried. Names match literally,
+# with `*` as a wildcard for any sequence of characters.
+queryFieldNamesExclude: []
+
+log:
+  # -- Log level: debug, info, warn, error
+  level: info
+  # -- Log format: logfmt, json
+  format: logfmt
+
+# -- Extra command line arguments for the exporter, e.g. `--collect.interval=30s`
+extraArgs: []
+
+# -- Use the host network for the pods
+hostNetwork: false
+
+hostPort:
+  # -- Expose the metrics port on the host
+  enabled: false
+  # -- The host port to expose the metrics on
+  port: 9835
+
+service:
+  # -- Create a Service for the exporter
+  enabled: true
+  # -- Service type
+  type: ClusterIP
+  # -- Service port
+  port: 9835
+  # -- Node port to use for NodePort/LoadBalancer service types
+  nodePort: ""
+
+serviceAccount:
+  # -- Create a service account for the exporter
+  create: true
+  # -- Annotations to add to the service account
+  annotations: {}
+  # -- The name of the service account to use. If not set and create is true, a name is generated.
+  name: ""
+
+serviceMonitor:
+  # -- Create a Prometheus Operator ServiceMonitor (requires the Prometheus Operator CRDs)
+  enabled: false
+  # -- Scrape interval
+  interval: 15s
+  # -- Scrape timeout
+  scrapeTimeout: ""
+  # -- Scrape scheme
+  scheme: http
+  # -- Bearer token file for scraping
+  bearerTokenFile: ""
+  # -- TLS configuration for scraping
+  tlsConfig: {}
+  # -- Additional labels for the ServiceMonitor, e.g. to match your Prometheus instance's selector
+  additionalLabels: {}
+  # -- Relabelings to apply to the scraped targets
+  relabelings: []
+  # -- Relabelings to apply to the scraped metrics
+  metricRelabelings: []
+
+podMonitor:
+  # -- Create a Prometheus Operator PodMonitor instead of a ServiceMonitor
+  # (requires the Prometheus Operator CRDs). Enable either this or the
+  # ServiceMonitor, not both, otherwise the targets are scraped twice.
+  enabled: false
+  # -- Scrape interval
+  interval: 15s
+  # -- Scrape timeout
+  scrapeTimeout: ""
+  # -- Additional labels for the PodMonitor
+  additionalLabels: {}
+  # -- Relabelings to apply to the scraped targets
+  relabelings: []
+  # -- Relabelings to apply to the scraped metrics
+  metricRelabelings: []
+
+prometheusRule:
+  # -- Create a Prometheus Operator PrometheusRule with default alerts
+  # (requires the Prometheus Operator CRDs). In clusters where the exporter
+  # also runs on nodes without GPUs, restrict the DaemonSet to GPU nodes via
+  # nodeSelector or affinity before enabling this, otherwise the alerts fire
+  # for nodes that cannot collect GPU metrics by design.
+  enabled: false
+  # -- Additional labels for the PrometheusRule, e.g. to match your Prometheus instance's rule selector
+  additionalLabels: {}
+  collectionFailing:
+    # -- Alert when the most recent collection failed for some time
+    enabled: true
+    # -- How long collection must be failing before the alert fires
+    for: 10m
+    # -- Severity label of the alert
+    severity: warning
+  collectionStale:
+    # -- Alert when the last successful collection is too far in the past
+    enabled: true
+    # -- Seconds since the last successful collection before the alert fires
+    thresholdSeconds: 300
+    # -- Severity label of the alert
+    severity: warning
+
+grafanaDashboard:
+  # -- Create a ConfigMap with the Grafana dashboard, labeled for the Grafana
+  # sidecar to pick up
+  enabled: false
+  # -- Label that the Grafana sidecar watches for
+  label: grafana_dashboard
+  # -- Value of the sidecar label
+  labelValue: "1"
+  # -- Annotations for the dashboard ConfigMap, e.g. the folder annotation of the sidecar
+  annotations: {}
+
+# -- Annotations to add to the pods
+podAnnotations: {}
+
+# -- Security context for the pods
+podSecurityContext: {}
+
+# -- Security context for the exporter container. The default is unprivileged:
+# GPU access comes from the NVIDIA runtime, which requires no privileges.
+securityContext: {}
+
+# -- Resources for the exporter container
+resources: {}
+
+# -- Extra volumes for the pods
+volumes: []
+
+# -- Extra volume mounts for the exporter container
+volumeMounts: []
+
+# -- Node selector for the pods, e.g. to restrict the DaemonSet to GPU nodes
+nodeSelector: {}
+
+# -- Tolerations for the pods
+tolerations: []
+
+# -- Affinity for the pods
+affinity: {}
+
+# -- Priority class name for the pods
+priorityClassName: ""
+
+# -- Image pull secrets
+imagePullSecrets: []
+
+# -- Override the chart name
+nameOverride: ""
+
+# -- Override the fully qualified app name
+fullnameOverride: ""

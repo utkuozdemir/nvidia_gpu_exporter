@@ -1,0 +1,42 @@
+{{- if .Values.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ template "nvidia-gpu-exporter.fullname" . }}
+  labels:
+    {{- include "nvidia-gpu-exporter.labels" . | nindent 4 }}
+  {{- with .Values.prometheusRule.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  groups:
+    - name: nvidia-gpu-exporter
+      rules:
+        {{- if .Values.prometheusRule.collectionFailing.enabled }}
+        - alert: NvidiaGpuExporterCollectionFailing
+          expr: nvidia_smi_last_collect_success == 0
+          for: {{ .Values.prometheusRule.collectionFailing.for }}
+          labels:
+            severity: {{ .Values.prometheusRule.collectionFailing.severity }}
+          annotations:
+            summary: nvidia-smi collection is failing on {{ printf "{{ $labels.instance }}" }}
+            description: >-
+              The exporter on {{ printf "{{ $labels.instance }}" }} cannot collect GPU metrics.
+              Check that the node has a GPU, the NVIDIA driver works, and the pod runs with
+              the NVIDIA runtime.
+        {{- end }}
+        {{- if .Values.prometheusRule.collectionStale.enabled }}
+        - alert: NvidiaGpuExporterCollectionStale
+          expr: >-
+            time() - nvidia_smi_last_collect_success_timestamp_seconds
+            > {{ .Values.prometheusRule.collectionStale.thresholdSeconds }}
+          labels:
+            severity: {{ .Values.prometheusRule.collectionStale.severity }}
+          annotations:
+            summary: GPU metrics are stale on {{ printf "{{ $labels.instance }}" }}
+            description: >-
+              The last successful nvidia-smi collection on {{ printf "{{ $labels.instance }}" }}
+              is older than {{ .Values.prometheusRule.collectionStale.thresholdSeconds }} seconds.
+              The served GPU metrics no longer reflect the current state.
+        {{- end }}
+{{- end }}

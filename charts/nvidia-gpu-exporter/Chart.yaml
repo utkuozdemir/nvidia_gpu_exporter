@@ -1,0 +1,27 @@
+apiVersion: v2
+name: nvidia-gpu-exporter
+description: Nvidia GPU exporter for prometheus, using nvidia-smi binary to gather metrics.
+type: application
+# version and appVersion are stamped from the release tag at publish time.
+# The chart major is the app major plus one.
+version: 0.0.0-dev
+appVersion: 0.0.0-dev
+home: https://github.com/utkuozdemir/nvidia_gpu_exporter
+icon: https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/img/nvidia.png
+keywords:
+  - nvidia
+  - gpu
+  - exporter
+  - nvidia-smi
+  - prometheus
+sources:
+  - https://github.com/utkuozdemir/nvidia_gpu_exporter
+maintainers:
+  - name: Utku Özdemir
+    email: utkuozdemir@gmail.com
+    url: https://utkuozdemir.org
+annotations:
+  artifacthub.io/license: MIT
+  artifacthub.io/links: |
+    - name: Grafana dashboard
+      url: https://grafana.com/grafana/dashboards/14574
