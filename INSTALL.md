@@ -200,9 +200,8 @@ Follow these simple steps:
 The container image does not bundle any NVIDIA components. Instead, the
 [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
 injects the GPU devices, the driver libraries, and the `nvidia-smi` binary
-matched to your host driver when the container starts. This works across
-driver upgrades, GPU counts, and CPU architectures without any manual
-mounting.
+matched to your host driver when the container starts. The same setup works
+with any driver version, any number of GPUs, and any CPU architecture.
 
 You will need:
 
@@ -221,9 +220,12 @@ docker run -d \
   utkuozdemir/nvidia_gpu_exporter:1.7.0
 ```
 
-`--gpus all` selects the NVIDIA runtime and exposes all GPUs to the
-container. `NVIDIA_DRIVER_CAPABILITIES=utility` limits the injection to the
-`nvidia-smi`/NVML tier, which is all the exporter needs.
+`--gpus all` turns on Docker's NVIDIA integration for the container and
+exposes all GPUs to it. `NVIDIA_DRIVER_CAPABILITIES=utility` declares that
+the container only needs the `nvidia-smi`/NVML tier. Recent toolkit versions
+inject the full driver userspace either way, so treat the variable as
+documentation of intent and compatibility with older setups rather than a
+restriction.
 
 > [!TIP]
 > The Docker image is also available from GHCR as `ghcr.io/utkuozdemir/nvidia_gpu_exporter`
@@ -261,8 +263,8 @@ environment instead.
 
 ### Fallback without the NVIDIA Container Toolkit
 
-On hosts where the toolkit cannot be installed, the legacy approach is to
-hand-mount the pieces into the container: each `/dev/nvidia*` device, the
+On hosts where the toolkit cannot be installed, you can mount the required
+pieces into the container yourself: each `/dev/nvidia*` device, the
 `nvidia-smi` binary, and the `libnvidia-ml.so*` library files from the host
 library directory. Be warned that this is fragile: the library symlink chain
 breaks on driver upgrades, the device list varies with GPU count, and library
@@ -271,8 +273,8 @@ possible.
 
 ## Running in Kubernetes
 
-Run the exporter as a DaemonSet with the NVIDIA runtime, letting the runtime
-inject GPU access on each node, same as with Docker above.
+Run the exporter as a DaemonSet with the NVIDIA runtime. The runtime then
+injects GPU access on each node, the same way it does for Docker above.
 
 > [!IMPORTANT]
 > Do **not** request an `nvidia.com/gpu` resource for the exporter. The
@@ -318,16 +320,16 @@ toolkit and either make the NVIDIA runtime the default or create a
 `RuntimeClass` named `nvidia` and reference it as above.
 
 There is a [Helm chart](https://artifacthub.io/packages/helm/utkuozdemir/nvidia-gpu-exporter),
-but it still uses the legacy hand-mount approach and is being reworked to the
-runtime-based approach described here. Until that lands, prefer the DaemonSet
-above on new setups.
+but it currently mounts driver files from the host instead of using the
+runtime as described here, and a rework is underway. Until that lands, prefer
+the DaemonSet above on new setups.
 
 ### Managed Kubernetes (AKS and similar)
 
 GPU node images on managed Kubernetes ship the NVIDIA driver and container
 toolkit as part of the node image, so the DaemonSet approach above works
 as-is. The `nvidia.com/gpu` resource and the NVIDIA device plugin exist for
-scheduling GPU workloads, and the exporter deliberately does not participate
-in that: it monitors GPUs, it does not consume them. GPU allocation
-limitations (whole-number allocations, one workload per GPU) apply to
-workloads, not to the exporter.
+scheduling GPU workloads, and the exporter deliberately stays out of that
+mechanism since it only needs to observe the GPUs. Allocation limitations
+such as whole-number allocations and one workload per GPU therefore apply to
+your workloads but never to the exporter.
