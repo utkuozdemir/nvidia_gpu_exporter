@@ -1,4 +1,4 @@
-FROM ubuntu:26.04
+FROM debian:13-slim
 
 ARG TARGETPLATFORM
 COPY ${TARGETPLATFORM}/nvidia_gpu_exporter /usr/bin/nvidia_gpu_exporter

@@ -197,121 +197,137 @@ Follow these simple steps:
 
 ## Running in Docker
 
-You can run the exporter in a Docker container.
+The container image does not bundle any NVIDIA components. Instead, the
+[NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+injects the GPU devices, the driver libraries, and the `nvidia-smi` binary
+matched to your host driver when the container starts. This works across
+driver upgrades, GPU counts, and CPU architectures without any manual
+mounting.
 
-For it to work, you will need to ensure the following:
+You will need:
 
-- The `nvidia-smi` binary is bind-mounted from the host to the container under its `PATH`
-- The devices `/dev/nvidiaX` (depends on the number of GPUs you have) and `/dev/nvidiactl` are mounted into the container
-- The library files `libnvidia-ml.so` and `libnvidia-ml.so.1` are mounted inside the container.
-  They are typically found under `/usr/lib/x86_64-linux-gnu/` or `/usr/lib/i386-linux-gnu/`.
-  Locate them in your host to ensure you are mounting them from the correct path.
+- The NVIDIA driver installed on the host
+- The NVIDIA Container Toolkit installed and configured for Docker
 
-A working example with all these combined (tested in `Ubuntu 20.04`):
+Then run:
 
 ```bash
-$ docker run -d \
---name nvidia_smi_exporter \
---restart unless-stopped \
---device /dev/nvidiactl:/dev/nvidiactl \
---device /dev/nvidia0:/dev/nvidia0 \
--v /usr/lib/x86_64-linux-gnu/libnvidia-ml.so:/usr/lib/x86_64-linux-gnu/libnvidia-ml.so \
--v /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1 \
--v /usr/bin/nvidia-smi:/usr/bin/nvidia-smi \
--p 9835:9835 \
-utkuozdemir/nvidia_gpu_exporter:1.3.1
+docker run -d \
+  --name nvidia_gpu_exporter \
+  --restart unless-stopped \
+  --gpus all \
+  -e NVIDIA_DRIVER_CAPABILITIES=utility \
+  -p 9835:9835 \
+  utkuozdemir/nvidia_gpu_exporter:1.7.0
 ```
+
+`--gpus all` selects the NVIDIA runtime and exposes all GPUs to the
+container. `NVIDIA_DRIVER_CAPABILITIES=utility` limits the injection to the
+`nvidia-smi`/NVML tier, which is all the exporter needs.
 
 > [!TIP]
 > The Docker image is also available from GHCR as `ghcr.io/utkuozdemir/nvidia_gpu_exporter`
 
-## Running in Kubernetes
-
-Using the exporter in Kubernetes is pretty similar with running it in Docker.
-
-You can use the [official helm chart](https://artifacthub.io/packages/helm/utkuozdemir/nvidia-gpu-exporter) to install the exporter.
-
-The chart was tested on the following configuration:
-
-- Ubuntu Desktop 20.04 with Kernel `5.8.0-55-generic`
-- K3s `v1.21.1+k3s1`
-- Nvidia GeForce RTX 2080 Super
-- Nvidia Driver version `465.27`
-
-### Running on Azure Kubernetes (AKS)
-
-- NCasT4_v3 series VM node
-- Nvidia Tesla T4 GPU
-- Nvidia Driver version `470.57.02`
-- Ubuntu `18.04` node image
-
-By default, GPU resource allocations must be whole numbers. Unlike CPU and memory allocations, GPUs cannot be subdivided into smaller increments.
-
-**Multi Instance GPU (MIG) configurations are not in scope of these notes.**
-
-**The GPU allocation limitations apply to all instances of Kubernetes, regardless of vendor.**
+With docker-compose:
 
 ```yaml
-limits:
-  memory: 1Gi
-  cpu: 1000m
-  nvidia.com/gpu: "1"
+services:
+  nvidia_gpu_exporter:
+    image: utkuozdemir/nvidia_gpu_exporter:1.7.0
+    restart: unless-stopped
+    environment:
+      - NVIDIA_DRIVER_CAPABILITIES=utility
+    ports:
+      - "9835:9835"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 ```
 
-Unless the node has multiple GPUs, only a single GPU enabled deployment can run per node, assuming the node has a single GPU. This means that the `nvidia_gpu_exporter` cannot be run as a separate deployment or as a sidecar because it will be unable to schedule the GPU.
+If your setup does not support the device reservation syntax, set
+`runtime: nvidia` on the service and add `NVIDIA_VISIBLE_DEVICES=all` to the
+environment instead.
 
-#### Driver Installation
+> [!IMPORTANT]
+> The `NVIDIA_*` environment variables configure the NVIDIA runtime, they do
+> not select it. Without `--gpus`, a device reservation, or `runtime: nvidia`,
+> the container runs on the default runtime and no GPU access is injected. In
+> that case the exporter still comes up, but it serves only its own health
+> metrics with `nvidia_smi_last_collect_success 0`.
 
-This is a particularly vague area in Nvidia's fragmented documentation and while there are several articles online outlining Nvidia driver installation on Ubuntu and other distros, there is little that explains how this works in managed Kubernetes.
+### Fallback without the NVIDIA Container Toolkit
 
-Containerized setups require:
+On hosts where the toolkit cannot be installed, the legacy approach is to
+hand-mount the pieces into the container: each `/dev/nvidia*` device, the
+`nvidia-smi` binary, and the `libnvidia-ml.so*` library files from the host
+library directory. Be warned that this is fragile: the library symlink chain
+breaks on driver upgrades, the device list varies with GPU count, and library
+paths differ per distribution and architecture. Prefer the toolkit whenever
+possible.
 
-- Nvidia GPU drivers for the specific Linux distribution
-- Nvidia Container Toolkit
+## Running in Kubernetes
 
-In AKS this manifests as:
+Run the exporter as a DaemonSet with the NVIDIA runtime, letting the runtime
+inject GPU access on each node, same as with Docker above.
 
-- The AKS node Ubuntu image already packages the GPU drivers, as listed in the [AKS Ubuntu VHD release notes](https://github.com/Azure/AKS/blob/master/vhd-notes/aks-ubuntu/AKSUbuntu-1804/2022.03.03.txt).
-- The [Nvidia Device Plugin](https://docs.microsoft.com/en-us/azure/aks/gpu-cluster#manually-install-the-nvidia-device-plugin) exposes the GPU to containers requesting GPU resources.
+> [!IMPORTANT]
+> Do **not** request an `nvidia.com/gpu` resource for the exporter. The
+> Kubernetes device plugin allocates whole GPUs exclusively, so a monitoring
+> pod that requests one takes that GPU away from real workloads. The
+> environment variable approach below gives the exporter visibility of all
+> GPUs on the node without reserving any of them.
 
-Testing locally and within several VMs on Azure confirms that the drivers are packaged with the VM image and do not need to be installed separately.
+A minimal DaemonSet:
 
-For example running a Docker image locally with no GPU drivers using `docker exec -ti` confirms no drivers present in `/usr/lib/x86_64-linux-gnu`.
-
-Running the same image on an AKS GPU node reveals the following GPU driver files, confirming the driver injection using node OS image and Nvidia Driver Plugin.
-
-```bash
-libnvidia-allocator.so.1 -> libnvidia-allocator.so.470.57.02
-libnvidia-allocator.so.470.57.02
-libnvidia-cfg.so.1 -> libnvidia-cfg.so.470.57.02
-libnvidia-cfg.so.470.57.02
-libnvidia-compiler.so.470.57.02
-libnvidia-ml.so.1 -> libnvidia-ml.so.470.57.02
-libnvidia-ml.so.470.57.02
-libnvidia-opencl.so.1 -> libnvidia-opencl.so.470.57.02
-libnvidia-opencl.so.470.57.02
-libnvidia-ptxjitcompiler.so.1 -> libnvidia-ptxjitcompiler.so.470.57.02
-libnvidia-ptxjitcompiler.so.470.57.02
+```yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nvidia-gpu-exporter
+spec:
+  selector:
+    matchLabels:
+      app: nvidia-gpu-exporter
+  template:
+    metadata:
+      labels:
+        app: nvidia-gpu-exporter
+    spec:
+      runtimeClassName: nvidia # omit if the NVIDIA runtime is your cluster default
+      containers:
+        - name: exporter
+          image: utkuozdemir/nvidia_gpu_exporter:1.7.0
+          env:
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: all
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: utility
+          ports:
+            - containerPort: 9835
+              name: metrics
 ```
 
-Additionally, we can now see the following in `/usr/bin`
+The nodes need the NVIDIA driver and the NVIDIA Container Toolkit configured
+for the container runtime. Managed GPU node images (AKS, GKE, EKS) typically
+ship both. On self-managed nodes with containerd (including k3s), install the
+toolkit and either make the NVIDIA runtime the default or create a
+`RuntimeClass` named `nvidia` and reference it as above.
 
-```bash
-nvidia-cuda-mps-control
-nvidia-cuda-mps-server
-nvidia-debugdump
-nvidia-persistenced
-nvidia-smi
-```
+There is a [Helm chart](https://artifacthub.io/packages/helm/utkuozdemir/nvidia-gpu-exporter),
+but it still uses the legacy hand-mount approach and is being reworked to the
+runtime-based approach described here. Until that lands, prefer the DaemonSet
+above on new setups.
 
-#### Packaging and Deployment
+### Managed Kubernetes (AKS and similar)
 
-Taking the above into account, we can embed the `/usr/bin/nvidia_gpu_exporter` into a GPU enabled deployment through a multi-stage Docker build using the `utkuozdemir/nvidia_gpu_exporter:0.5.0` as the base image.
-
-Extending the Docker entrypoint with:
-
-`/usr/bin/nvidia_gpu_exporter --web.listen-address=:9835 --web.telemetry-path=/metrics --nvidia-smi-command=nvidia-smi --log.level=info --query-field-names=AUTO --log.format=logfmt &`
-
-This reduces overall complexity, inherits the packaged drivers & nvidia-smi, and most importantly leverages the same GPU resource request as the deployment/GPU you are trying to monitor.
-
-**It is recommended to add logic to only start the `nvidia_gpu_exporter` if an Nvidia GPU is detected.**
+GPU node images on managed Kubernetes ship the NVIDIA driver and container
+toolkit as part of the node image, so the DaemonSet approach above works
+as-is. The `nvidia.com/gpu` resource and the NVIDIA device plugin exist for
+scheduling GPU workloads, and the exporter deliberately does not participate
+in that: it monitors GPUs, it does not consume them. GPU allocation
+limitations (whole-number allocations, one workload per GPU) apply to
+workloads, not to the exporter.
