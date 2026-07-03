@@ -1,5 +1,6 @@
 # Artifact Hub repository metadata. Published to the root of the Helm
 # repository (gh-pages) by the release workflow.
+repositoryID: 47bcd417-c4a3-4719-b0ca-d732ed30e375
 owners:
   - name: utkuozdemir
     email: utkuozdemir@gmail.com
