@@ -47,3 +47,54 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PRIVATE_ACCESS_TOKEN: ${{ secrets.PRIVATE_ACCESS_TOKEN }}
+
+  helm-chart:
+    runs-on: ubuntu-24.04
+    needs: release
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.0
+      - name: Compute chart and app versions from the tag
+        run: |
+          app_version="${GITHUB_REF_NAME#v}"
+          IFS=. read -r major minor patch <<<"${app_version}"
+          chart_version="$((major + 1)).${minor}.${patch}"
+          echo "APP_VERSION=${app_version}" >>"${GITHUB_ENV}"
+          echo "CHART_VERSION=${chart_version}" >>"${GITHUB_ENV}"
+      - name: Package chart
+        run: |
+          helm package charts/nvidia-gpu-exporter \
+            --version "${CHART_VERSION}" \
+            --app-version "${APP_VERSION}" \
+            --destination /tmp/chart-dist
+          cp charts/artifacthub-repo.yml /tmp/chart-dist/
+      - name: Push chart to GHCR
+        run: |
+          helm registry login ghcr.io \
+            --username "${{ github.repository_owner }}" \
+            --password "${{ secrets.GITHUB_TOKEN }}"
+          helm push /tmp/chart-dist/*.tgz "oci://ghcr.io/${{ github.repository_owner }}/charts"
+      - name: Publish chart to the Helm repository on gh-pages
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code origin gh-pages >/dev/null; then
+            git fetch origin gh-pages:gh-pages
+            git checkout gh-pages
+          else
+            git checkout --orphan gh-pages
+            git rm -rfq .
+          fi
+          cp /tmp/chart-dist/*.tgz .
+          cp /tmp/chart-dist/artifacthub-repo.yml .
+          if [ -f index.yaml ]; then
+            helm repo index . --url "https://utkuozdemir.github.io/nvidia_gpu_exporter" --merge index.yaml
+          else
+            helm repo index . --url "https://utkuozdemir.github.io/nvidia_gpu_exporter"
+          fi
+          git add ./*.tgz index.yaml artifacthub-repo.yml
+          git commit -m "publish chart ${CHART_VERSION} (app ${APP_VERSION})"
+          git push origin gh-pages
