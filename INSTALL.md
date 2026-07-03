@@ -283,7 +283,20 @@ injects GPU access on each node, the same way it does for Docker above.
 > environment variable approach below gives the exporter visibility of all
 > GPUs on the node without reserving any of them.
 
-A minimal DaemonSet:
+The easiest way is the [Helm chart](charts/nvidia-gpu-exporter), which lives
+in this repository and implements all of the above:
+
+```bash
+helm install nvidia-gpu-exporter oci://ghcr.io/utkuozdemir/charts/nvidia-gpu-exporter \
+  --set runtimeClassName=nvidia
+```
+
+See the [chart README](charts/nvidia-gpu-exporter/README.md) for the full
+values reference, the optional monitoring extras (ServiceMonitor, PodMonitor,
+alerts, the Grafana dashboard), and the migration notes if you are coming
+from the old chart repository.
+
+If you prefer not to use Helm, a minimal DaemonSet:
 
 ```yaml
 apiVersion: apps/v1
@@ -318,11 +331,6 @@ for the container runtime. Managed GPU node images (AKS, GKE, EKS) typically
 ship both. On self-managed nodes with containerd (including k3s), install the
 toolkit and either make the NVIDIA runtime the default or create a
 `RuntimeClass` named `nvidia` and reference it as above.
-
-There is a [Helm chart](https://artifacthub.io/packages/helm/utkuozdemir/nvidia-gpu-exporter),
-but it currently mounts driver files from the host instead of using the
-runtime as described here, and a rework is underway. Until that lands, prefer
-the DaemonSet above on new setups.
 
 ### Managed Kubernetes (AKS and similar)
 
