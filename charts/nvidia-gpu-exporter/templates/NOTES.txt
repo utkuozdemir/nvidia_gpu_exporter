@@ -1,0 +1,29 @@
+{{ .Chart.Name }} {{ .Chart.Version }} (app version {{ .Chart.AppVersion }}) is installed.
+
+GPU access is injected by the NVIDIA container runtime. The nodes need the
+NVIDIA driver and the NVIDIA Container Toolkit, and the pods must run with the
+NVIDIA runtime:
+
+{{- if .Values.runtimeClassName }}
+
+  runtimeClassName is set to {{ .Values.runtimeClassName | quote }}. Make sure a
+  RuntimeClass with that name exists and its handler is configured on the nodes.
+{{- else }}
+
+  runtimeClassName is NOT set, so the exporter relies on the NVIDIA runtime
+  being the default runtime of your nodes. If it is not, set
+  runtimeClassName=nvidia (and create the RuntimeClass if needed), otherwise
+  the exporter will serve no GPU metrics and report
+  nvidia_smi_last_collect_success 0.
+{{- end }}
+
+Check the metrics:
+
+  kubectl port-forward -n {{ .Release.Namespace }} ds/{{ include "nvidia-gpu-exporter.fullname" . }} {{ .Values.port }}:{{ .Values.port }}
+  curl localhost:{{ .Values.port }}{{ .Values.telemetryPath }}
+
+UPGRADING FROM CHART 1.x: the chart no longer mounts GPU device files and
+driver libraries from the host and no longer runs privileged. GPU access now
+comes from the NVIDIA container runtime (see above). If you carried custom
+values for volumes, volumeMounts, or securityContext to support the old
+hand-mounted setup, you can drop them. The ingress support was removed.
