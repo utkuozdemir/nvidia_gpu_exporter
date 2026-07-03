@@ -39,10 +39,10 @@ func TestCachedServesCacheWithoutRecollecting(t *testing.T) {
 
 	var calls atomic.Int64
 
-	query := func(_ context.Context) (*nvidiasmi.Table, int, error) {
+	query := func(_ context.Context) (collect.Reading, int, error) {
 		calls.Add(1)
 
-		return table, 0, nil
+		return collect.Reading{Table: table}, 0, nil
 	}
 
 	cached := collect.NewCached(query, time.Hour, 0, nil, slogt.New(t))
@@ -85,10 +85,10 @@ func TestCachedCollectsOnTicks(t *testing.T) {
 
 	var calls atomic.Int64
 
-	query := func(_ context.Context) (*nvidiasmi.Table, int, error) {
+	query := func(_ context.Context) (collect.Reading, int, error) {
 		calls.Add(1)
 
-		return &nvidiasmi.Table{}, 0, nil
+		return collect.Reading{Table: &nvidiasmi.Table{}}, 0, nil
 	}
 
 	cached := collect.NewCached(query, 10*time.Millisecond, 0, nil, slogt.New(t))
@@ -103,12 +103,12 @@ func TestCachedFirstScrapeBlocksUntilFirstCollection(t *testing.T) {
 	t.Parallel()
 
 	release := make(chan struct{})
-	query := func(ctx context.Context) (*nvidiasmi.Table, int, error) {
+	query := func(ctx context.Context) (collect.Reading, int, error) {
 		select {
 		case <-release:
-			return &nvidiasmi.Table{}, 0, nil
+			return collect.Reading{Table: &nvidiasmi.Table{}}, 0, nil
 		case <-ctx.Done():
-			return nil, -1, ctx.Err()
+			return collect.Reading{}, -1, ctx.Err()
 		}
 	}
 
@@ -137,11 +137,11 @@ func TestCachedFirstScrapeBlocksUntilFirstCollection(t *testing.T) {
 func TestCachedNotReadyWhenScrapeWinsTheRace(t *testing.T) {
 	t.Parallel()
 
-	query := func(ctx context.Context) (*nvidiasmi.Table, int, error) {
+	query := func(ctx context.Context) (collect.Reading, int, error) {
 		// never completes on its own; unblocked only by shutdown cancellation
 		<-ctx.Done()
 
-		return nil, -1, ctx.Err()
+		return collect.Reading{}, -1, ctx.Err()
 	}
 
 	cached := collect.NewCached(query, time.Hour, 0, nil, slogt.New(t))
@@ -200,10 +200,10 @@ func TestCachedRunStopsOnCancel(t *testing.T) {
 func TestCachedTimeoutBoundsCollection(t *testing.T) {
 	t.Parallel()
 
-	query := func(ctx context.Context) (*nvidiasmi.Table, int, error) {
+	query := func(ctx context.Context) (collect.Reading, int, error) {
 		<-ctx.Done()
 
-		return nil, -1, ctx.Err()
+		return collect.Reading{}, -1, ctx.Err()
 	}
 
 	cached := collect.NewCached(query, time.Hour, 50*time.Millisecond, nil, slogt.New(t))

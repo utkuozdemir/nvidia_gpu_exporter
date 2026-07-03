@@ -19,8 +19,8 @@ import (
 var errQueryFailed = errors.New("query failed")
 
 func staticQuery(table *nvidiasmi.Table, exitCode int, err error) collect.QueryFunc {
-	return func(_ context.Context) (*nvidiasmi.Table, int, error) {
-		return table, exitCode, err
+	return func(_ context.Context) (collect.Reading, int, error) {
+		return collect.Reading{Table: table}, exitCode, err
 	}
 }
 
@@ -75,13 +75,13 @@ func TestLiveFailuresAccumulateAndLastSuccessSticks(t *testing.T) {
 
 	table := &nvidiasmi.Table{}
 	calls := 0
-	query := func(_ context.Context) (*nvidiasmi.Table, int, error) {
+	query := func(_ context.Context) (collect.Reading, int, error) {
 		calls++
 		if calls == 1 {
-			return table, 0, nil
+			return collect.Reading{Table: table}, 0, nil
 		}
 
-		return nil, -1, errQueryFailed
+		return collect.Reading{}, -1, errQueryFailed
 	}
 
 	live := collect.NewLive(query, 0, nil, slogt.New(t))
@@ -103,10 +103,10 @@ func TestLiveFailuresAccumulateAndLastSuccessSticks(t *testing.T) {
 func TestLiveTimeoutBecomesFailure(t *testing.T) {
 	t.Parallel()
 
-	query := func(ctx context.Context) (*nvidiasmi.Table, int, error) {
+	query := func(ctx context.Context) (collect.Reading, int, error) {
 		<-ctx.Done()
 
-		return nil, -1, ctx.Err()
+		return collect.Reading{}, -1, ctx.Err()
 	}
 
 	live := collect.NewLive(query, 50*time.Millisecond, nil, slogt.New(t))
@@ -122,7 +122,7 @@ func TestLiveTimeoutBecomesFailure(t *testing.T) {
 func TestLiveZeroTimeoutDisablesDeadline(t *testing.T) {
 	t.Parallel()
 
-	query := func(ctx context.Context) (*nvidiasmi.Table, int, error) {
+	query := func(ctx context.Context) (collect.Reading, int, error) {
 		// with a zero timeout the context must not carry a deadline; a plain
 		// context.WithTimeout(ctx, 0) would be expired already
 		_, hasDeadline := ctx.Deadline()
@@ -130,7 +130,7 @@ func TestLiveZeroTimeoutDisablesDeadline(t *testing.T) {
 
 		require.NoError(t, ctx.Err())
 
-		return &nvidiasmi.Table{}, 0, nil
+		return collect.Reading{Table: &nvidiasmi.Table{}}, 0, nil
 	}
 
 	live := collect.NewLive(query, 0, nil, slogt.New(t))
@@ -185,10 +185,10 @@ func TestLiveOnFatalNotFiredOnTimeout(t *testing.T) {
 
 	// the query returns an exit error, but only after the collection timeout
 	// fired: the kill is ours, so shutdown-on-error must not trigger
-	query := func(ctx context.Context) (*nvidiasmi.Table, int, error) {
+	query := func(ctx context.Context) (collect.Reading, int, error) {
 		<-ctx.Done()
 
-		return nil, 3, exitErr
+		return collect.Reading{}, 3, exitErr
 	}
 
 	live := collect.NewLive(query, 50*time.Millisecond, onFatal, slogt.New(t))
@@ -198,6 +198,61 @@ func TestLiveOnFatalNotFiredOnTimeout(t *testing.T) {
 	require.NoError(t, gotFatal)
 }
 
+func TestLiveAppsSoftFailure(t *testing.T) {
+	t.Parallel()
+
+	// the per-process query failing must not fail the collection: no failure
+	// counted, shutdown-on-error not fired, GPU data still served
+	table := &nvidiasmi.Table{}
+	exitErr := realExitError(t)
+	query := func(_ context.Context) (collect.Reading, int, error) {
+		return collect.Reading{
+			Table:         table,
+			AppsAttempted: true,
+			AppsSuccess:   false,
+			AppsErr:       exitErr,
+		}, 0, nil
+	}
+
+	var gotFatal error
+
+	live := collect.NewLive(query, 0, func(err error) { gotFatal = err }, slogt.New(t))
+
+	snapshot := live.Latest(t.Context())
+
+	assert.True(t, snapshot.Success)
+	assert.Same(t, table, snapshot.Table)
+	assert.Equal(t, uint64(0), snapshot.Failures)
+	assert.True(t, snapshot.AppsAttempted)
+	assert.False(t, snapshot.AppsSuccess)
+	assert.Nil(t, snapshot.Apps)
+	require.NoError(t, snapshot.Err)
+	require.NoError(t, gotFatal)
+}
+
+func TestLiveAppsSuccessCarriesApps(t *testing.T) {
+	t.Parallel()
+
+	apps := []nvidiasmi.ComputeApp{{GPUUUID: "abc", PID: "42", ProcessName: "./gpu_burn", UsedMemory: "10 MiB"}}
+	query := func(_ context.Context) (collect.Reading, int, error) {
+		return collect.Reading{
+			Table:         &nvidiasmi.Table{},
+			Apps:          apps,
+			AppsAttempted: true,
+			AppsSuccess:   true,
+		}, 0, nil
+	}
+
+	live := collect.NewLive(query, 0, nil, slogt.New(t))
+
+	snapshot := live.Latest(t.Context())
+
+	assert.True(t, snapshot.Success)
+	assert.True(t, snapshot.AppsAttempted)
+	assert.True(t, snapshot.AppsSuccess)
+	assert.Equal(t, apps, snapshot.Apps)
+}
+
 func TestLiveSerializesConcurrentCalls(t *testing.T) {
 	t.Parallel()
 
@@ -205,7 +260,7 @@ func TestLiveSerializesConcurrentCalls(t *testing.T) {
 
 	firstIn := make(chan struct{}, 1)
 	release := make(chan struct{})
-	query := func(_ context.Context) (*nvidiasmi.Table, int, error) {
+	query := func(_ context.Context) (collect.Reading, int, error) {
 		if inFlight.Add(1) > 1 {
 			overlaps.Add(1)
 		}
@@ -219,7 +274,7 @@ func TestLiveSerializesConcurrentCalls(t *testing.T) {
 
 		inFlight.Add(-1)
 
-		return &nvidiasmi.Table{}, 0, nil
+		return collect.Reading{Table: &nvidiasmi.Table{}}, 0, nil
 	}
 
 	live := collect.NewLive(query, 0, nil, slogt.New(t))

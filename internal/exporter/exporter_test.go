@@ -183,13 +183,53 @@ func newTestExporter(
 	resolved, err := nvidiasmi.ResolveFields(ctx, "bbb", qFieldsRaw, "", 0, nvidiasmi.DefaultRunFunc, logger)
 	require.NoError(t, err)
 
-	query := func(queryCtx context.Context) (*nvidiasmi.Table, int, error) {
-		return nvidiasmi.Query(queryCtx, "bbb", resolved.Query, run)
+	query := func(queryCtx context.Context) (collect.Reading, int, error) {
+		table, exitCode, err := nvidiasmi.Query(queryCtx, "bbb", resolved.Query, run)
+		if err != nil {
+			return collect.Reading{}, exitCode, fmt.Errorf("query failed: %w", err)
+		}
+
+		return collect.Reading{Table: table}, exitCode, nil
 	}
 
 	source := collect.NewLive(query, 0, nil, logger)
 
-	return exporter.New(ctx, prefix, resolved, source, logger)
+	return exporter.New(ctx, prefix, resolved, source, false, logger)
+}
+
+// staticSource serves a fixed snapshot, for driving the render paths directly.
+type staticSource struct {
+	snapshot collect.Snapshot
+}
+
+func (s *staticSource) Latest(_ context.Context) collect.Snapshot {
+	return s.snapshot
+}
+
+// newAppsExporter wires an exporter with per-process metrics enabled to a
+// fixed snapshot.
+func newAppsExporter(t *testing.T, snapshot collect.Snapshot) *exporter.GPUExporter {
+	t.Helper()
+
+	logger := slogt.New(t)
+
+	resolved, err := nvidiasmi.ResolveFields(
+		t.Context(), "bbb", "fan.speed", "", 0, nvidiasmi.DefaultRunFunc, logger)
+	require.NoError(t, err)
+
+	return exporter.New(t.Context(), "aaa", resolved, &staticSource{snapshot: snapshot}, true, logger)
+}
+
+// gpuTable builds a minimal one-GPU table carrying just the uuid cell.
+func gpuTable(uuid string) *nvidiasmi.Table {
+	cell := nvidiasmi.Cell{QField: nvidiasmi.UUIDQField, RField: "uuid", RawValue: uuid}
+
+	return &nvidiasmi.Table{
+		Rows: []nvidiasmi.Row{{
+			QFieldToCells: map[nvidiasmi.QField]nvidiasmi.Cell{nvidiasmi.UUIDQField: cell},
+			Cells:         []nvidiasmi.Cell{cell},
+		}},
+	}
 }
 
 func TestDescribe(t *testing.T) {
@@ -382,14 +422,14 @@ func TestCollectDeliversMetricsOnFatalError(t *testing.T) {
 	require.NoError(t, err)
 
 	// a real non-zero exit, so the shutdown callback fires
-	query := func(queryCtx context.Context) (*nvidiasmi.Table, int, error) {
+	query := func(queryCtx context.Context) (collect.Reading, int, error) {
 		runErr := exec.CommandContext(queryCtx, "sh", "-c", "exit 3").Run()
 
-		return nil, 3, fmt.Errorf("query failed: %w", runErr)
+		return collect.Reading{}, 3, fmt.Errorf("query failed: %w", runErr)
 	}
 
 	source := collect.NewLive(query, 0, func(fatalErr error) { cancel(fatalErr) }, logger)
-	exp := exporter.New(ctx, "aaa", resolved, source, logger)
+	exp := exporter.New(ctx, "aaa", resolved, source, false, logger)
 
 	families := gatherFamilies(t, exp)
 
@@ -401,4 +441,101 @@ func TestCollectDeliversMetricsOnFatalError(t *testing.T) {
 	assertFloat(t, 1, failed.GetMetric()[0].GetCounter().GetValue())
 	assertFloat(t, 0, gaugeValue(t, families, "aaa_last_collect_success"))
 	assertFloat(t, 3, gaugeValue(t, families, "aaa_command_exit_code"))
+}
+
+func appsSnapshot(table *nvidiasmi.Table, apps []nvidiasmi.ComputeApp, appsSuccess bool) collect.Snapshot {
+	return collect.Snapshot{
+		Attempted:     true,
+		Success:       true,
+		Table:         table,
+		Apps:          apps,
+		AppsAttempted: true,
+		AppsSuccess:   appsSuccess,
+		LastSuccess:   time.Now(),
+	}
+}
+
+func TestCollectComputeApps(t *testing.T) {
+	t.Parallel()
+
+	apps := []nvidiasmi.ComputeApp{
+		{GPUUUID: "abc", PID: "42", ProcessName: "/usr/bin/burn", UsedMemory: "10 MiB"},
+		{GPUUUID: "abc", PID: "43", ProcessName: `C:\Windows\System32\dwm.exe`, UsedMemory: "[N/A]"},
+	}
+
+	exp := newAppsExporter(t, appsSnapshot(gpuTable("GPU-ABC"), apps, true))
+	families := gatherFamilies(t, exp)
+
+	assertFloat(t, 1, gaugeValue(t, families, "aaa_compute_apps_last_collect_success"))
+
+	info, ok := families["aaa_compute_app_info"]
+	require.True(t, ok)
+	require.Len(t, info.GetMetric(), 2)
+
+	// the [N/A] memory value is an expected state: info present, memory absent
+	memory, ok := families["aaa_compute_app_used_memory_bytes"]
+	require.True(t, ok)
+	require.Len(t, memory.GetMetric(), 1)
+	assertFloat(t, 10*1024*1024, memory.GetMetric()[0].GetGauge().GetValue())
+
+	labels := map[string]string{}
+	for _, pair := range memory.GetMetric()[0].GetLabel() {
+		labels[pair.GetName()] = pair.GetValue()
+	}
+
+	assert.Equal(t, map[string]string{
+		"uuid": "abc", "pid": "42", "process_name": "/usr/bin/burn",
+	}, labels)
+
+	assertFloat(t, 2, gaugeValue(t, families, "aaa_compute_apps"))
+}
+
+func TestCollectComputeAppsZeroProcesses(t *testing.T) {
+	t.Parallel()
+
+	exp := newAppsExporter(t, appsSnapshot(gpuTable("GPU-DEF"), nil, true))
+	families := gatherFamilies(t, exp)
+
+	// an idle GPU reports an explicit 0, distinguishable from a failed query
+	assertFloat(t, 1, gaugeValue(t, families, "aaa_compute_apps_last_collect_success"))
+	assertFloat(t, 0, gaugeValue(t, families, "aaa_compute_apps"))
+	assert.NotContains(t, families, "aaa_compute_app_info")
+	assert.NotContains(t, families, "aaa_compute_app_used_memory_bytes")
+}
+
+func TestCollectComputeAppsFailureSuppressesSeries(t *testing.T) {
+	t.Parallel()
+
+	// a failed per-process query must not look like an idle GPU: only the
+	// success gauge is emitted, and no count series reads 0
+	exp := newAppsExporter(t, appsSnapshot(gpuTable("GPU-ABC"), nil, false))
+	families := gatherFamilies(t, exp)
+
+	assertFloat(t, 0, gaugeValue(t, families, "aaa_compute_apps_last_collect_success"))
+	assert.NotContains(t, families, "aaa_compute_apps")
+	assert.NotContains(t, families, "aaa_compute_app_info")
+	assert.NotContains(t, families, "aaa_compute_app_used_memory_bytes")
+}
+
+func TestCollectComputeAppsDisabled(t *testing.T) {
+	t.Parallel()
+
+	logger := slogt.New(t)
+
+	resolved, err := nvidiasmi.ResolveFields(
+		t.Context(), "bbb", "fan.speed", "", 0, nvidiasmi.DefaultRunFunc, logger)
+	require.NoError(t, err)
+
+	// even a snapshot carrying apps data produces no per-process series when
+	// the feature is off
+	apps := []nvidiasmi.ComputeApp{{GPUUUID: "abc", PID: "42", ProcessName: "x", UsedMemory: "1 MiB"}}
+	source := &staticSource{snapshot: appsSnapshot(gpuTable("GPU-ABC"), apps, true)}
+	exp := exporter.New(t.Context(), "aaa", resolved, source, false, logger)
+
+	families := gatherFamilies(t, exp)
+
+	assert.NotContains(t, families, "aaa_compute_apps_last_collect_success")
+	assert.NotContains(t, families, "aaa_compute_apps")
+	assert.NotContains(t, families, "aaa_compute_app_info")
+	assert.NotContains(t, families, "aaa_compute_app_used_memory_bytes")
 }

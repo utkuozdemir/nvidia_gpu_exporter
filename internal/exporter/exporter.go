@@ -15,6 +15,9 @@ import (
 
 const DefaultPrefix = "nvidia_smi"
 
+// computeAppLabels is the label set on the per-process metrics.
+var computeAppLabels = []string{"uuid", "pid", "process_name"}
+
 // GPUExporter renders the latest collection as Prometheus metrics. It is
 // agnostic to how the reading is produced: the source may collect inline on
 // each scrape or serve a cached result from background collection.
@@ -29,15 +32,23 @@ type GPUExporter struct {
 	collectTimestampDesc  *prometheus.Desc
 	collectDurationDesc   *prometheus.Desc
 	gpuInfoDesc           *prometheus.Desc
+	appInfoDesc           *prometheus.Desc
+	appMemoryDesc         *prometheus.Desc
+	appCountDesc          *prometheus.Desc
+	appsSuccessDesc       *prometheus.Desc
 	logger                *slog.Logger
 	ctx                   context.Context //nolint:containedctx
 }
 
+// New builds the exporter. The per-process descriptors exist only when
+// computeApps is set: with the feature off they stay nil and the exporter
+// neither describes nor emits any per-process series.
 func New(
 	ctx context.Context,
 	prefix string,
 	fields nvidiasmi.ResolvedFields,
 	source collect.Source,
+	computeApps bool,
 	logger *slog.Logger,
 ) *GPUExporter {
 	qFieldToMetricInfoMap := BuildQFieldToMetricInfoMap(prefix, fields.Returned, logger)
@@ -47,12 +58,18 @@ func New(
 		infoLabels[i] = infoField.Label
 	}
 
+	appInfoDesc, appMemoryDesc, appCountDesc, appsSuccessDesc := newComputeAppDescs(prefix, computeApps)
+
 	return &GPUExporter{
 		ctx:                   ctx,
 		prefix:                prefix,
 		fields:                fields,
 		qFieldToMetricInfoMap: qFieldToMetricInfoMap,
 		source:                source,
+		appInfoDesc:           appInfoDesc,
+		appMemoryDesc:         appMemoryDesc,
+		appCountDesc:          appCountDesc,
+		appsSuccessDesc:       appsSuccessDesc,
 		logger:                logger,
 		failedScrapesDesc: prometheus.NewDesc(
 			prometheus.BuildFQName(prefix, "", "failed_scrapes_total"),
@@ -88,6 +105,40 @@ func New(
 	}
 }
 
+// newComputeAppDescs builds the per-process metric descriptors (info, memory,
+// count, success), all nil when the feature is disabled.
+func newComputeAppDescs(
+	prefix string,
+	enabled bool,
+) (*prometheus.Desc, *prometheus.Desc, *prometheus.Desc, *prometheus.Desc) {
+	if !enabled {
+		return nil, nil, nil, nil
+	}
+
+	info := prometheus.NewDesc(
+		prometheus.BuildFQName(prefix, "", "compute_app_info"),
+		"A metric with a constant '1' value labeled by the identity of a process with a compute context on a GPU.",
+		computeAppLabels,
+		nil)
+	memory := prometheus.NewDesc(
+		prometheus.BuildFQName(prefix, "", "compute_app_used_memory_bytes"),
+		"GPU memory used by the process. Absent when the driver cannot report it (e.g. Windows WDDM).",
+		computeAppLabels,
+		nil)
+	count := prometheus.NewDesc(
+		prometheus.BuildFQName(prefix, "", "compute_apps"),
+		"Number of processes with a compute context on the GPU.",
+		[]string{"uuid"},
+		nil)
+	success := prometheus.NewDesc(
+		prometheus.BuildFQName(prefix, "", "compute_apps_last_collect_success"),
+		"Whether the most recent per-process collection succeeded (1) or not (0)",
+		nil,
+		nil)
+
+	return info, memory, count, success
+}
+
 // Describe describes all the metrics ever exported by the exporter. It
 // implements prometheus.Collector.
 func (e *GPUExporter) Describe(descCh chan<- *prometheus.Desc) {
@@ -101,6 +152,13 @@ func (e *GPUExporter) Describe(descCh chan<- *prometheus.Desc) {
 	e.sendDesc(descCh, e.collectTimestampDesc)
 	e.sendDesc(descCh, e.collectDurationDesc)
 	e.sendDesc(descCh, e.gpuInfoDesc)
+
+	if e.appInfoDesc != nil {
+		e.sendDesc(descCh, e.appInfoDesc)
+		e.sendDesc(descCh, e.appMemoryDesc)
+		e.sendDesc(descCh, e.appCountDesc)
+		e.sendDesc(descCh, e.appsSuccessDesc)
+	}
 }
 
 // Collect fetches the latest reading from the source and delivers it as
@@ -117,6 +175,94 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 	for _, currentRow := range snapshot.Table.Rows {
 		e.renderRow(metricCh, currentRow)
 	}
+
+	e.renderApps(metricCh, snapshot)
+}
+
+// renderApps emits the per-process metrics. Failure must not look like idle:
+// when the per-process query failed, only the success gauge (0) is emitted and
+// every per-process series is suppressed, including the zero-filled per-GPU
+// count, so "no processes" (count 0, success 1) stays distinguishable from
+// "could not observe the process list" (no count series, success 0).
+func (e *GPUExporter) renderApps(metricCh chan<- prometheus.Metric, snapshot collect.Snapshot) {
+	if e.appInfoDesc == nil || !snapshot.AppsAttempted {
+		return
+	}
+
+	success := 0.0
+	if snapshot.AppsSuccess {
+		success = 1
+	}
+
+	e.sendConst(metricCh, e.appsSuccessDesc, prometheus.GaugeValue, success)
+
+	if !snapshot.AppsSuccess {
+		return
+	}
+
+	// zero-fill the per-GPU count from the GPU table, so an idle GPU reports
+	// an explicit 0 instead of a missing series
+	counts := make(map[string]float64, len(snapshot.Table.Rows))
+	for _, row := range snapshot.Table.Rows {
+		counts[nvidiasmi.NormalizeUUID(row.QFieldToCells[nvidiasmi.UUIDQField].RawValue)] = 0
+	}
+
+	for _, app := range snapshot.Apps {
+		counts[app.GPUUUID]++
+
+		e.renderApp(metricCh, app)
+	}
+
+	for uuid, count := range counts {
+		metric, err := prometheus.NewConstMetric(e.appCountDesc, prometheus.GaugeValue, count, uuid)
+		if err != nil {
+			e.logger.Error("failed to create compute apps count metric", "err", err, "uuid", uuid)
+
+			continue
+		}
+
+		e.sendMetric(metricCh, metric)
+	}
+}
+
+// renderApp emits the info and memory metrics for a single process.
+func (e *GPUExporter) renderApp(metricCh chan<- prometheus.Metric, app nvidiasmi.ComputeApp) {
+	e.sendAppMetric(metricCh, e.appInfoDesc, 1, app)
+
+	if nvidiasmi.IsKnownAbsentValue(app.UsedMemory) {
+		// an expected state ("[N/A]" on Windows WDDM, "[Insufficient
+		// Permissions]" in restricted containers), reported for every
+		// process on every collection: skip without logging
+		return
+	}
+
+	num, err := nvidiasmi.TransformRawValue(app.UsedMemory, nvidiasmi.UsedMemoryMultiplier)
+	if err != nil {
+		e.logger.Debug("failed to transform per-process memory value",
+			"err", err, "raw_value", app.UsedMemory, "pid", app.PID)
+
+		return
+	}
+
+	e.sendAppMetric(metricCh, e.appMemoryDesc, num, app)
+}
+
+// sendAppMetric emits one per-process gauge carrying the compute app labels.
+func (e *GPUExporter) sendAppMetric(
+	metricCh chan<- prometheus.Metric,
+	desc *prometheus.Desc,
+	value float64,
+	app nvidiasmi.ComputeApp,
+) {
+	metric, err := prometheus.NewConstMetric(desc, prometheus.GaugeValue, value,
+		app.GPUUUID, app.PID, app.ProcessName)
+	if err != nil {
+		e.logger.Error("failed to create per-process metric", "err", err, "pid", app.PID)
+
+		return
+	}
+
+	e.sendMetric(metricCh, metric)
 }
 
 // renderHealth emits the collection health metrics from the snapshot's
@@ -166,10 +312,7 @@ func (e *GPUExporter) sendConst(
 // renderRow emits the gpu_info metric and one metric per queried field for a
 // single GPU row.
 func (e *GPUExporter) renderRow(metricCh chan<- prometheus.Metric, row nvidiasmi.Row) {
-	uuid := strings.TrimPrefix(
-		strings.ToLower(row.QFieldToCells[nvidiasmi.UUIDQField].RawValue),
-		"gpu-",
-	)
+	uuid := nvidiasmi.NormalizeUUID(row.QFieldToCells[nvidiasmi.UUIDQField].RawValue)
 
 	labelValues := make([]string, len(e.fields.Info))
 

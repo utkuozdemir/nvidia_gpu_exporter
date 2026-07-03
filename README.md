@@ -37,6 +37,7 @@ However, this one is written in Go to produce a single, static binary.
 - Doesn't even need to run the monitored machine: can be configured to execute `nvidia-smi` command remotely
 - No need for a Docker or Kubernetes environment
 - Auto-discovery of the metric fields `nvidia-smi` can expose (future-compatible)
+- Optional per-process GPU metrics: see which process uses how much GPU memory
 - Comes with its own [Grafana dashboard](https://grafana.com/grafana/dashboards/14574)
 
 ## Visualization

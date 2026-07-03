@@ -52,9 +52,17 @@ Flags:
                                 background, with scrapes serving the most recent
                                 result. When 0, nvidia-smi runs synchronously on
                                 each scrape instead.
-      --collect.timeout=10s     Maximum duration a single nvidia-smi run may
-                                take, including the runs at startup. 0 disables
-                                the bound.
+      --collect.timeout=10s     Maximum duration a single collection cycle may
+                                take, including all nvidia-smi runs within it
+                                and the runs at startup. 0 disables the bound.
+      --[no-]collect.compute-apps
+                                Also export per-process GPU metrics
+                                from `nvidia-smi --query-compute-apps`.
+                                Adds one nvidia-smi run per collection cycle.
+                                When the exporter runs in a container, seeing
+                                other workloads' processes requires sharing
+                                the host PID namespace (hostPID in Kubernetes,
+                                --pid=host in Docker).
       --[no-]shutdown-on-error  Shut down the exporter if there is an error
                                 querying nvidia-smi. When false, exporter will
                                 simply log this error and export it as a metric,
@@ -139,9 +147,11 @@ Two things to keep in mind in this mode:
 
 ## Collection timeout
 
-Every `nvidia-smi` run, including the field discovery runs at startup, is
-bounded by `--collect.timeout` (default `10s`). A run that exceeds it counts
-as a failed collection instead of hanging the scrape or the exporter startup.
+Every collection cycle, including the field discovery runs at startup, is
+bounded by `--collect.timeout` (default `10s`). All `nvidia-smi` runs within
+one cycle share the budget (with `--collect.compute-apps` there are two). A
+cycle that exceeds it counts as a failed collection instead of hanging the
+scrape or the exporter startup.
 This matters on setups where `nvidia-smi` can wedge on a driver issue.
 Cleaning up a killed process that refuses to die can take a couple of seconds
 on top of the timeout itself.
@@ -157,3 +167,45 @@ a slow run fails at the HTTP or Prometheus layer first. Background mode is
 mostly unaffected since scrapes only read the cached result, with one
 exception: a scrape arriving before the very first collection completes
 waits for it, so it can take up to `--collect.timeout` once at startup.
+
+## Per-process GPU metrics
+
+`--collect.compute-apps` additionally exports one set of metrics per process
+holding a compute context on a GPU, read from `nvidia-smi
+--query-compute-apps`. The main use case is a machine running several
+workloads on one GPU, where you want to see which process uses what.
+
+```text
+nvidia_smi_compute_app_info{uuid="...",pid="1234",process_name="/usr/bin/python3"} 1
+nvidia_smi_compute_app_used_memory_bytes{uuid="...",pid="1234",process_name="/usr/bin/python3"} 2.690646016e+09
+nvidia_smi_compute_apps{uuid="..."} 3
+nvidia_smi_compute_apps_last_collect_success 1
+```
+
+`nvidia_smi_compute_apps` reports an explicit `0` for an idle GPU. When the
+per-process query itself fails, all per-process series disappear and
+`nvidia_smi_compute_apps_last_collect_success` reads `0`, so a query failure
+never looks like an idle GPU.
+
+Things to keep in mind:
+
+- **Containers see only their own processes.** Process visibility follows the
+  PID namespace: an exporter container without host PID sharing sees no other
+  workloads. Run with `--pid=host` (Docker) or `hostPID: true` (Kubernetes,
+  exposed as the `hostPID` value in the Helm chart) to see everything. The
+  tradeoff is that the exporter pod can then see all host process names,
+  which some security policies forbid.
+- **Windows in WDDM mode reports no per-process memory.** The driver does not
+  manage the memory there, so `used_gpu_memory` is not available: the
+  `compute_app_info` and `compute_apps` metrics still work, the
+  `used_memory_bytes` metric is absent.
+- **MIG limits both attribution and container access.** Processes are
+  attributed to the parent GPU's UUID, not to MIG instances. A containerized
+  exporter on a MIG-enabled GPU additionally needs to run privileged with the
+  `NVIDIA_MIG_MONITOR_DEVICES=all` environment variable (plus host PID
+  sharing), otherwise the per-process list and even some GPU-level fields
+  read `[Insufficient Permissions]`.
+- **The `pid` label churns.** Every new process creates new series, and they
+  disappear with the process. On machines with high process turnover this
+  can bloat the time series database, which is one of the reasons the
+  feature is opt-in.

@@ -37,9 +37,24 @@ func DefaultRunFunc(cmd *exec.Cmd) error {
 func Query(ctx context.Context, command string, qFields []QField, run RunFunc) (*Table, int, error) {
 	qFieldsJoined := strings.Join(QFieldSliceToStringSlice(qFields), ",")
 
+	stdout, exitCode, err := execQuery(ctx, command, run, "--query-gpu="+qFieldsJoined, "--format=csv")
+	if err != nil {
+		return nil, exitCode, err
+	}
+
+	table, err := ParseCSVIntoTable(strings.TrimSpace(stdout), qFields)
+	if err != nil {
+		return nil, -1, err
+	}
+
+	return &table, 0, nil
+}
+
+// execQuery runs the nvidia-smi command with the given arguments appended,
+// returning its stdout and exit code.
+func execQuery(ctx context.Context, command string, run RunFunc, args ...string) (string, int, error) {
 	cmdAndArgs := strings.Fields(command)
-	cmdAndArgs = append(cmdAndArgs, "--query-gpu="+qFieldsJoined)
-	cmdAndArgs = append(cmdAndArgs, "--format=csv")
+	cmdAndArgs = append(cmdAndArgs, args...)
 
 	var stdout bytes.Buffer
 
@@ -59,7 +74,7 @@ func Query(ctx context.Context, command string, qFields []QField, run RunFunc) (
 			exitCode = exitError.ExitCode()
 		}
 
-		return nil, exitCode, fmt.Errorf(
+		return "", exitCode, fmt.Errorf(
 			"command failed: code: %d | command: %s | stdout: %s | stderr: %s: %w",
 			exitCode,
 			strings.Join(cmdAndArgs, " "),
@@ -69,10 +84,5 @@ func Query(ctx context.Context, command string, qFields []QField, run RunFunc) (
 		)
 	}
 
-	table, err := ParseCSVIntoTable(strings.TrimSpace(stdout.String()), qFields)
-	if err != nil {
-		return nil, -1, err
-	}
-
-	return &table, 0, nil
+	return stdout.String(), 0, nil
 }
