@@ -1,3 +1,4 @@
+<!-- markdownlint-disable-file MD041 -->
 ## Types of changes
 <!--- What types of changes does your code introduce? Put an `x` in all the boxes that apply: -->
 - [ ] Bug fix (non-breaking change which fixes an issue)

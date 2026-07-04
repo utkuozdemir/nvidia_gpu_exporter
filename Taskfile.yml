@@ -8,17 +8,29 @@ tasks:
       - go fix ./...
       - golangci-lint run --fix ./...
       - golangci-lint fmt ./...
-      - shfmt -l -i 2 -ci -sr -w .
+      - git ls-files '*.sh' | xargs shfmt -w -i 2 -ci -sr
 
   lint:
-    desc: lint code
+    desc: lint everything (code, docs, scripts, release config)
+    cmds:
+      - task: lint:go
+      - task: lint:assets
+      - goreleaser check
+
+  lint:go:
+    desc: lint go code and module tidiness (what CI covers via golangci)
     cmds:
       - go mod tidy --diff
       - golangci-lint run ./...
-      - markdownlint **/*.md
-      - shellcheck **/*.sh
-      - shfmt -l -i 2 -ci -sr .
-      - goreleaser check
+
+  # runs in CI as its own step; shell linting targets tracked files only, so
+  # local scratch space and generated output stay out of scope
+  lint:assets:
+    desc: lint markdown and shell scripts
+    cmds:
+      - markdownlint '**/*.md'
+      - git ls-files '*.sh' | xargs shellcheck
+      - git ls-files '*.sh' | xargs shfmt -d -i 2 -ci -sr
 
   release:
     desc: release
