@@ -69,6 +69,11 @@ type Options struct {
 	// OnListen, when set, is called with the bound listener addresses right
 	// before serving starts. Tests use it to discover the ephemeral port.
 	OnListen func([]net.Addr)
+	// Terminate overrides what --help and --version do after printing: the
+	// flag parser terminates the process by default, which is exactly what
+	// the binary wants, but would kill the whole test process for in-process
+	// callers that pass such flags through.
+	Terminate func(int)
 }
 
 // Run wires up the exporter from the given command-line arguments and serves
@@ -77,6 +82,10 @@ type Options struct {
 //nolint:funlen
 func Run(ctx context.Context, args []string, opts Options) error {
 	app := kingpin.New(appName, "")
+
+	if opts.Terminate != nil {
+		app.Terminate(opts.Terminate)
+	}
 
 	var (
 		webConfig = webflag.AddFlags(app, ":9835")

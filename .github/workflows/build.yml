@@ -72,6 +72,25 @@ jobs:
       - name: Check for dirty files
         run: git diff --exit-code
 
+  # the exporter targets Windows and macOS too, and the integration tests
+  # exercise OS-dependent behavior (process exec, paths, the fake binary
+  # build), so run the test suite on both in addition to the Linux run above
+  test-cross-platform:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2025, macos-15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.0
+      - name: Setup Go
+        uses: actions/setup-go@v6.5.0
+        with:
+          go-version-file: go.mod
+      - name: Run tests
+        run: go test -timeout 20m ./...
+
   chart:
     runs-on: ubuntu-24.04
     steps:

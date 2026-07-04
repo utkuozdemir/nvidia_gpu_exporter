@@ -70,8 +70,12 @@ func Load(path string) (*Capture, error) {
 
 // Parse parses capture file content. Blocks whose heading carries no
 // state/label separator (the file's metadata header) are collected into
-// Header; every other block becomes a Section.
+// Header; every other block becomes a Section. Windows line endings are
+// tolerated: capture files travel through issue attachments and emails, where
+// CRLF conversion is out of our control.
 func Parse(content string) (*Capture, error) {
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+
 	lines := strings.Split(content, "\n")
 	capt := &Capture{}
 
