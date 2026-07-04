@@ -43,8 +43,8 @@ jobs:
         uses: actions/setup-go@v6.5.0
         with:
           go-version-file: go.mod
-      - name: Tidy go.mod
-        run: go mod tidy
+      - name: Check go.mod tidiness
+        run: go mod tidy --diff
       - name: Run linters
         uses: golangci/golangci-lint-action@v9.3.0
         with:
@@ -52,6 +52,18 @@ jobs:
           version: v2.12.2
           args: --timeout=3m0s
           install-mode: goinstall
+      - name: Set up Task
+        uses: arduino/setup-task@v2.0.0
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install asset linters
+        run: |
+          # renovate: depName=markdownlint-cli datasource=npm
+          npm install --global markdownlint-cli@0.49.0
+          # renovate: depName=mvdan/sh datasource=github-releases
+          go install mvdan.cc/sh/v3/cmd/shfmt@v3.13.1
+      - name: Lint markdown and shell scripts
+        run: task lint:assets
       - name: Run tests
         run: go test -v -race -coverpkg=./... -coverprofile ./coverage.out -covermode=atomic -timeout 20m ./...
       - name: Print coverage results
