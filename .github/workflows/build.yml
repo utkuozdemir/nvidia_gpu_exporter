@@ -53,7 +53,7 @@ jobs:
           args: --timeout=3m0s
           install-mode: goinstall
       - name: Run tests
-        run: go test -v -race -coverprofile ./coverage.out -covermode=atomic -timeout 20m ./...
+        run: go test -v -race -coverpkg=./... -coverprofile ./coverage.out -covermode=atomic -timeout 20m ./...
       - name: Print coverage results
         run: go tool cover -func ./coverage.out
       - name: Send coverage
