@@ -81,9 +81,9 @@ func Run(args []string, stdout, stderr io.Writer) int {
 }
 
 // loadCapture resolves the --capture value: a path (anything with a path
-// separator, or naming an existing file) loads from disk, anything else
-// names an embedded capture from internal/captures, the .txt suffix
-// optional.
+// separator, or naming an existing file) loads from disk, and anything else
+// names an embedded capture from internal/captures, where the .txt suffix
+// may be omitted.
 func loadCapture(value string) (*capture.Capture, error) {
 	_, statErr := os.Stat(value)
 
