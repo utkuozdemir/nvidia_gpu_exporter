@@ -251,8 +251,11 @@ func TestGoldenMetrics(t *testing.T) {
 			}
 
 			want, err := os.ReadFile(goldenPath)
-			require.NoError(t, err,
-				"missing golden for a new capture? generate and review it with: go test ./integration/ -update")
+			require.NoError(
+				t,
+				err,
+				"missing golden for a new capture? generate and review it with: go test ./internal/integration/ -update",
+			)
 
 			assert.Equal(t, string(want), got)
 		})

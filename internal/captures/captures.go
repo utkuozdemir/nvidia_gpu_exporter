@@ -18,5 +18,5 @@ import "embed"
 var FS embed.FS
 
 // Default is the capture replayed when the caller picks none: a common
-// consumer setup on the newest driver we have a capture for.
+// consumer setup, on the newest driver captured for that GPU and OS.
 const Default = "linux-x86_64__nvidia-geforce-rtx-2080-super__595.71.05.txt"

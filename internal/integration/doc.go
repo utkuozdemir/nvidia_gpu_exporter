@@ -7,5 +7,5 @@
 // capture is picked up automatically and fails the suite until its golden
 // file is generated (and reviewed) with:
 //
-//	go test ./integration/ -update
+//	go test ./internal/integration/ -update
 package integration
