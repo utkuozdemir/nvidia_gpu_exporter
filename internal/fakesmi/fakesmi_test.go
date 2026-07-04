@@ -195,6 +195,24 @@ func TestFailureInjection(t *testing.T) {
 	assert.Contains(t, stderr, "injected failure")
 }
 
+// TestSelectiveFailureInjection proves one query can be broken while the
+// others keep answering, which is how the exporter's soft-failure paths get
+// exercised.
+func TestSelectiveFailureInjection(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(capturesDir, "linux-x86_64__nvidia-geforce-rtx-2080-super__595.71.05.txt")
+
+	code, _, stderr := runFake(t, "--capture", path, "--fail-arg", "--query-compute-apps",
+		"--query-compute-apps=gpu_uuid,pid,process_name,used_gpu_memory", "--format=csv")
+	assert.Equal(t, 1, code)
+	assert.Contains(t, stderr, "injected failure")
+
+	code, _, stderr = runFake(t, "--capture", path, "--fail-arg", "--query-compute-apps",
+		"--query-gpu=uuid", "--format=csv")
+	assert.Equal(t, 0, code, "stderr: %s", stderr)
+}
+
 func TestErrors(t *testing.T) {
 	t.Parallel()
 

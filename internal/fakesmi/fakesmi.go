@@ -37,6 +37,7 @@ type config struct {
 	capturePath string
 	state       string
 	stderrMsg   string
+	failArg     string
 	delay       time.Duration
 	exitCode    int
 	exitSet     bool
@@ -65,6 +66,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return cfg.exitCode
 	}
 
+	if failed := failMatching(cfg, rest, stderr); failed {
+		return errorExitCode
+	}
+
 	capt, err := capture.Load(cfg.capturePath)
 	if err != nil {
 		fmt.Fprintf(stderr, "fake-nvidia-smi: %v\n", err)
@@ -86,7 +91,7 @@ func parseFlags(args []string) (config, []string, error) {
 		name, value, hasValue := strings.Cut(args[0], "=")
 
 		switch name {
-		case "--capture", "--state", "--stderr-msg", "--exit", "--delay":
+		case "--capture", "--state", "--stderr-msg", "--fail-arg", "--exit", "--delay":
 		default:
 			return cfg, args, nil
 		}
@@ -110,6 +115,8 @@ func parseFlags(args []string) (config, []string, error) {
 			cfg.state = value
 		case "--stderr-msg":
 			cfg.stderrMsg = value
+		case "--fail-arg":
+			cfg.failArg = value
 		case "--exit":
 			cfg.exitSet = true
 
@@ -124,6 +131,31 @@ func parseFlags(args []string) (config, []string, error) {
 	}
 
 	return cfg, nil, nil
+}
+
+// failMatching implements the selective failure injection: when an argument
+// of the replayed invocation starts with the configured prefix, the
+// invocation fails while all others keep working. This is how tests break one
+// of the exporter's queries (e.g. only the per-process one) in isolation.
+func failMatching(cfg config, args []string, stderr io.Writer) bool {
+	if cfg.failArg == "" {
+		return false
+	}
+
+	for _, arg := range args {
+		if strings.HasPrefix(arg, cfg.failArg) {
+			message := cfg.stderrMsg
+			if message == "" {
+				message = fmt.Sprintf("fake-nvidia-smi: injected failure for %q", arg)
+			}
+
+			fmt.Fprintln(stderr, message)
+
+			return true
+		}
+	}
+
+	return false
 }
 
 // answer serves the nvidia-smi invocation in args from the capture: the two
