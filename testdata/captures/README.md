@@ -127,7 +127,33 @@ falls back to H.264/HEVC on its own).
 
 ## How developers/tests use this
 
-- Replay any captured CSV by pointing a fake `nvidia-smi` at the relevant section.
+**These captures are executable.** `cmd/fake-nvidia-smi` is a fake nvidia-smi
+that replays a capture file as-is: it serves the recorded sections verbatim and
+answers `--query-gpu`/`--query-compute-apps` for any field subset by projecting
+columns out of the recorded CSV. The integration tests under `integration/` run
+the real exporter against the fake for **every capture in this directory** and
+compare the scraped metrics against a golden file, so contributing a capture
+automatically extends the test suite. A new capture fails the suite until its
+golden file is generated and reviewed:
+
+```bash
+go test ./integration/ -update   # generates integration/testdata/<capture>__<state>.metrics
+git diff integration/testdata/   # eyeball what the exporter makes of the new capture
+```
+
+(Contributors don't have to do this — attaching the capture to an issue or PR is
+enough, maintainers take it from there.)
+
+The fake is also handy for local development without a GPU:
+
+```bash
+go build -o fake-nvidia-smi ./cmd/fake-nvidia-smi
+go run ./cmd/nvidia_gpu_exporter --nvidia-smi-command \
+  "./fake-nvidia-smi --capture testdata/captures/<file>.txt --state load"
+```
+
+Beyond that:
+
 - Test field auto-detection against the `--help-query-gpu` sections of many
   drivers at once.
 - Diff the same command across two captures to spot field renames or format drift.
