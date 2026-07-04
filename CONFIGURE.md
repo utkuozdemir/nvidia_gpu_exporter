@@ -35,7 +35,14 @@ Flags:
                                 Path under which to expose metrics.
       --nvidia-smi-command="nvidia-smi"
                                 Path or command to be used for the nvidia-smi
-                                executable
+                                executable. Multiple words run the first as the
+                                executable with the rest as its arguments (e.g.
+                                `sudo nvidia-smi` or an ssh wrapper).
+                                A path containing spaces must be quoted,
+                                and the quotes must be part of this value
+                                itself, not consumed by the shell you set the
+                                flag from: --nvidia-smi-command '"C:\Program
+                                Files\...\nvidia-smi.exe"'.
       --query-field-names="AUTO"
                                 Comma-separated list of the query fields.
                                 You can find out possible fields by running
@@ -76,6 +83,31 @@ Flags:
                                 json]
       --[no-]version            Show application version.
 ```
+
+## Custom nvidia-smi command
+
+`--nvidia-smi-command` accepts a full path, or multiple words where the first
+is the executable and the rest are passed to it as arguments. If the path
+contains spaces, quote it with single or double quotes:
+
+```bash
+# Windows, nvidia-smi not on PATH
+nvidia_gpu_exporter --nvidia-smi-command '"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe"'
+
+# a wrapper plus a quoted path
+nvidia_gpu_exporter --nvidia-smi-command 'sudo "/opt/my tools/nvidia-smi"'
+```
+
+The quotes must reach the exporter as part of the flag value itself. When you
+set the flag from a shell, the shell consumes the outermost quotes, so nest
+them as in the examples above — `--nvidia-smi-command "C:\Program Files\..."`
+alone will NOT work, because the exporter never sees those quotes. Where no
+shell is involved (a Windows service configuration, a systemd unit's exec
+line), plain quotes in the value are enough.
+
+Quote-aware parsing only kicks in when the value actually contains a quote
+character, so existing unquoted commands keep working exactly as before,
+including Windows paths with backslashes. No variable expansion happens.
 
 ## Remote scraping configuration
 

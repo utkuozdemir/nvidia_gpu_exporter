@@ -105,7 +105,11 @@ func run(ctx context.Context, extraHandler slog.Handler) error {
 		metricsPath = kingpin.Flag("web.telemetry-path", "Path under which to expose metrics.").
 				Default("/metrics").String()
 		nvidiaSmiCommand = kingpin.Flag("nvidia-smi-command",
-			"Path or command to be used for the nvidia-smi executable").
+			"Path or command to be used for the nvidia-smi executable. "+
+				"Multiple words run the first as the executable with the rest as its arguments "+
+				"(e.g. `sudo nvidia-smi` or an ssh wrapper). A path containing spaces must be "+
+				"quoted, and the quotes must be part of this value itself, not consumed by the "+
+				"shell you set the flag from: --nvidia-smi-command '\"C:\\Program Files\\...\\nvidia-smi.exe\"'.").
 			Default(nvidiasmi.DefaultCommand).String()
 		qFields = kingpin.Flag("query-field-names",
 			fmt.Sprintf("Comma-separated list of the query fields. "+
