@@ -100,7 +100,9 @@ func recordedFields(command string) ([]string, error) {
 // splitRow splits a CSV row into exactly want cells. When the row has more
 // cells than recorded fields and a free-text column exists, the extra commas
 // belong to that column: the cells left and right of it are fixed, and the
-// middle is kept together, preserving its content byte for byte.
+// middle is kept together with its commas intact. Every cell, the free-text
+// one included, is trimmed of surrounding whitespace, matching how the
+// exporter's own parser treats cells.
 func splitRow(row string, want, freeTextColumn int) ([]string, error) {
 	raw := strings.Split(row, ",")
 
