@@ -3,4 +3,4 @@
 # so they must never be CRLF-converted on checkout (core.autocrlf on Windows
 # would otherwise break the whole suite).
 internal/captures/*.txt text eol=lf
-integration/testdata/*.metrics text eol=lf
+internal/integration/testdata/*.metrics text eol=lf

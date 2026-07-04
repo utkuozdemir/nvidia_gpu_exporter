@@ -52,7 +52,7 @@ func TestMain(m *testing.M) {
 		fakeBin += ".exe"
 	}
 
-	build := exec.CommandContext(context.Background(), "go", "build", "-o", fakeBin, "../cmd/fake-nvidia-smi")
+	build := exec.CommandContext(context.Background(), "go", "build", "-o", fakeBin, "../../cmd/fake-nvidia-smi")
 
 	output, err := build.CombinedOutput()
 	if err != nil {
