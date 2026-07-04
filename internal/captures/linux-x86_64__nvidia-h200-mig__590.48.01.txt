@@ -1,12 +1,12 @@
 ################################################################################
 # nvidia_gpu_exporter GPU capture
-# https://github.com/utkuozdemir/nvidia_gpu_exporter - see testdata/captures/README.md
+# https://github.com/utkuozdemir/nvidia_gpu_exporter - see internal/captures/README.md
 ################################################################################
 # The GPU model and driver are in the filename. Every other nvidia-smi
 # value is in the raw sections below, not re-parsed here. This header only
 # carries what nvidia-smi does not report: collection time, mask status,
 # host OS (from uname), and the synthetic load used.
-collected_at:   2026-07-03T22:10:45Z
+collected_at:   2026-07-03T22:21:59Z
 masked:         yes
 os:             linux (Ubuntu 22.04.5 LTS)
 kernel:         5.15.0-171-generic
@@ -1184,6 +1184,11 @@ Reason that describes why the page was retired. Can take one of two values:
 # $ nvidia-smi -L
 ################################################################################
 GPU 0: NVIDIA H200 (UUID: GPU-00000000-0000-0000-0000-000000000000)
+  MIG 1c.3g.71gb  Device  0: (UUID: MIG-00000000-0000-0000-0000-000000000000)
+  MIG 2c.3g.71gb  Device  1: (UUID: MIG-00000001-0000-0000-0000-000000000001)
+  MIG 2g.35gb     Device  2: (UUID: MIG-00000002-0000-0000-0000-000000000002)
+  MIG 1g.18gb     Device  3: (UUID: MIG-00000003-0000-0000-0000-000000000003)
+  MIG 1g.18gb     Device  4: (UUID: MIG-00000004-0000-0000-0000-000000000004)
 
 
 ################################################################################
@@ -1209,24 +1214,7 @@ Legend:
 # $ nvidia-smi nvlink -s
 ################################################################################
 GPU 0: NVIDIA H200 (UUID: GPU-00000000-0000-0000-0000-000000000000)
-	 Link 0: 26.562 GB/s
-	 Link 1: 26.562 GB/s
-	 Link 2: 26.562 GB/s
-	 Link 3: 26.562 GB/s
-	 Link 4: 26.562 GB/s
-	 Link 5: 26.562 GB/s
-	 Link 6: 26.562 GB/s
-	 Link 7: 26.562 GB/s
-	 Link 8: 26.562 GB/s
-	 Link 9: 26.562 GB/s
-	 Link 10: 26.562 GB/s
-	 Link 11: 26.562 GB/s
-	 Link 12: 26.562 GB/s
-	 Link 13: 26.562 GB/s
-	 Link 14: 26.562 GB/s
-	 Link 15: 26.562 GB/s
-	 Link 16: 26.562 GB/s
-	 Link 17: 26.562 GB/s
+Nvlink queries are not supported for Devices in MIG mode
 
 
 ################################################################################
@@ -1450,7 +1438,7 @@ hostname
 # idle :: nvidia-smi (default table)
 # $ nvidia-smi 
 ################################################################################
-Fri Jul  3 22:10:45 2026       
+Fri Jul  3 22:22:00 2026       
 +-----------------------------------------------------------------------------------------+
 | NVIDIA-SMI 590.48.01              Driver Version: 590.48.01      CUDA Version: 13.1     |
 +-----------------------------------------+------------------------+----------------------+
@@ -1458,10 +1446,33 @@ Fri Jul  3 22:10:45 2026
 | Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
 |                                         |                        |               MIG M. |
 |=========================================+========================+======================|
-|   0  NVIDIA H200                    On  |   00000000:83:00.0 Off |                    0 |
-| N/A   28C    P0             77W /  700W |       0MiB / 143771MiB |      0%      Default |
-|                                         |                        |             Disabled |
+|   0  NVIDIA H200                    On  |   00000000:83:00.0 Off |                   On |
+| N/A   28C    P0             78W /  700W |      55MiB / 143771MiB |     N/A      Default |
+|                                         |                        |              Enabled |
 +-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| MIG devices:                                                                            |
++------------------+----------------------------------+-----------+-----------------------+
+| GPU  GI  CI  MIG |              Shared Memory-Usage |        Vol|        Shared         |
+|      ID  ID  Dev |                Shared BAR1-Usage | SM     Unc| CE ENC  DEC  OFA  JPG |
+|                  |                                  |        ECC|                       |
+|==================+==================================+===========+=======================|
+|  0    2   0   0  |              22MiB / 71424MiB    | 16      0 |  3   0    3    0    3 |
+|                  |               0MiB / 59237MiB    |           |                       |
++------------------+----------------------------------+-----------+-----------------------+
+|  0    2   1   1  |              22MiB / 71424MiB    | 32      0 |  3   0    3    0    3 |
+|                  |               0MiB / 59237MiB    |           |                       |
++------------------+----------------------------------+-----------+-----------------------+
+|  0    3   0   2  |              17MiB / 33280MiB    | 32      0 |  2   0    2    0    2 |
+|                  |               0MiB / 29618MiB    |           |                       |
++------------------+----------------------------------+-----------+-----------------------+
+|  0    9   0   3  |               9MiB / 16384MiB    | 16      0 |  1   0    1    0    1 |
+|                  |               0MiB / 14809MiB    |           |                       |
++------------------+----------------------------------+-----------+-----------------------+
+|  0   10   0   4  |               9MiB / 16384MiB    | 16      0 |  1   0    1    0    1 |
+|                  |               0MiB / 14809MiB    |           |                       |
++------------------+----------------------------------+-----------+-----------------------+
 
 +-----------------------------------------------------------------------------------------+
 | Processes:                                                                              |
@@ -1479,7 +1490,7 @@ Fri Jul  3 22:10:45 2026
 
 ==============NVSMI LOG==============
 
-Timestamp                                              : Fri Jul  3 22:10:45 2026
+Timestamp                                              : Fri Jul  3 22:22:00 2026
 Driver Version                                         : 590.48.01
 CUDA Version                                           : 13.1
 
@@ -1494,8 +1505,128 @@ GPU 00000000:83:00.0
     Persistence Mode                                   : Enabled
     Addressing Mode                                    : None
     MIG Mode
-        Current                                        : Disabled
-        Pending                                        : Disabled
+        Current                                        : Enabled
+        Pending                                        : Enabled
+    MIG Device
+        Index                                          : 0
+        GPU Instance ID                                : 2
+        Compute Instance ID                            : 0
+        Device Attributes
+            Shared
+                Multiprocessor count                   : 16
+                Copy Engine count                      : 3
+                Encoder count                          : 0
+                Decoder count                          : 3
+                OFA count                              : 0
+                JPG count                              : 3
+        ECC Errors
+            Volatile
+                SRAM Uncorrectable                     : 0
+        Shared FB Memory Usage
+            Total                                      : 71424 MiB
+            Reserved                                   : 0 MiB
+            Used                                       : 22 MiB
+            Free                                       : 71403 MiB
+        Shared BAR1 Memory
+            Total                                      : 59237 MiB
+            Used                                       : 0 MiB
+            Free                                       : 59237 MiB
+    MIG Device
+        Index                                          : 1
+        GPU Instance ID                                : 2
+        Compute Instance ID                            : 1
+        Device Attributes
+            Shared
+                Multiprocessor count                   : 32
+                Copy Engine count                      : 3
+                Encoder count                          : 0
+                Decoder count                          : 3
+                OFA count                              : 0
+                JPG count                              : 3
+        ECC Errors
+            Volatile
+                SRAM Uncorrectable                     : 0
+        Shared FB Memory Usage
+            Total                                      : 71424 MiB
+            Reserved                                   : 0 MiB
+            Used                                       : 22 MiB
+            Free                                       : 71403 MiB
+        Shared BAR1 Memory
+            Total                                      : 59237 MiB
+            Used                                       : 0 MiB
+            Free                                       : 59237 MiB
+    MIG Device
+        Index                                          : 2
+        GPU Instance ID                                : 3
+        Compute Instance ID                            : 0
+        Device Attributes
+            Shared
+                Multiprocessor count                   : 32
+                Copy Engine count                      : 2
+                Encoder count                          : 0
+                Decoder count                          : 2
+                OFA count                              : 0
+                JPG count                              : 2
+        ECC Errors
+            Volatile
+                SRAM Uncorrectable                     : 0
+        Shared FB Memory Usage
+            Total                                      : 33280 MiB
+            Reserved                                   : 0 MiB
+            Used                                       : 17 MiB
+            Free                                       : 33264 MiB
+        Shared BAR1 Memory
+            Total                                      : 29618 MiB
+            Used                                       : 0 MiB
+            Free                                       : 29618 MiB
+    MIG Device
+        Index                                          : 3
+        GPU Instance ID                                : 9
+        Compute Instance ID                            : 0
+        Device Attributes
+            Shared
+                Multiprocessor count                   : 16
+                Copy Engine count                      : 1
+                Encoder count                          : 0
+                Decoder count                          : 1
+                OFA count                              : 0
+                JPG count                              : 1
+        ECC Errors
+            Volatile
+                SRAM Uncorrectable                     : 0
+        Shared FB Memory Usage
+            Total                                      : 16384 MiB
+            Reserved                                   : 0 MiB
+            Used                                       : 9 MiB
+            Free                                       : 16376 MiB
+        Shared BAR1 Memory
+            Total                                      : 14809 MiB
+            Used                                       : 0 MiB
+            Free                                       : 14809 MiB
+    MIG Device
+        Index                                          : 4
+        GPU Instance ID                                : 10
+        Compute Instance ID                            : 0
+        Device Attributes
+            Shared
+                Multiprocessor count                   : 16
+                Copy Engine count                      : 1
+                Encoder count                          : 0
+                Decoder count                          : 1
+                OFA count                              : 0
+                JPG count                              : 1
+        ECC Errors
+            Volatile
+                SRAM Uncorrectable                     : 0
+        Shared FB Memory Usage
+            Total                                      : 16384 MiB
+            Reserved                                   : 0 MiB
+            Used                                       : 9 MiB
+            Free                                       : 16376 MiB
+        Shared BAR1 Memory
+            Total                                      : 14809 MiB
+            Used                                       : 0 MiB
+            Free                                       : 14809 MiB
     Accounting Mode                                    : Disabled
     Accounting Mode Buffer Size                        : 4000
     Driver Model
@@ -1563,7 +1694,7 @@ GPU 00000000:83:00.0
             Firmware                                   : N/A
         Replays Since Reset                            : 0
         Replay Number Rollovers                        : 0
-        Tx Throughput                                  : 371 KB/s
+        Tx Throughput                                  : 376 KB/s
         Rx Throughput                                  : 337 KB/s
         Atomic Caps Outbound                           : N/A
         Atomic Caps Inbound                            : N/A
@@ -1589,24 +1720,24 @@ GPU 00000000:83:00.0
     FB Memory Usage
         Total                                          : 143771 MiB
         Reserved                                       : 614 MiB
-        Used                                           : 0 MiB
-        Free                                           : 143158 MiB
+        Used                                           : 55 MiB
+        Free                                           : 143103 MiB
     BAR1 Memory Usage
         Total                                          : 262144 MiB
-        Used                                           : 1 MiB
-        Free                                           : 262143 MiB
+        Used                                           : 143157 MiB
+        Free                                           : 118987 MiB
     Conf Compute Protected Memory Usage
         Total                                          : 0 MiB
         Used                                           : 0 MiB
         Free                                           : 0 MiB
     Compute Mode                                       : Default
     Utilization
-        GPU                                            : 0 %
-        Memory                                         : 0 %
-        Encoder                                        : 0 %
-        Decoder                                        : 0 %
-        JPEG                                           : 0 %
-        OFA                                            : 0 %
+        GPU                                            : N/A
+        Memory                                         : N/A
+        Encoder                                        : N/A
+        Decoder                                        : N/A
+        JPEG                                           : N/A
+        OFA                                            : N/A
     Encoder Stats
         Active Sessions                                : 0
         Average FPS                                    : 0
@@ -1648,17 +1779,7 @@ GPU 00000000:83:00.0
         Single Bit ECC                                 : N/A
         Double Bit ECC                                 : N/A
         Pending Page Blacklist                         : N/A
-    Remapped Rows
-        Correctable Error                              : 0
-        Uncorrectable Error                            : 0
-        Pending                                        : No
-        Remapping Failure Occurred                     : No
-        Bank Remap Availability Histogram
-            Max                                        : 3072 bank(s)
-            High                                       : 0 bank(s)
-            Partial                                    : 0 bank(s)
-            Low                                        : 0 bank(s)
-            None                                       : 0 bank(s)
+    Remapped Rows                                      : N/A
     Temperature
         GPU Current Temp                               : 28 C
         GPU T.Limit Temp                               : 59 C
@@ -1669,7 +1790,7 @@ GPU 00000000:83:00.0
         Memory Current Temp                            : 32 C
         Memory Max Operating T.Limit Temp              : 0 C
     GPU Power Readings
-        Average Power Draw                             : 77.67 W
+        Average Power Draw                             : 78.28 W
         Instantaneous Power Draw                       : 77.88 W
         Current Power Limit                            : 700.00 W
         Requested Power Limit                          : 700.00 W
@@ -1677,7 +1798,7 @@ GPU 00000000:83:00.0
         Min Power Limit                                : 200.00 W
         Max Power Limit                                : 700.00 W
     GPU Memory Power Readings 
-        Average Power Draw                             : 46.56 W
+        Average Power Draw                             : 47.51 W
         Instantaneous Power Draw                       : N/A
     Module Power Readings
         Average Power Draw                             : N/A
@@ -1738,7 +1859,7 @@ GPU 00000000:83:00.0
 # $ nvidia-smi --query-gpu=timestamp,driver_version,vgpu_driver_capability.heterogenous_multivGPU,count,name,serial,uuid,pci.bus_id,pci.domain,pci.bus,pci.device,pci.baseClass,pci.subClass,pci.device_id,pci.sub_device_id,vgpu_device_capability.fractional_multiVgpu,vgpu_device_capability.heterogeneous_timeSlice_profile,vgpu_device_capability.heterogeneous_timeSlice_sizes,vgpu_device_capability.homogeneous_placements,vgpu_device_capability.mig_timeSlicing,vgpu_device_capability.mig_timeSlicing_mode,pcie.link.gen.current,pcie.link.gen.gpucurrent,pcie.link.gen.max,pcie.link.gen.gpumax,pcie.link.gen.hostmax,pcie.link.width.current,pcie.link.width.max,index,display_mode,display_attached,display_active,persistence_mode,addressing_mode,accounting.mode,accounting.buffer_size,driver_model.current,driver_model.pending,vbios_version,inforom.img,inforom.oem,inforom.ecc,inforom.pwr,inforom.checksum_validation,gpu_recovery_action,gom.current,gom.pending,fan.speed,pstate,clocks_event_reasons.supported,clocks_event_reasons.active,clocks_event_reasons.gpu_idle,clocks_event_reasons.applications_clocks_setting,clocks_event_reasons.sw_power_cap,clocks_event_reasons.hw_slowdown,clocks_event_reasons.hw_thermal_slowdown,clocks_event_reasons.hw_power_brake_slowdown,clocks_event_reasons.sw_thermal_slowdown,clocks_event_reasons.sync_boost,clocks_event_reasons_counters.sw_power_cap,clocks_event_reasons_counters.sync_boost,clocks_event_reasons_counters.sw_thermal_slowdown,clocks_event_reasons_counters.hw_thermal_slowdown,clocks_event_reasons_counters.hw_power_brake_slowdown,memory.total,memory.reserved,memory.used,memory.free,compute_mode,compute_cap,utilization.gpu,utilization.memory,utilization.encoder,utilization.decoder,utilization.jpeg,utilization.ofa,encoder.stats.sessionCount,encoder.stats.averageFps,encoder.stats.averageLatency,dramEncryption.mode.current,dramEncryption.mode.pending,ecc.mode.current,ecc.mode.pending,ecc.errors.corrected.volatile.device_memory,ecc.errors.corrected.volatile.dram,ecc.errors.corrected.volatile.register_file,ecc.errors.corrected.volatile.l1_cache,ecc.errors.corrected.volatile.l2_cache,ecc.errors.corrected.volatile.texture_memory,ecc.errors.corrected.volatile.cbu,ecc.errors.corrected.volatile.sram,ecc.errors.corrected.volatile.total,ecc.errors.corrected.aggregate.device_memory,ecc.errors.corrected.aggregate.dram,ecc.errors.corrected.aggregate.register_file,ecc.errors.corrected.aggregate.l1_cache,ecc.errors.corrected.aggregate.l2_cache,ecc.errors.corrected.aggregate.texture_memory,ecc.errors.corrected.aggregate.cbu,ecc.errors.corrected.aggregate.sram,ecc.errors.corrected.aggregate.total,ecc.errors.uncorrected.volatile.device_memory,ecc.errors.uncorrected.volatile.dram,ecc.errors.uncorrected.volatile.register_file,ecc.errors.uncorrected.volatile.l1_cache,ecc.errors.uncorrected.volatile.l2_cache,ecc.errors.uncorrected.volatile.texture_memory,ecc.errors.uncorrected.volatile.cbu,ecc.errors.uncorrected.volatile.sram,ecc.errors.uncorrected.volatile.total,ecc.errors.uncorrected.aggregate.device_memory,ecc.errors.uncorrected.aggregate.dram,ecc.errors.uncorrected.aggregate.register_file,ecc.errors.uncorrected.aggregate.l1_cache,ecc.errors.uncorrected.aggregate.l2_cache,ecc.errors.uncorrected.aggregate.texture_memory,ecc.errors.uncorrected.aggregate.cbu,ecc.errors.uncorrected.aggregate.sram,ecc.errors.uncorrected.aggregate.total,ecc.errors.uncorrected.volatile.sram.parity,ecc.errors.uncorrected.volatile.sram.secded,ecc.errors.uncorrected.aggregate.sram.parity,ecc.errors.uncorrected.aggregate.sram.secded,ecc.errors.uncorrected.aggregate.sram.thresholdExceeded,ecc.errors.uncorrected.aggregate.sram.l2,ecc.errors.uncorrected.aggregate.sram.sm,ecc.errors.uncorrected.aggregate.sram.mcu,ecc.errors.uncorrected.aggregate.sram.pcie,ecc.errors.uncorrected.aggregate.sram.other,retired_pages.single_bit_ecc.count,retired_pages.double_bit.count,retired_pages.pending,remapped_rows.correctable,remapped_rows.uncorrectable,remapped_rows.pending,remapped_rows.failure,remapped_rows.histogram.max,remapped_rows.histogram.high,remapped_rows.histogram.partial,remapped_rows.histogram.low,remapped_rows.histogram.none,temperature.gpu,temperature.gpu.tlimit,temperature.memory,power.management,power.draw,power.draw.average,power.draw.instant,power.limit,enforced.power.limit,power.default_limit,power.min_limit,power.max_limit,module.power.draw.average,module.power.draw.instant,module.power.limit,module.enforced.power.limit,module.power.default_limit,module.power.min_limit,module.power.max_limit,power_smoothing.delayed_power_smoothing_supported,power_smoothing.primary_power_floor,power_smoothing.secondary_power_floor,power_smoothing.min_primary_floor_activation_offset,power_smoothing.min_primary_floor_activation_point,power_smoothing.window_multiplier,power_smoothing.curr_profile.secondary_power_floor,power_smoothing.curr_profile.primary_floor_act_window_multiplier,power_smoothing.curr_profile.primary_floor_tar_window_multiplier,power_smoothing.curr_profile.primary_floor_act_offset,power_smoothing.admin_override.secondary_power_floor,power_smoothing.admin_override.primary_floor_act_window_multiplier,power_smoothing.admin_override.primary_floor_tar_window_multiplier,power_smoothing.admin_override.primary_floor_act_offset,edpp_multiplier,clocks.current.graphics,clocks.current.sm,clocks.current.memory,clocks.current.video,clocks.applications.graphics,clocks.applications.memory,clocks.default_applications.graphics,clocks.default_applications.memory,clocks.max.graphics,clocks.max.sm,clocks.max.memory,mig.mode.current,mig.mode.pending,gsp.mode.current,gsp.mode.default,c2c.mode,protected_memory.total,protected_memory.used,protected_memory.free,fabric.state,fabric.status,fabric.cliqueId,fabric.clusterUuid,fabric.health.summary,fabric.health.bandwidth,fabric.health.route_recovery_in_progress,fabric.health.route_unhealthy,fabric.health.access_timeout_recovery,fabric.health.incorrect_configuration,platform.chassis_serial_number,platform.slot_number,platform.tray_index,platform.host_id,platform.peer_type,platform.module_id,platform.gpu_fabric_guid,hostname --format=csv
 ################################################################################
 timestamp, driver_version, vgpu_driver_capability.heterogenous_multivGPU, count, name, serial, uuid, pci.bus_id, pci.domain, pci.bus, pci.device, pci.baseClass, pci.subClass, pci.device_id, pci.sub_device_id, vgpu_device_capability.fractional_multiVgpu, vgpu_device_capability.heterogeneous_timeSlice_profile, vgpu_device_capability.heterogeneous_timeSlice_sizes, vgpu_device_capability.homogeneous_placements, vgpu_device_capability.mig_timeSlicing, vgpu_device_capability.mig_timeSlicing_mode, pcie.link.gen.current, pcie.link.gen.gpucurrent, pcie.link.gen.max, pcie.link.gen.gpumax, pcie.link.gen.hostmax, pcie.link.width.current, pcie.link.width.max, index, display_mode, display_attached, display_active, persistence_mode, addressing_mode, accounting.mode, accounting.buffer_size, driver_model.current, driver_model.pending, vbios_version, inforom.img, inforom.oem, inforom.ecc, inforom.pwr, inforom.checksum_validation, gpu_recovery_action, gom.current, gom.pending, fan.speed [%], pstate, clocks_event_reasons.supported, clocks_event_reasons.active, clocks_event_reasons.gpu_idle, clocks_event_reasons.applications_clocks_setting, clocks_event_reasons.sw_power_cap, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_power_brake_slowdown, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.sync_boost, clocks_event_reasons_counters.sw_power_cap [us], clocks_event_reasons_counters.sync_boost [us], clocks_event_reasons_counters.sw_thermal_slowdown [us], clocks_event_reasons_counters.hw_thermal_slowdown [us], clocks_event_reasons_counters.hw_power_brake_slowdown [us], memory.total [MiB], memory.reserved [MiB], memory.used [MiB], memory.free [MiB], compute_mode, compute_cap, utilization.gpu [%], utilization.memory [%], utilization.encoder [%], utilization.decoder [%], utilization.jpeg [%], utilization.ofa [%], encoder.stats.sessionCount, encoder.stats.averageFps, encoder.stats.averageLatency, dramEncryption.mode.current, dramEncryption.mode.pending, ecc.mode.current, ecc.mode.pending, ecc.errors.corrected.volatile.device_memory, ecc.errors.corrected.volatile.dram, ecc.errors.corrected.volatile.register_file, ecc.errors.corrected.volatile.l1_cache, ecc.errors.corrected.volatile.l2_cache, ecc.errors.corrected.volatile.texture_memory, ecc.errors.corrected.volatile.cbu, ecc.errors.corrected.volatile.sram, ecc.errors.corrected.volatile.total, ecc.errors.corrected.aggregate.device_memory, ecc.errors.corrected.aggregate.dram, ecc.errors.corrected.aggregate.register_file, ecc.errors.corrected.aggregate.l1_cache, ecc.errors.corrected.aggregate.l2_cache, ecc.errors.corrected.aggregate.texture_memory, ecc.errors.corrected.aggregate.cbu, ecc.errors.corrected.aggregate.sram, ecc.errors.corrected.aggregate.total, ecc.errors.uncorrected.volatile.device_memory, ecc.errors.uncorrected.volatile.dram, ecc.errors.uncorrected.volatile.register_file, ecc.errors.uncorrected.volatile.l1_cache, ecc.errors.uncorrected.volatile.l2_cache, ecc.errors.uncorrected.volatile.texture_memory, ecc.errors.uncorrected.volatile.cbu, ecc.errors.uncorrected.volatile.sram, ecc.errors.uncorrected.volatile.total, ecc.errors.uncorrected.aggregate.device_memory, ecc.errors.uncorrected.aggregate.dram, ecc.errors.uncorrected.aggregate.register_file, ecc.errors.uncorrected.aggregate.l1_cache, ecc.errors.uncorrected.aggregate.l2_cache, ecc.errors.uncorrected.aggregate.texture_memory, ecc.errors.uncorrected.aggregate.cbu, ecc.errors.uncorrected.aggregate.sram, ecc.errors.uncorrected.aggregate.total, ecc.errors.uncorrected.volatile.sram.parity, ecc.errors.uncorrected.volatile.sram.secded, ecc.errors.uncorrected.aggregate.sram.parity, ecc.errors.uncorrected.aggregate.sram.secded, ecc.errors.uncorrected.aggregate.sram.thresholdExceeded, ecc.errors.uncorrected.aggregate.sram.l2, ecc.errors.uncorrected.aggregate.sram.sm, ecc.errors.uncorrected.aggregate.sram.mcu, ecc.errors.uncorrected.aggregate.sram.pcie, ecc.errors.uncorrected.aggregate.sram.other, retired_pages.single_bit_ecc.count, retired_pages.double_bit.count, retired_pages.pending, remapped_rows.correctable, remapped_rows.uncorrectable, remapped_rows.pending, remapped_rows.failure, remapped_rows.histogram.max, remapped_rows.histogram.high, remapped_rows.histogram.partial, remapped_rows.histogram.low, remapped_rows.histogram.none, temperature.gpu, temperature.gpu.tlimit, temperature.memory, power.management, power.draw [W], power.draw.average [W], power.draw.instant [W], power.limit [W], enforced.power.limit [W], power.default_limit [W], power.min_limit [W], power.max_limit [W], module.power.draw.average [W], module.power.draw.instant [W], module.power.limit [W], module.enforced.power.limit [W], module.power.default_limit [W], module.power.min_limit [W], module.power.max_limit [W], power_smoothing.delayed_power_smoothing_supported, power_smoothing.primary_power_floor [W], power_smoothing.secondary_power_floor [W], power_smoothing.min_primary_floor_activation_offset [W], power_smoothing.min_primary_floor_activation_point [W], power_smoothing.window_multiplier [ms], power_smoothing.curr_profile.secondary_power_floor [W], power_smoothing.curr_profile.primary_floor_act_window_multiplier, power_smoothing.curr_profile.primary_floor_tar_window_multiplier, power_smoothing.curr_profile.primary_floor_act_offset [W], power_smoothing.admin_override.secondary_power_floor [W], power_smoothing.admin_override.primary_floor_act_window_multiplier, power_smoothing.admin_override.primary_floor_tar_window_multiplier, power_smoothing.admin_override.primary_floor_act_offset [W], edpp_multiplier [%], clocks.current.graphics [MHz], clocks.current.sm [MHz], clocks.current.memory [MHz], clocks.current.video [MHz], clocks.applications.graphics [MHz], clocks.applications.memory [MHz], clocks.default_applications.graphics [MHz], clocks.default_applications.memory [MHz], clocks.max.graphics [MHz], clocks.max.sm [MHz], clocks.max.memory [MHz], mig.mode.current, mig.mode.pending, gsp.mode.current, gsp.mode.default, c2c.mode, protected_memory.total [MiB], protected_memory.used [MiB], protected_memory.free [MiB], fabric.state, fabric.status, fabric.cliqueId, fabric.clusterUuid, fabric.health.summary, fabric.health.bandwidth, fabric.health.route_recovery_in_progress, fabric.health.route_unhealthy, fabric.health.access_timeout_recovery, fabric.health.incorrect_configuration, platform.chassis_serial_number, platform.slot_number, platform.tray_index, platform.host_id, platform.peer_type, platform.module_id, platform.gpu_fabric_guid, hostname
-2026/07/03 22:10:46.109, 590.48.01, [N/A], 1, NVIDIA H200, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, 00000000:83:00.0, 0x0000, 0x83, 0x00, 0x3, 0x2, 0x233510DE, 0x18BE10DE, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], 5, 5, 5, 5, [N/A], 16, 16, 0, [Requested functionality has been deprecated], Yes, Disabled, Enabled, None, Disabled, 4000, [N/A], [N/A], 96.00.A5.00.03, G520.0280.02.02, 2.1, 7.16, [N/A], valid, None, [N/A], [N/A], [N/A], P0, 0x00000000000001FF, 0x0000000000000001, Active, Not Active, Not Active, Not Active, Not Active, Not Active, Not Active, Not Active, 0 us, 0 us, 0 us, 0 us, 0 us, 143771 MiB, 614 MiB, 0 MiB, 143158 MiB, Default, 9.0, 0 %, 0 %, 0 %, 0 %, 0 %, 0 %, 0, 0, 0, [N/A], [N/A], Enabled, Enabled, 0, 0, [N/A], [N/A], [N/A], [N/A], [N/A], 0, 0, 0, 0, [N/A], [N/A], [N/A], [N/A], [N/A], 0, 0, 0, 0, [N/A], [N/A], [N/A], [N/A], [N/A], 0, 0, 0, 0, [N/A], [N/A], [N/A], [N/A], [N/A], 0, 0, 0, 0, 0, 0, No, 0, 0, 0, 0, 0, [N/A], [N/A], [N/A], 0, 0, No, No, 3072, 0, 0, 0, 0, 28, 59, 32, [Requested functionality has been deprecated], 77.71 W, 77.71 W, 78.21 W, 700.00 W, 700.00 W, 700.00 W, 200.00 W, 700.00 W, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], 100.00 %, 345 MHz, 345 MHz, 3201 MHz, 765 MHz, [Requested functionality has been deprecated], [Requested functionality has been deprecated], [Requested functionality has been deprecated], [Requested functionality has been deprecated], 1980 MHz, 1980 MHz, 3201 MHz, Disabled, Disabled, Enabled, Enabled, Disabled, 0 MiB, 0 MiB, 0 MiB, Completed, Success, 0, 00000000-0000-0000-0000-000000000000, N/A, N/A, N/A, N/A, N/A, N/A, , 0, 0, 1, Direct Connected, 1, 0x0000000000000000, [N/A]
+2026/07/03 22:22:01.444, 590.48.01, [N/A], 1, NVIDIA H200, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, 00000000:83:00.0, 0x0000, 0x83, 0x00, 0x3, 0x2, 0x233510DE, 0x18BE10DE, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], 5, 5, 5, 5, [N/A], 16, 16, 0, [Requested functionality has been deprecated], Yes, Disabled, Enabled, None, Disabled, 4000, [N/A], [N/A], 96.00.A5.00.03, G520.0280.02.02, 2.1, 7.16, [N/A], valid, None, [N/A], [N/A], [N/A], P0, 0x00000000000001FF, 0x0000000000000001, Active, Not Active, Not Active, Not Active, Not Active, Not Active, Not Active, Not Active, 0 us, 0 us, 0 us, 0 us, 0 us, 143771 MiB, 614 MiB, 55 MiB, 143103 MiB, Default, 9.0, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], 0, 0, 0, [N/A], [N/A], Enabled, Enabled, 0, 0, [N/A], [N/A], [N/A], [N/A], [N/A], 0, 0, 0, 0, [N/A], [N/A], [N/A], [N/A], [N/A], 0, 0, 0, 0, [N/A], [N/A], [N/A], [N/A], [N/A], 0, 0, 0, 0, [N/A], [N/A], [N/A], [N/A], [N/A], 0, 0, 0, 0, 0, 0, No, 0, 0, 0, 0, 0, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], 3072, 0, 0, 0, 0, 28, 59, 32, [Requested functionality has been deprecated], 78.28 W, 78.28 W, 78.21 W, 700.00 W, 700.00 W, 700.00 W, 200.00 W, 700.00 W, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], 100.00 %, 345 MHz, 345 MHz, 3201 MHz, 765 MHz, [Requested functionality has been deprecated], [Requested functionality has been deprecated], [Requested functionality has been deprecated], [Requested functionality has been deprecated], 1980 MHz, 1980 MHz, 3201 MHz, Enabled, Enabled, Enabled, Enabled, Disabled, 0 MiB, 0 MiB, 0 MiB, Completed, Success, 0, 00000000-0000-0000-0000-000000000000, N/A, N/A, N/A, N/A, N/A, N/A, , 0, 0, 1, Direct Connected, 1, 0x0000000000000000, [N/A]
 
 
 ################################################################################
@@ -1753,6 +1874,12 @@ timestamp, gpu_name, gpu_bus_id, gpu_serial, gpu_uuid, pid, process_name, used_g
 # $ nvidia-smi --query-accounted-apps=timestamp,gpu_name,gpu_bus_id,gpu_serial,gpu_uuid,pid,gpu_util,mem_util,max_memory_usage,time --format=csv
 ################################################################################
 timestamp, gpu_name, gpu_bus_id, gpu_serial, gpu_uuid, pid, gpu_utilization [%], mem_utilization [%], max_memory_usage [MiB], time [ms]
+2026/07/03 22:22:01.643, NVIDIA H200, 00000000:83:00.0, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, 10744, 0 %, 0 %, 0 MiB, 8110 ms
+2026/07/03 22:22:01.643, NVIDIA H200, 00000000:83:00.0, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, 10526, 0 %, 0 %, 818 MiB, 39376 ms
+2026/07/03 22:22:01.643, NVIDIA H200, 00000000:83:00.0, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, 10525, 0 %, 0 %, 1542 MiB, 42479 ms
+2026/07/03 22:22:01.643, NVIDIA H200, 00000000:83:00.0, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, 10529, 0 %, 0 %, 818 MiB, 42532 ms
+2026/07/03 22:22:01.643, NVIDIA H200, 00000000:83:00.0, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, 10528, 0 %, 0 %, 818 MiB, 42571 ms
+2026/07/03 22:22:01.643, NVIDIA H200, 00000000:83:00.0, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, 10550, 97 %, 7 %, 14410 MiB, 41397 ms
 
 
 ################################################################################
@@ -1760,8 +1887,8 @@ timestamp, gpu_name, gpu_bus_id, gpu_serial, gpu_uuid, pid, gpu_utilization [%],
 # $ nvidia-smi --query-retired-pages=timestamp,gpu_name,gpu_bus_id,gpu_serial,gpu_uuid,retired_pages.address,retired_pages.timestamp,retired_pages.cause --format=csv
 ################################################################################
 timestamp, gpu_name, gpu_bus_id, gpu_serial, gpu_uuid, retired_pages.address, retired_pages.timestamp, retired_pages.cause
-2026/07/03 22:10:46.307, NVIDIA H200, 00000000:83:00.0, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, [N/A], [N/A], Single Bit ECC
-2026/07/03 22:10:46.307, NVIDIA H200, 00000000:83:00.0, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, [N/A], [N/A], Double Bit ECC
+2026/07/03 22:22:01.662, NVIDIA H200, 00000000:83:00.0, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, [N/A], [N/A], Single Bit ECC
+2026/07/03 22:22:01.662, NVIDIA H200, 00000000:83:00.0, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, [N/A], [N/A], Double Bit ECC
 
 
 ################################################################################
@@ -1783,18 +1910,18 @@ timestamp, gpu_name, gpu_bus_id, gpu_serial, gpu_uuid, retired_pages.address, re
 ################################################################################
 # gpu    pwr  gtemp  mtemp     sm    mem    enc    dec    jpg    ofa   mclk   pclk 
 # Idx      W      C      C      %      %      %      %      %      %    MHz    MHz 
-    0     77     28     31      0      0      0      0      0      0   3201    345 
-    0     77     28     32      0      0      0      0      0      0   3201    345 
-    0     77     28     32      0      0      0      0      0      0   3201    345 
-    0     77     28     32      0      0      0      0      0      0   3201    345 
-    0     77     28     32      0      0      0      0      0      0   3201    345 
+    0     78     28     33      -      -      -      -      -      -   3201    345 
+    0     78     28     32      -      -      -      -      -      -   3201    345 
+    0     78     28     32      -      -      -      -      -      -   3201    345 
+    0     78     28     32      -      -      -      -      -      -   3201    345 
+    0     78     28     32      -      -      -      -      -      -   3201    345 
 
 
 ################################################################################
 # load :: nvidia-smi (default table)
 # $ nvidia-smi 
 ################################################################################
-Fri Jul  3 22:11:09 2026       
+Fri Jul  3 22:22:26 2026       
 +-----------------------------------------------------------------------------------------+
 | NVIDIA-SMI 590.48.01              Driver Version: 590.48.01      CUDA Version: 13.1     |
 +-----------------------------------------+------------------------+----------------------+
@@ -1802,19 +1929,42 @@ Fri Jul  3 22:11:09 2026
 | Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
 |                                         |                        |               MIG M. |
 |=========================================+========================+======================|
-|   0  NVIDIA H200                    On  |   00000000:83:00.0 Off |                    0 |
-| N/A   52C    P0            628W /  700W |   32362MiB / 143771MiB |    100%      Default |
-|                                         |                        |             Disabled |
+|   0  NVIDIA H200                    On  |   00000000:83:00.0 Off |                   On |
+| N/A   36C    P0            295W /  700W |   16959MiB / 143771MiB |     N/A      Default |
+|                                         |                        |              Enabled |
 +-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| MIG devices:                                                                            |
++------------------+----------------------------------+-----------+-----------------------+
+| GPU  GI  CI  MIG |              Shared Memory-Usage |        Vol|        Shared         |
+|      ID  ID  Dev |                Shared BAR1-Usage | SM     Unc| CE ENC  DEC  OFA  JPG |
+|                  |                                  |        ECC|                       |
+|==================+==================================+===========+=======================|
+|  0    2   0   0  |           16925MiB / 71424MiB    | 16      0 |  3   0    3    0    3 |
+|                  |               0MiB / 59237MiB    |           |                       |
++------------------+----------------------------------+-----------+-----------------------+
+|  0    2   1   1  |           16925MiB / 71424MiB    | 32      0 |  3   0    3    0    3 |
+|                  |               0MiB / 59237MiB    |           |                       |
++------------------+----------------------------------+-----------+-----------------------+
+|  0    3   0   2  |              17MiB / 33280MiB    | 32      0 |  2   0    2    0    2 |
+|                  |               0MiB / 29618MiB    |           |                       |
++------------------+----------------------------------+-----------+-----------------------+
+|  0    9   0   3  |               9MiB / 16384MiB    | 16      0 |  1   0    1    0    1 |
+|                  |               0MiB / 14809MiB    |           |                       |
++------------------+----------------------------------+-----------+-----------------------+
+|  0   10   0   4  |               9MiB / 16384MiB    | 16      0 |  1   0    1    0    1 |
+|                  |               0MiB / 14809MiB    |           |                       |
++------------------+----------------------------------+-----------+-----------------------+
 
 +-----------------------------------------------------------------------------------------+
 | Processes:                                                                              |
 |  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
 |        ID   ID                                                               Usage      |
 |=========================================================================================|
-|    0   N/A  N/A           10291      C   /root/tools/memhog                     2566MiB |
-|    0   N/A  N/A           10293      C   /root/tools/memhog                     1542MiB |
-|    0   N/A  N/A           10309      C   ./gpu_burn                            28234MiB |
+|    0    2    1            12249      C   /root/tools/memhog                     2194MiB |
+|    0    2    1            12250      C   /root/tools/memhog                     1170MiB |
+|    0    2    1            12267      C   ./gpu_burn                            13526MiB |
 +-----------------------------------------------------------------------------------------+
 
 
@@ -1825,7 +1975,7 @@ Fri Jul  3 22:11:09 2026
 
 ==============NVSMI LOG==============
 
-Timestamp                                              : Fri Jul  3 22:11:09 2026
+Timestamp                                              : Fri Jul  3 22:22:26 2026
 Driver Version                                         : 590.48.01
 CUDA Version                                           : 13.1
 
@@ -1840,8 +1990,128 @@ GPU 00000000:83:00.0
     Persistence Mode                                   : Enabled
     Addressing Mode                                    : None
     MIG Mode
-        Current                                        : Disabled
-        Pending                                        : Disabled
+        Current                                        : Enabled
+        Pending                                        : Enabled
+    MIG Device
+        Index                                          : 0
+        GPU Instance ID                                : 2
+        Compute Instance ID                            : 0
+        Device Attributes
+            Shared
+                Multiprocessor count                   : 16
+                Copy Engine count                      : 3
+                Encoder count                          : 0
+                Decoder count                          : 3
+                OFA count                              : 0
+                JPG count                              : 3
+        ECC Errors
+            Volatile
+                SRAM Uncorrectable                     : 0
+        Shared FB Memory Usage
+            Total                                      : 71424 MiB
+            Reserved                                   : 0 MiB
+            Used                                       : 16925 MiB
+            Free                                       : 54499 MiB
+        Shared BAR1 Memory
+            Total                                      : 59237 MiB
+            Used                                       : 0 MiB
+            Free                                       : 59237 MiB
+    MIG Device
+        Index                                          : 1
+        GPU Instance ID                                : 2
+        Compute Instance ID                            : 1
+        Device Attributes
+            Shared
+                Multiprocessor count                   : 32
+                Copy Engine count                      : 3
+                Encoder count                          : 0
+                Decoder count                          : 3
+                OFA count                              : 0
+                JPG count                              : 3
+        ECC Errors
+            Volatile
+                SRAM Uncorrectable                     : 0
+        Shared FB Memory Usage
+            Total                                      : 71424 MiB
+            Reserved                                   : 0 MiB
+            Used                                       : 16925 MiB
+            Free                                       : 54499 MiB
+        Shared BAR1 Memory
+            Total                                      : 59237 MiB
+            Used                                       : 0 MiB
+            Free                                       : 59237 MiB
+    MIG Device
+        Index                                          : 2
+        GPU Instance ID                                : 3
+        Compute Instance ID                            : 0
+        Device Attributes
+            Shared
+                Multiprocessor count                   : 32
+                Copy Engine count                      : 2
+                Encoder count                          : 0
+                Decoder count                          : 2
+                OFA count                              : 0
+                JPG count                              : 2
+        ECC Errors
+            Volatile
+                SRAM Uncorrectable                     : 0
+        Shared FB Memory Usage
+            Total                                      : 33280 MiB
+            Reserved                                   : 0 MiB
+            Used                                       : 17 MiB
+            Free                                       : 33264 MiB
+        Shared BAR1 Memory
+            Total                                      : 29618 MiB
+            Used                                       : 0 MiB
+            Free                                       : 29618 MiB
+    MIG Device
+        Index                                          : 3
+        GPU Instance ID                                : 9
+        Compute Instance ID                            : 0
+        Device Attributes
+            Shared
+                Multiprocessor count                   : 16
+                Copy Engine count                      : 1
+                Encoder count                          : 0
+                Decoder count                          : 1
+                OFA count                              : 0
+                JPG count                              : 1
+        ECC Errors
+            Volatile
+                SRAM Uncorrectable                     : 0
+        Shared FB Memory Usage
+            Total                                      : 16384 MiB
+            Reserved                                   : 0 MiB
+            Used                                       : 9 MiB
+            Free                                       : 16376 MiB
+        Shared BAR1 Memory
+            Total                                      : 14809 MiB
+            Used                                       : 0 MiB
+            Free                                       : 14809 MiB
+    MIG Device
+        Index                                          : 4
+        GPU Instance ID                                : 10
+        Compute Instance ID                            : 0
+        Device Attributes
+            Shared
+                Multiprocessor count                   : 16
+                Copy Engine count                      : 1
+                Encoder count                          : 0
+                Decoder count                          : 1
+                OFA count                              : 0
+                JPG count                              : 1
+        ECC Errors
+            Volatile
+                SRAM Uncorrectable                     : 0
+        Shared FB Memory Usage
+            Total                                      : 16384 MiB
+            Reserved                                   : 0 MiB
+            Used                                       : 9 MiB
+            Free                                       : 16376 MiB
+        Shared BAR1 Memory
+            Total                                      : 14809 MiB
+            Used                                       : 0 MiB
+            Free                                       : 14809 MiB
     Accounting Mode                                    : Disabled
     Accounting Mode Buffer Size                        : 4000
     Driver Model
@@ -1909,8 +2179,8 @@ GPU 00000000:83:00.0
             Firmware                                   : N/A
         Replays Since Reset                            : 0
         Replay Number Rollovers                        : 0
-        Tx Throughput                                  : 4217 KB/s
-        Rx Throughput                                  : 8691 KB/s
+        Tx Throughput                                  : 5136 KB/s
+        Rx Throughput                                  : 36408 KB/s
         Atomic Caps Outbound                           : N/A
         Atomic Caps Inbound                            : N/A
     Fan Speed                                          : N/A
@@ -1935,24 +2205,24 @@ GPU 00000000:83:00.0
     FB Memory Usage
         Total                                          : 143771 MiB
         Reserved                                       : 614 MiB
-        Used                                           : 32362 MiB
-        Free                                           : 110796 MiB
+        Used                                           : 16959 MiB
+        Free                                           : 126199 MiB
     BAR1 Memory Usage
         Total                                          : 262144 MiB
-        Used                                           : 32363 MiB
-        Free                                           : 229781 MiB
+        Used                                           : 143157 MiB
+        Free                                           : 118987 MiB
     Conf Compute Protected Memory Usage
         Total                                          : 0 MiB
         Used                                           : 0 MiB
         Free                                           : 0 MiB
     Compute Mode                                       : Default
     Utilization
-        GPU                                            : 100 %
-        Memory                                         : 7 %
-        Encoder                                        : 0 %
-        Decoder                                        : 0 %
-        JPEG                                           : 0 %
-        OFA                                            : 0 %
+        GPU                                            : N/A
+        Memory                                         : N/A
+        Encoder                                        : N/A
+        Decoder                                        : N/A
+        JPEG                                           : N/A
+        OFA                                            : N/A
     Encoder Stats
         Active Sessions                                : 0
         Average FPS                                    : 0
@@ -1994,36 +2264,26 @@ GPU 00000000:83:00.0
         Single Bit ECC                                 : N/A
         Double Bit ECC                                 : N/A
         Pending Page Blacklist                         : N/A
-    Remapped Rows
-        Correctable Error                              : 0
-        Uncorrectable Error                            : 0
-        Pending                                        : No
-        Remapping Failure Occurred                     : No
-        Bank Remap Availability Histogram
-            Max                                        : 3072 bank(s)
-            High                                       : 0 bank(s)
-            Partial                                    : 0 bank(s)
-            Low                                        : 0 bank(s)
-            None                                       : 0 bank(s)
+    Remapped Rows                                      : N/A
     Temperature
-        GPU Current Temp                               : 52 C
-        GPU T.Limit Temp                               : 35 C
+        GPU Current Temp                               : 36 C
+        GPU T.Limit Temp                               : 46 C
         GPU Shutdown T.Limit Temp                      : -8 C
         GPU Slowdown T.Limit Temp                      : -2 C
         GPU Max Operating T.Limit Temp                 : 0 C
         GPU Target Temperature                         : N/A
-        Memory Current Temp                            : 41 C
+        Memory Current Temp                            : 39 C
         Memory Max Operating T.Limit Temp              : 0 C
     GPU Power Readings
-        Average Power Draw                             : 627.32 W
-        Instantaneous Power Draw                       : 625.24 W
+        Average Power Draw                             : 294.94 W
+        Instantaneous Power Draw                       : 292.14 W
         Current Power Limit                            : 700.00 W
         Requested Power Limit                          : 700.00 W
         Default Power Limit                            : 700.00 W
         Min Power Limit                                : 200.00 W
         Max Power Limit                                : 700.00 W
     GPU Memory Power Readings 
-        Average Power Draw                             : 97.69 W
+        Average Power Draw                             : 81.57 W
         Instantaneous Power Draw                       : N/A
     Module Power Readings
         Average Power Draw                             : N/A
@@ -2074,24 +2334,24 @@ GPU 00000000:83:00.0
             Access Timeout Recovery                    : N/A
             Incorrect Configuration                    : N/A
     Processes
-        GPU instance ID                   : N/A
-        Compute instance ID               : N/A
-        Process ID                        : 10291
+        GPU instance ID                   : 2
+        Compute instance ID               : 1
+        Process ID                        : 12249
             Type                          : C
             Name                          : /root/tools/memhog
-            Used GPU Memory               : 2566 MiB
-        GPU instance ID                   : N/A
-        Compute instance ID               : N/A
-        Process ID                        : 10293
+            Used GPU Memory               : 2194 MiB
+        GPU instance ID                   : 2
+        Compute instance ID               : 1
+        Process ID                        : 12250
             Type                          : C
             Name                          : /root/tools/memhog
-            Used GPU Memory               : 1542 MiB
-        GPU instance ID                   : N/A
-        Compute instance ID               : N/A
-        Process ID                        : 10309
+            Used GPU Memory               : 1170 MiB
+        GPU instance ID                   : 2
+        Compute instance ID               : 1
+        Process ID                        : 12267
             Type                          : C
             Name                          : ./gpu_burn
-            Used GPU Memory               : 28234 MiB
+            Used GPU Memory               : 13526 MiB
     Capabilities
         EGM                                            : disabled
 
@@ -2102,7 +2362,7 @@ GPU 00000000:83:00.0
 # $ nvidia-smi --query-gpu=timestamp,driver_version,vgpu_driver_capability.heterogenous_multivGPU,count,name,serial,uuid,pci.bus_id,pci.domain,pci.bus,pci.device,pci.baseClass,pci.subClass,pci.device_id,pci.sub_device_id,vgpu_device_capability.fractional_multiVgpu,vgpu_device_capability.heterogeneous_timeSlice_profile,vgpu_device_capability.heterogeneous_timeSlice_sizes,vgpu_device_capability.homogeneous_placements,vgpu_device_capability.mig_timeSlicing,vgpu_device_capability.mig_timeSlicing_mode,pcie.link.gen.current,pcie.link.gen.gpucurrent,pcie.link.gen.max,pcie.link.gen.gpumax,pcie.link.gen.hostmax,pcie.link.width.current,pcie.link.width.max,index,display_mode,display_attached,display_active,persistence_mode,addressing_mode,accounting.mode,accounting.buffer_size,driver_model.current,driver_model.pending,vbios_version,inforom.img,inforom.oem,inforom.ecc,inforom.pwr,inforom.checksum_validation,gpu_recovery_action,gom.current,gom.pending,fan.speed,pstate,clocks_event_reasons.supported,clocks_event_reasons.active,clocks_event_reasons.gpu_idle,clocks_event_reasons.applications_clocks_setting,clocks_event_reasons.sw_power_cap,clocks_event_reasons.hw_slowdown,clocks_event_reasons.hw_thermal_slowdown,clocks_event_reasons.hw_power_brake_slowdown,clocks_event_reasons.sw_thermal_slowdown,clocks_event_reasons.sync_boost,clocks_event_reasons_counters.sw_power_cap,clocks_event_reasons_counters.sync_boost,clocks_event_reasons_counters.sw_thermal_slowdown,clocks_event_reasons_counters.hw_thermal_slowdown,clocks_event_reasons_counters.hw_power_brake_slowdown,memory.total,memory.reserved,memory.used,memory.free,compute_mode,compute_cap,utilization.gpu,utilization.memory,utilization.encoder,utilization.decoder,utilization.jpeg,utilization.ofa,encoder.stats.sessionCount,encoder.stats.averageFps,encoder.stats.averageLatency,dramEncryption.mode.current,dramEncryption.mode.pending,ecc.mode.current,ecc.mode.pending,ecc.errors.corrected.volatile.device_memory,ecc.errors.corrected.volatile.dram,ecc.errors.corrected.volatile.register_file,ecc.errors.corrected.volatile.l1_cache,ecc.errors.corrected.volatile.l2_cache,ecc.errors.corrected.volatile.texture_memory,ecc.errors.corrected.volatile.cbu,ecc.errors.corrected.volatile.sram,ecc.errors.corrected.volatile.total,ecc.errors.corrected.aggregate.device_memory,ecc.errors.corrected.aggregate.dram,ecc.errors.corrected.aggregate.register_file,ecc.errors.corrected.aggregate.l1_cache,ecc.errors.corrected.aggregate.l2_cache,ecc.errors.corrected.aggregate.texture_memory,ecc.errors.corrected.aggregate.cbu,ecc.errors.corrected.aggregate.sram,ecc.errors.corrected.aggregate.total,ecc.errors.uncorrected.volatile.device_memory,ecc.errors.uncorrected.volatile.dram,ecc.errors.uncorrected.volatile.register_file,ecc.errors.uncorrected.volatile.l1_cache,ecc.errors.uncorrected.volatile.l2_cache,ecc.errors.uncorrected.volatile.texture_memory,ecc.errors.uncorrected.volatile.cbu,ecc.errors.uncorrected.volatile.sram,ecc.errors.uncorrected.volatile.total,ecc.errors.uncorrected.aggregate.device_memory,ecc.errors.uncorrected.aggregate.dram,ecc.errors.uncorrected.aggregate.register_file,ecc.errors.uncorrected.aggregate.l1_cache,ecc.errors.uncorrected.aggregate.l2_cache,ecc.errors.uncorrected.aggregate.texture_memory,ecc.errors.uncorrected.aggregate.cbu,ecc.errors.uncorrected.aggregate.sram,ecc.errors.uncorrected.aggregate.total,ecc.errors.uncorrected.volatile.sram.parity,ecc.errors.uncorrected.volatile.sram.secded,ecc.errors.uncorrected.aggregate.sram.parity,ecc.errors.uncorrected.aggregate.sram.secded,ecc.errors.uncorrected.aggregate.sram.thresholdExceeded,ecc.errors.uncorrected.aggregate.sram.l2,ecc.errors.uncorrected.aggregate.sram.sm,ecc.errors.uncorrected.aggregate.sram.mcu,ecc.errors.uncorrected.aggregate.sram.pcie,ecc.errors.uncorrected.aggregate.sram.other,retired_pages.single_bit_ecc.count,retired_pages.double_bit.count,retired_pages.pending,remapped_rows.correctable,remapped_rows.uncorrectable,remapped_rows.pending,remapped_rows.failure,remapped_rows.histogram.max,remapped_rows.histogram.high,remapped_rows.histogram.partial,remapped_rows.histogram.low,remapped_rows.histogram.none,temperature.gpu,temperature.gpu.tlimit,temperature.memory,power.management,power.draw,power.draw.average,power.draw.instant,power.limit,enforced.power.limit,power.default_limit,power.min_limit,power.max_limit,module.power.draw.average,module.power.draw.instant,module.power.limit,module.enforced.power.limit,module.power.default_limit,module.power.min_limit,module.power.max_limit,power_smoothing.delayed_power_smoothing_supported,power_smoothing.primary_power_floor,power_smoothing.secondary_power_floor,power_smoothing.min_primary_floor_activation_offset,power_smoothing.min_primary_floor_activation_point,power_smoothing.window_multiplier,power_smoothing.curr_profile.secondary_power_floor,power_smoothing.curr_profile.primary_floor_act_window_multiplier,power_smoothing.curr_profile.primary_floor_tar_window_multiplier,power_smoothing.curr_profile.primary_floor_act_offset,power_smoothing.admin_override.secondary_power_floor,power_smoothing.admin_override.primary_floor_act_window_multiplier,power_smoothing.admin_override.primary_floor_tar_window_multiplier,power_smoothing.admin_override.primary_floor_act_offset,edpp_multiplier,clocks.current.graphics,clocks.current.sm,clocks.current.memory,clocks.current.video,clocks.applications.graphics,clocks.applications.memory,clocks.default_applications.graphics,clocks.default_applications.memory,clocks.max.graphics,clocks.max.sm,clocks.max.memory,mig.mode.current,mig.mode.pending,gsp.mode.current,gsp.mode.default,c2c.mode,protected_memory.total,protected_memory.used,protected_memory.free,fabric.state,fabric.status,fabric.cliqueId,fabric.clusterUuid,fabric.health.summary,fabric.health.bandwidth,fabric.health.route_recovery_in_progress,fabric.health.route_unhealthy,fabric.health.access_timeout_recovery,fabric.health.incorrect_configuration,platform.chassis_serial_number,platform.slot_number,platform.tray_index,platform.host_id,platform.peer_type,platform.module_id,platform.gpu_fabric_guid,hostname --format=csv
 ################################################################################
 timestamp, driver_version, vgpu_driver_capability.heterogenous_multivGPU, count, name, serial, uuid, pci.bus_id, pci.domain, pci.bus, pci.device, pci.baseClass, pci.subClass, pci.device_id, pci.sub_device_id, vgpu_device_capability.fractional_multiVgpu, vgpu_device_capability.heterogeneous_timeSlice_profile, vgpu_device_capability.heterogeneous_timeSlice_sizes, vgpu_device_capability.homogeneous_placements, vgpu_device_capability.mig_timeSlicing, vgpu_device_capability.mig_timeSlicing_mode, pcie.link.gen.current, pcie.link.gen.gpucurrent, pcie.link.gen.max, pcie.link.gen.gpumax, pcie.link.gen.hostmax, pcie.link.width.current, pcie.link.width.max, index, display_mode, display_attached, display_active, persistence_mode, addressing_mode, accounting.mode, accounting.buffer_size, driver_model.current, driver_model.pending, vbios_version, inforom.img, inforom.oem, inforom.ecc, inforom.pwr, inforom.checksum_validation, gpu_recovery_action, gom.current, gom.pending, fan.speed [%], pstate, clocks_event_reasons.supported, clocks_event_reasons.active, clocks_event_reasons.gpu_idle, clocks_event_reasons.applications_clocks_setting, clocks_event_reasons.sw_power_cap, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_power_brake_slowdown, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.sync_boost, clocks_event_reasons_counters.sw_power_cap [us], clocks_event_reasons_counters.sync_boost [us], clocks_event_reasons_counters.sw_thermal_slowdown [us], clocks_event_reasons_counters.hw_thermal_slowdown [us], clocks_event_reasons_counters.hw_power_brake_slowdown [us], memory.total [MiB], memory.reserved [MiB], memory.used [MiB], memory.free [MiB], compute_mode, compute_cap, utilization.gpu [%], utilization.memory [%], utilization.encoder [%], utilization.decoder [%], utilization.jpeg [%], utilization.ofa [%], encoder.stats.sessionCount, encoder.stats.averageFps, encoder.stats.averageLatency, dramEncryption.mode.current, dramEncryption.mode.pending, ecc.mode.current, ecc.mode.pending, ecc.errors.corrected.volatile.device_memory, ecc.errors.corrected.volatile.dram, ecc.errors.corrected.volatile.register_file, ecc.errors.corrected.volatile.l1_cache, ecc.errors.corrected.volatile.l2_cache, ecc.errors.corrected.volatile.texture_memory, ecc.errors.corrected.volatile.cbu, ecc.errors.corrected.volatile.sram, ecc.errors.corrected.volatile.total, ecc.errors.corrected.aggregate.device_memory, ecc.errors.corrected.aggregate.dram, ecc.errors.corrected.aggregate.register_file, ecc.errors.corrected.aggregate.l1_cache, ecc.errors.corrected.aggregate.l2_cache, ecc.errors.corrected.aggregate.texture_memory, ecc.errors.corrected.aggregate.cbu, ecc.errors.corrected.aggregate.sram, ecc.errors.corrected.aggregate.total, ecc.errors.uncorrected.volatile.device_memory, ecc.errors.uncorrected.volatile.dram, ecc.errors.uncorrected.volatile.register_file, ecc.errors.uncorrected.volatile.l1_cache, ecc.errors.uncorrected.volatile.l2_cache, ecc.errors.uncorrected.volatile.texture_memory, ecc.errors.uncorrected.volatile.cbu, ecc.errors.uncorrected.volatile.sram, ecc.errors.uncorrected.volatile.total, ecc.errors.uncorrected.aggregate.device_memory, ecc.errors.uncorrected.aggregate.dram, ecc.errors.uncorrected.aggregate.register_file, ecc.errors.uncorrected.aggregate.l1_cache, ecc.errors.uncorrected.aggregate.l2_cache, ecc.errors.uncorrected.aggregate.texture_memory, ecc.errors.uncorrected.aggregate.cbu, ecc.errors.uncorrected.aggregate.sram, ecc.errors.uncorrected.aggregate.total, ecc.errors.uncorrected.volatile.sram.parity, ecc.errors.uncorrected.volatile.sram.secded, ecc.errors.uncorrected.aggregate.sram.parity, ecc.errors.uncorrected.aggregate.sram.secded, ecc.errors.uncorrected.aggregate.sram.thresholdExceeded, ecc.errors.uncorrected.aggregate.sram.l2, ecc.errors.uncorrected.aggregate.sram.sm, ecc.errors.uncorrected.aggregate.sram.mcu, ecc.errors.uncorrected.aggregate.sram.pcie, ecc.errors.uncorrected.aggregate.sram.other, retired_pages.single_bit_ecc.count, retired_pages.double_bit.count, retired_pages.pending, remapped_rows.correctable, remapped_rows.uncorrectable, remapped_rows.pending, remapped_rows.failure, remapped_rows.histogram.max, remapped_rows.histogram.high, remapped_rows.histogram.partial, remapped_rows.histogram.low, remapped_rows.histogram.none, temperature.gpu, temperature.gpu.tlimit, temperature.memory, power.management, power.draw [W], power.draw.average [W], power.draw.instant [W], power.limit [W], enforced.power.limit [W], power.default_limit [W], power.min_limit [W], power.max_limit [W], module.power.draw.average [W], module.power.draw.instant [W], module.power.limit [W], module.enforced.power.limit [W], module.power.default_limit [W], module.power.min_limit [W], module.power.max_limit [W], power_smoothing.delayed_power_smoothing_supported, power_smoothing.primary_power_floor [W], power_smoothing.secondary_power_floor [W], power_smoothing.min_primary_floor_activation_offset [W], power_smoothing.min_primary_floor_activation_point [W], power_smoothing.window_multiplier [ms], power_smoothing.curr_profile.secondary_power_floor [W], power_smoothing.curr_profile.primary_floor_act_window_multiplier, power_smoothing.curr_profile.primary_floor_tar_window_multiplier, power_smoothing.curr_profile.primary_floor_act_offset [W], power_smoothing.admin_override.secondary_power_floor [W], power_smoothing.admin_override.primary_floor_act_window_multiplier, power_smoothing.admin_override.primary_floor_tar_window_multiplier, power_smoothing.admin_override.primary_floor_act_offset [W], edpp_multiplier [%], clocks.current.graphics [MHz], clocks.current.sm [MHz], clocks.current.memory [MHz], clocks.current.video [MHz], clocks.applications.graphics [MHz], clocks.applications.memory [MHz], clocks.default_applications.graphics [MHz], clocks.default_applications.memory [MHz], clocks.max.graphics [MHz], clocks.max.sm [MHz], clocks.max.memory [MHz], mig.mode.current, mig.mode.pending, gsp.mode.current, gsp.mode.default, c2c.mode, protected_memory.total [MiB], protected_memory.used [MiB], protected_memory.free [MiB], fabric.state, fabric.status, fabric.cliqueId, fabric.clusterUuid, fabric.health.summary, fabric.health.bandwidth, fabric.health.route_recovery_in_progress, fabric.health.route_unhealthy, fabric.health.access_timeout_recovery, fabric.health.incorrect_configuration, platform.chassis_serial_number, platform.slot_number, platform.tray_index, platform.host_id, platform.peer_type, platform.module_id, platform.gpu_fabric_guid, hostname
-2026/07/03 22:11:09.763, 590.48.01, [N/A], 1, NVIDIA H200, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, 00000000:83:00.0, 0x0000, 0x83, 0x00, 0x3, 0x2, 0x233510DE, 0x18BE10DE, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], 5, 5, 5, 5, [N/A], 16, 16, 0, [Requested functionality has been deprecated], Yes, Disabled, Enabled, None, Disabled, 4000, [N/A], [N/A], 96.00.A5.00.03, G520.0280.02.02, 2.1, 7.16, [N/A], valid, None, [N/A], [N/A], [N/A], P0, 0x00000000000001FF, 0x0000000000000000, Not Active, Not Active, Not Active, Not Active, Not Active, Not Active, Not Active, Not Active, 0 us, 0 us, 0 us, 0 us, 0 us, 143771 MiB, 614 MiB, 32362 MiB, 110796 MiB, Default, 9.0, 100 %, 7 %, 0 %, 0 %, 0 %, 0 %, 0, 0, 0, [N/A], [N/A], Enabled, Enabled, 0, 0, [N/A], [N/A], [N/A], [N/A], [N/A], 0, 0, 0, 0, [N/A], [N/A], [N/A], [N/A], [N/A], 0, 0, 0, 0, [N/A], [N/A], [N/A], [N/A], [N/A], 0, 0, 0, 0, [N/A], [N/A], [N/A], [N/A], [N/A], 0, 0, 0, 0, 0, 0, No, 0, 0, 0, 0, 0, [N/A], [N/A], [N/A], 0, 0, No, No, 3072, 0, 0, 0, 0, 52, 35, 40, [Requested functionality has been deprecated], 627.40 W, 627.40 W, 626.26 W, 700.00 W, 700.00 W, 700.00 W, 200.00 W, 700.00 W, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], 100.00 %, 1980 MHz, 1980 MHz, 3201 MHz, 1545 MHz, [Requested functionality has been deprecated], [Requested functionality has been deprecated], [Requested functionality has been deprecated], [Requested functionality has been deprecated], 1980 MHz, 1980 MHz, 3201 MHz, Disabled, Disabled, Enabled, Enabled, Disabled, 0 MiB, 0 MiB, 0 MiB, Completed, Success, 0, 00000000-0000-0000-0000-000000000000, N/A, N/A, N/A, N/A, N/A, N/A, , 0, 0, 1, Direct Connected, 1, 0x0000000000000000, [N/A]
+2026/07/03 22:22:27.218, 590.48.01, [N/A], 1, NVIDIA H200, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, 00000000:83:00.0, 0x0000, 0x83, 0x00, 0x3, 0x2, 0x233510DE, 0x18BE10DE, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], 5, 5, 5, 5, [N/A], 16, 16, 0, [Requested functionality has been deprecated], Yes, Disabled, Enabled, None, Disabled, 4000, [N/A], [N/A], 96.00.A5.00.03, G520.0280.02.02, 2.1, 7.16, [N/A], valid, None, [N/A], [N/A], [N/A], P0, 0x00000000000001FF, 0x0000000000000000, Not Active, Not Active, Not Active, Not Active, Not Active, Not Active, Not Active, Not Active, 0 us, 0 us, 0 us, 0 us, 0 us, 143771 MiB, 614 MiB, 16959 MiB, 126199 MiB, Default, 9.0, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], 0, 0, 0, [N/A], [N/A], Enabled, Enabled, 0, 0, [N/A], [N/A], [N/A], [N/A], [N/A], 0, 0, 0, 0, [N/A], [N/A], [N/A], [N/A], [N/A], 0, 0, 0, 0, [N/A], [N/A], [N/A], [N/A], [N/A], 0, 0, 0, 0, [N/A], [N/A], [N/A], [N/A], [N/A], 0, 0, 0, 0, 0, 0, No, 0, 0, 0, 0, 0, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], 3072, 0, 0, 0, 0, 36, 46, 39, [Requested functionality has been deprecated], 295.01 W, 295.01 W, 294.14 W, 700.00 W, 700.00 W, 700.00 W, 200.00 W, 700.00 W, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], 100.00 %, 1980 MHz, 1980 MHz, 3201 MHz, 1545 MHz, [Requested functionality has been deprecated], [Requested functionality has been deprecated], [Requested functionality has been deprecated], [Requested functionality has been deprecated], 1980 MHz, 1980 MHz, 3201 MHz, Enabled, Enabled, Enabled, Enabled, Disabled, 0 MiB, 0 MiB, 0 MiB, Completed, Success, 0, 00000000-0000-0000-0000-000000000000, N/A, N/A, N/A, N/A, N/A, N/A, , 0, 0, 1, Direct Connected, 1, 0x0000000000000000, [N/A]
 
 
 ################################################################################
@@ -2110,9 +2370,9 @@ timestamp, driver_version, vgpu_driver_capability.heterogenous_multivGPU, count,
 # $ nvidia-smi --query-compute-apps=timestamp,gpu_name,gpu_bus_id,gpu_serial,gpu_uuid,pid,process_name,used_gpu_memory --format=csv
 ################################################################################
 timestamp, gpu_name, gpu_bus_id, gpu_serial, gpu_uuid, pid, process_name, used_gpu_memory [MiB]
-2026/07/03 22:11:09.916, NVIDIA H200, 00000000:83:00.0, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, 10291, /root/tools/memhog, 2566 MiB
-2026/07/03 22:11:09.916, NVIDIA H200, 00000000:83:00.0, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, 10293, /root/tools/memhog, 1542 MiB
-2026/07/03 22:11:09.916, NVIDIA H200, 00000000:83:00.0, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, 10309, ./gpu_burn, 28234 MiB
+2026/07/03 22:22:27.377, NVIDIA H200, 00000000:83:00.0, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, 12249, /root/tools/memhog, 2194 MiB
+2026/07/03 22:22:27.377, NVIDIA H200, 00000000:83:00.0, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, 12250, /root/tools/memhog, 1170 MiB
+2026/07/03 22:22:27.377, NVIDIA H200, 00000000:83:00.0, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, 12267, ./gpu_burn, 13526 MiB
 
 
 ################################################################################
@@ -2120,6 +2380,12 @@ timestamp, gpu_name, gpu_bus_id, gpu_serial, gpu_uuid, pid, process_name, used_g
 # $ nvidia-smi --query-accounted-apps=timestamp,gpu_name,gpu_bus_id,gpu_serial,gpu_uuid,pid,gpu_util,mem_util,max_memory_usage,time --format=csv
 ################################################################################
 timestamp, gpu_name, gpu_bus_id, gpu_serial, gpu_uuid, pid, gpu_utilization [%], mem_utilization [%], max_memory_usage [MiB], time [ms]
+2026/07/03 22:22:27.394, NVIDIA H200, 00000000:83:00.0, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, 10744, 0 %, 0 %, 0 MiB, 8110 ms
+2026/07/03 22:22:27.394, NVIDIA H200, 00000000:83:00.0, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, 10526, 0 %, 0 %, 818 MiB, 39376 ms
+2026/07/03 22:22:27.394, NVIDIA H200, 00000000:83:00.0, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, 10525, 0 %, 0 %, 1542 MiB, 42479 ms
+2026/07/03 22:22:27.394, NVIDIA H200, 00000000:83:00.0, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, 10529, 0 %, 0 %, 818 MiB, 42532 ms
+2026/07/03 22:22:27.394, NVIDIA H200, 00000000:83:00.0, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, 10528, 0 %, 0 %, 818 MiB, 42571 ms
+2026/07/03 22:22:27.394, NVIDIA H200, 00000000:83:00.0, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, 10550, 97 %, 7 %, 14410 MiB, 41397 ms
 
 
 ################################################################################
@@ -2127,8 +2393,8 @@ timestamp, gpu_name, gpu_bus_id, gpu_serial, gpu_uuid, pid, gpu_utilization [%],
 # $ nvidia-smi --query-retired-pages=timestamp,gpu_name,gpu_bus_id,gpu_serial,gpu_uuid,retired_pages.address,retired_pages.timestamp,retired_pages.cause --format=csv
 ################################################################################
 timestamp, gpu_name, gpu_bus_id, gpu_serial, gpu_uuid, retired_pages.address, retired_pages.timestamp, retired_pages.cause
-2026/07/03 22:11:09.950, NVIDIA H200, 00000000:83:00.0, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, [N/A], [N/A], Single Bit ECC
-2026/07/03 22:11:09.950, NVIDIA H200, 00000000:83:00.0, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, [N/A], [N/A], Double Bit ECC
+2026/07/03 22:22:27.412, NVIDIA H200, 00000000:83:00.0, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, [N/A], [N/A], Single Bit ECC
+2026/07/03 22:22:27.412, NVIDIA H200, 00000000:83:00.0, 0000000000000, GPU-00000000-0000-0000-0000-000000000000, [N/A], [N/A], Double Bit ECC
 
 
 ################################################################################
@@ -2137,21 +2403,21 @@ timestamp, gpu_name, gpu_bus_id, gpu_serial, gpu_uuid, retired_pages.address, re
 ################################################################################
 # gpu         pid   type     sm    mem    enc    dec    jpg    ofa    command 
 # Idx           #    C/G      %      %      %      %      %      %    name 
-    0      10291     C      -      -      -      -      -      -    memhog         
-    0      10293     C      -      -      -      -      -      -    memhog         
-    0      10309     C     99      7      -      -      -      -    gpu_burn       
-    0      10291     C      -      -      -      -      -      -    memhog         
-    0      10293     C      -      -      -      -      -      -    memhog         
-    0      10309     C     99      7      -      -      -      -    gpu_burn       
-    0      10291     C      -      -      -      -      -      -    memhog         
-    0      10293     C      -      -      -      -      -      -    memhog         
-    0      10309     C     99      7      -      -      -      -    gpu_burn       
-    0      10291     C     19      1      -      -      -      -    memhog         
-    0      10293     C      -      -      -      -      -      -    memhog         
-    0      10309     C     79      5      -      -      -      -    gpu_burn       
-    0      10291     C      -      -      -      -      -      -    memhog         
-    0      10293     C      -      -      -      -      -      -    memhog         
-    0      10309     C     99      7      -      -      -      -    gpu_burn       
+    0      12249     C      -      -      -      -      -      -    memhog         
+    0      12250     C      -      -      -      -      -      -    memhog         
+    0      12267     C      -      -      -      -      -      -    gpu_burn       
+    0      12249     C      -      -      -      -      -      -    memhog         
+    0      12250     C      -      -      -      -      -      -    memhog         
+    0      12267     C      -      -      -      -      -      -    gpu_burn       
+    0      12249     C      -      -      -      -      -      -    memhog         
+    0      12250     C      -      -      -      -      -      -    memhog         
+    0      12267     C      -      -      -      -      -      -    gpu_burn       
+    0      12249     C      -      -      -      -      -      -    memhog         
+    0      12250     C      -      -      -      -      -      -    memhog         
+    0      12267     C      -      -      -      -      -      -    gpu_burn       
+    0      12249     C      -      -      -      -      -      -    memhog         
+    0      12250     C      -      -      -      -      -      -    memhog         
+    0      12267     C      -      -      -      -      -      -    gpu_burn       
 
 
 ################################################################################
@@ -2160,8 +2426,8 @@ timestamp, gpu_name, gpu_bus_id, gpu_serial, gpu_uuid, retired_pages.address, re
 ################################################################################
 # gpu    pwr  gtemp  mtemp     sm    mem    enc    dec    jpg    ofa   mclk   pclk 
 # Idx      W      C      C      %      %      %      %      %      %    MHz    MHz 
-    0    630     53     41    100      8      0      0      0      0   3201   1980 
-    0    628     53     42    100      8      0      0      0      0   3201   1980 
-    0    629     53     42    100      8      0      0      0      0   3201   1980 
-    0    632     54     42    100      8      0      0      0      0   3201   1980 
-    0    630     54     42    100      8      0      0      0      0   3201   1980 
+    0    295     37     39      -      -      -      -      -      -   3201   1980 
+    0    295     37     39      -      -      -      -      -      -   3201   1980 
+    0    295     37     39      -      -      -      -      -      -   3201   1980 
+    0    295     37     40      -      -      -      -      -      -   3201   1980 
+    0    294     37     40      -      -      -      -      -      -   3201   1980 

@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
@@ -20,12 +21,11 @@ import (
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/app"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/capture"
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/captures"
 )
 
 // update regenerates the golden files instead of comparing against them.
 var update = flag.Bool("update", false, "update the golden files")
-
-const capturesDir = "../testdata/captures"
 
 const startupTimeout = 30 * time.Second
 
@@ -187,24 +187,27 @@ func filterDeterministic(metrics string) string {
 // goldenCase is one cell of the golden matrix: a capture in one of its
 // states, and the golden file pinning the exporter's output for it.
 type goldenCase struct {
-	capturePath string
+	captureName string
 	state       string
 	goldenName  string
 }
 
-// goldenCases discovers the golden matrix from the capture files themselves:
+// goldenCases discovers the golden matrix from the embedded corpus itself:
 // every committed capture, in every state it holds sections for.
 func goldenCases(t *testing.T) []goldenCase {
 	t.Helper()
 
-	paths, err := filepath.Glob(filepath.Join(capturesDir, "*.txt"))
+	names, err := fs.Glob(captures.FS, "*.txt")
 	require.NoError(t, err)
-	require.NotEmpty(t, paths)
+	require.NotEmpty(t, names)
 
 	var cases []goldenCase
 
-	for _, path := range paths {
-		capt, err := capture.Load(path)
+	for _, name := range names {
+		content, err := fs.ReadFile(captures.FS, name)
+		require.NoError(t, err)
+
+		capt, err := capture.Parse(string(content))
 		require.NoError(t, err)
 
 		for _, state := range []string{"idle", "load"} {
@@ -213,9 +216,9 @@ func goldenCases(t *testing.T) []goldenCase {
 			}
 
 			cases = append(cases, goldenCase{
-				capturePath: path,
+				captureName: name,
 				state:       state,
-				goldenName:  strings.TrimSuffix(filepath.Base(path), ".txt") + "__" + state + ".metrics",
+				goldenName:  strings.TrimSuffix(name, ".txt") + "__" + state + ".metrics",
 			})
 		}
 	}
@@ -233,11 +236,8 @@ func TestGoldenMetrics(t *testing.T) {
 		t.Run(testCase.goldenName, func(t *testing.T) {
 			t.Parallel()
 
-			capturePath, err := filepath.Abs(testCase.capturePath)
-			require.NoError(t, err)
-
 			baseURL := startExporter(t,
-				"--nvidia-smi-command="+fakeCommand(capturePath, "--state", testCase.state),
+				"--nvidia-smi-command="+fakeCommand(testCase.captureName, "--state", testCase.state),
 				"--collect.compute-apps")
 
 			got := filterDeterministic(scrape(t, baseURL))
@@ -290,16 +290,12 @@ func TestWallClockFamilies(t *testing.T) {
 	assert.Contains(t, metrics, "nvidia_smi_last_collect_success 1")
 }
 
-// defaultCapture is the capture used by the targeted tests, as an absolute
-// path.
+// defaultCapture is the capture used by the targeted tests, an embedded
+// capture name.
 func defaultCapture(t *testing.T) string {
 	t.Helper()
 
-	path, err := filepath.Abs(filepath.Join(capturesDir,
-		"linux-x86_64__nvidia-geforce-rtx-2080-super__595.71.05.txt"))
-	require.NoError(t, err)
-
-	return path
+	return captures.Default
 }
 
 // TestComputeAppsDisabled proves the per-process families stay absent without

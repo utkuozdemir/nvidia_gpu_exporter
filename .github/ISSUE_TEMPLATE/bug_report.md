@@ -32,7 +32,7 @@ The biggest help for a GPU bug is your actual `nvidia-smi` output. This collecto
 grabs it and prints one file to attach here:
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/testdata/captures/collect.sh
+curl -fsSLO https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/internal/captures/collect.sh
 bash collect.sh        # add --load to also capture an under-load sample
 ```
 

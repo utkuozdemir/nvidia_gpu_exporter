@@ -16,7 +16,7 @@ import (
 func TestLoadCorpus(t *testing.T) {
 	t.Parallel()
 
-	paths, err := filepath.Glob(filepath.Join("..", "..", "testdata", "captures", "*.txt"))
+	paths, err := filepath.Glob(filepath.Join("..", "captures", "*.txt"))
 	require.NoError(t, err)
 	require.NotEmpty(t, paths)
 

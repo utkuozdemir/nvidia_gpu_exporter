@@ -2,5 +2,5 @@
 # expected scrapes: both are compared byte for byte by the integration tests,
 # so they must never be CRLF-converted on checkout (core.autocrlf on Windows
 # would otherwise break the whole suite).
-testdata/captures/*.txt text eol=lf
+internal/captures/*.txt text eol=lf
 integration/testdata/*.metrics text eol=lf

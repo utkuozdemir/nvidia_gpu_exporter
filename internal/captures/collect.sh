@@ -19,7 +19,7 @@
 #
 # Options:
 #   --out DIR          Base output directory (default: this script's directory,
-#                      i.e. testdata/captures in a clone of the repo).
+#                      i.e. internal/captures in a clone of the repo).
 #   --nvidia-smi CMD   nvidia-smi invocation (default: nvidia-smi). May contain
 #                      args. NOTE: OS/host metadata is read from wherever THIS
 #                      script runs, so prefer running it on the GPU host.
@@ -41,7 +41,7 @@ set -uo pipefail
 
 # ---- defaults ---------------------------------------------------------------
 # Default output dir is the directory this script lives in. In a clone of the
-# repo that is testdata/captures/, so the file lands where it belongs for a PR.
+# repo that is internal/captures/, so the file lands where it belongs for a PR.
 # When run from stdin (e.g. `ssh host bash -s`) the location is unknown, so fall
 # back to the current directory and rely on --out.
 if [ -n "${BASH_SOURCE:-}" ] && [ -f "${BASH_SOURCE}" ]; then
@@ -269,7 +269,7 @@ fi
 {
   echo "################################################################################"
   echo "# nvidia_gpu_exporter GPU capture"
-  echo "# https://github.com/utkuozdemir/nvidia_gpu_exporter - see testdata/captures/README.md"
+  echo "# https://github.com/utkuozdemir/nvidia_gpu_exporter - see internal/captures/README.md"
   echo "################################################################################"
   echo "# The GPU model and driver are in the filename. Every other nvidia-smi"
   echo "# value is in the raw sections below, not re-parsed here. This header only"

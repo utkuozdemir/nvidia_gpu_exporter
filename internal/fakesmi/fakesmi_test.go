@@ -13,7 +13,7 @@ import (
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/fakesmi"
 )
 
-const capturesDir = "../../testdata/captures"
+const capturesDir = "../captures"
 
 // runFake runs the fake in-process, returning its exit code and outputs.
 func runFake(t *testing.T, args ...string) (int, string, string) {
@@ -184,6 +184,28 @@ func TestVerbatimSections(t *testing.T) {
 	code, stdoutLoad, _ := runFake(t, "--capture", path, "--state", "load", "-q")
 	require.Equal(t, 0, code)
 	assert.NotEqual(t, stdoutIdle, stdoutLoad)
+}
+
+// TestEmbeddedCaptures proves --capture resolves embedded capture names (the
+// .txt suffix optional) and that the default needs no repository checkout.
+func TestEmbeddedCaptures(t *testing.T) {
+	t.Parallel()
+
+	code, stdout, stderr := runFake(t, "--capture", "linux-x86_64__nvidia-l40s__595.80", "-L")
+	require.Equal(t, 0, code, "stderr: %s", stderr)
+	assert.Contains(t, stdout, "GPU 0:")
+
+	code, _, stderr = runFake(t, "--capture", "linux-x86_64__nvidia-l40s__595.80.txt", "-L")
+	require.Equal(t, 0, code, "stderr: %s", stderr)
+
+	// no --capture at all: the embedded default answers
+	code, stdout, stderr = runFake(t, "--help-query-gpu")
+	require.Equal(t, 0, code, "stderr: %s", stderr)
+	assert.NotEmpty(t, stdout)
+
+	code, _, stderr = runFake(t, "--capture", "no-such-capture", "-L")
+	assert.Equal(t, 2, code)
+	assert.Contains(t, stderr, "neither a file on disk nor an embedded capture")
 }
 
 func TestFailureInjection(t *testing.T) {

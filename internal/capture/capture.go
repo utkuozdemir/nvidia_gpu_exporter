@@ -1,7 +1,7 @@
-// Package capture parses the GPU capture files under testdata/captures: raw
-// nvidia-smi output recorded from real machines, one self-contained file per
-// machine/driver combination. The package knows the file format only; what
-// the recorded commands mean is up to the caller.
+// Package capture parses the GPU capture files that internal/captures
+// stores: raw nvidia-smi output recorded from real machines, one
+// self-contained file per machine/driver combination. The package knows the
+// file format only; what the recorded commands mean is up to the caller.
 package capture
 
 import (
