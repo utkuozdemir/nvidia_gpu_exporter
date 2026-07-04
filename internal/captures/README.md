@@ -137,19 +137,21 @@ automatically extends the test suite. A new capture fails the suite until its
 golden file is generated and reviewed:
 
 ```bash
-go test ./integration/ -update   # generates integration/testdata/<capture>__<state>.metrics
-git diff integration/testdata/   # eyeball what the exporter makes of the new capture
+go test ./internal/integration/ -update   # generates internal/integration/testdata/<capture>__<state>.metrics
+git diff internal/integration/testdata/   # eyeball what the exporter makes of the new capture
 ```
 
 (Contributors don't have to do this — attaching the capture to an issue or PR is
 enough, maintainers take it from there.)
 
-The fake is also handy for local development without a GPU:
+The fake is also handy for local development without a GPU. The whole corpus
+is embedded into it, so `--capture` takes a capture name (or a path to an
+uncommitted capture file):
 
 ```bash
 go build -o fake-nvidia-smi ./cmd/fake-nvidia-smi
 go run ./cmd/nvidia_gpu_exporter --nvidia-smi-command \
-  "./fake-nvidia-smi --capture internal/captures/<file>.txt --state load"
+  "./fake-nvidia-smi --capture linux-x86_64__nvidia-h200__590.48.01 --state load"
 ```
 
 Beyond that:

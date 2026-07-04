@@ -191,7 +191,7 @@ Follow these simple steps:
    sudo useradd --system --no-create-home --shell /usr/sbin/nologin nvidia_gpu_exporter
    ```
 
-3. Drop a copy of the file **[nvidia_gpu_exporter.service](systemd/nvidia_gpu_exporter.service)** under `/etc/systemd/system` directory.
+3. Drop a copy of the file **[nvidia_gpu_exporter.service](../install/systemd/nvidia_gpu_exporter.service)** under `/etc/systemd/system` directory.
 4. Run `sudo systemctl daemon-reload`
 5. Start and enable the service to run on boot: `sudo systemctl enable --now nvidia_gpu_exporter`
 
@@ -283,7 +283,7 @@ injects GPU access on each node, the same way it does for Docker above.
 > environment variable approach below gives the exporter visibility of all
 > GPUs on the node without reserving any of them.
 
-The easiest way is the [Helm chart](charts/nvidia-gpu-exporter), which lives
+The easiest way is the [Helm chart](../charts/nvidia-gpu-exporter), which lives
 in this repository and implements all of the above:
 
 ```bash
@@ -291,7 +291,7 @@ helm install nvidia-gpu-exporter oci://ghcr.io/utkuozdemir/charts/nvidia-gpu-exp
   --set runtimeClassName=nvidia
 ```
 
-See the [chart README](charts/nvidia-gpu-exporter/README.md) for the full
+See the [chart README](../charts/nvidia-gpu-exporter/README.md) for the full
 values reference, the optional monitoring extras (ServiceMonitor, PodMonitor,
 alerts, the Grafana dashboard), and the migration notes if you are coming
 from the old chart repository.
