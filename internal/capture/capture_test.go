@@ -132,6 +132,12 @@ func TestParseSection(t *testing.T) {
 	capt, err := capture.Parse(content)
 	require.NoError(t, err)
 
+	// CRLF-converted content (a capture that traveled through a Windows
+	// checkout or an email attachment) must parse identically
+	crlf, err := capture.Parse(strings.ReplaceAll(content, "\n", "\r\n"))
+	require.NoError(t, err)
+	assert.Equal(t, capt, crlf)
+
 	assert.Equal(t, "collected_at: whenever", capt.Header)
 	require.Len(t, capt.Sections, 2)
 

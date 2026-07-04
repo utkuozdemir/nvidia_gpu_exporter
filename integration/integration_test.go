@@ -67,10 +67,17 @@ func TestMain(m *testing.M) {
 // the command splitting.
 func fakeCommand(capturePath string, fakeArgs ...string) string {
 	parts := make([]string, 0, 3+len(fakeArgs))
-	parts = append(parts, "'"+fakeBin+"'", "--capture", "'"+capturePath+"'")
+	parts = append(parts, quote(fakeBin), "--capture", quote(capturePath))
 	parts = append(parts, fakeArgs...)
 
 	return strings.Join(parts, " ")
+}
+
+// quote single-quotes a path for the command splitting, escaping any literal
+// single quote the POSIX way (closing the quotes, escaping the quote,
+// reopening), so even a path like /home/o'connor survives.
+func quote(path string) string {
+	return "'" + strings.ReplaceAll(path, "'", `'\''`) + "'"
 }
 
 // startExporter runs the real exporter entry in-process with the given flags
@@ -175,15 +182,24 @@ func filterDeterministic(metrics string) string {
 	return strings.Join(kept, "\n") + "\n"
 }
 
-// TestGoldenMetrics runs the exporter against every committed capture in
-// every state the capture holds, and compares the deterministic part of the
-// scrape against a golden file. Run with -update to regenerate the goldens.
-func TestGoldenMetrics(t *testing.T) {
-	t.Parallel()
+// goldenCase is one cell of the golden matrix: a capture in one of its
+// states, and the golden file pinning the exporter's output for it.
+type goldenCase struct {
+	capturePath string
+	state       string
+	goldenName  string
+}
+
+// goldenCases discovers the golden matrix from the capture files themselves:
+// every committed capture, in every state it holds sections for.
+func goldenCases(t *testing.T) []goldenCase {
+	t.Helper()
 
 	paths, err := filepath.Glob(filepath.Join(capturesDir, "*.txt"))
 	require.NoError(t, err)
 	require.NotEmpty(t, paths)
+
+	var cases []goldenCase
 
 	for _, path := range paths {
 		capt, err := capture.Load(path)
@@ -194,35 +210,69 @@ func TestGoldenMetrics(t *testing.T) {
 				continue
 			}
 
-			goldenName := strings.TrimSuffix(filepath.Base(path), ".txt") + "__" + state + ".metrics"
-
-			t.Run(goldenName, func(t *testing.T) {
-				t.Parallel()
-
-				capturePath, err := filepath.Abs(path)
-				require.NoError(t, err)
-
-				baseURL := startExporter(t,
-					"--nvidia-smi-command="+fakeCommand(capturePath, "--state", state),
-					"--collect.compute-apps")
-
-				got := filterDeterministic(scrape(t, baseURL))
-				goldenPath := filepath.Join("testdata", goldenName)
-
-				if *update {
-					require.NoError(t, os.MkdirAll("testdata", 0o755))
-					require.NoError(t, os.WriteFile(goldenPath, []byte(got), 0o600))
-
-					return
-				}
-
-				want, err := os.ReadFile(goldenPath)
-				require.NoError(t, err,
-					"missing golden for a new capture? generate and review it with: go test ./integration/ -update")
-
-				assert.Equal(t, string(want), got)
+			cases = append(cases, goldenCase{
+				capturePath: path,
+				state:       state,
+				goldenName:  strings.TrimSuffix(filepath.Base(path), ".txt") + "__" + state + ".metrics",
 			})
 		}
+	}
+
+	return cases
+}
+
+// TestGoldenMetrics runs the exporter against every committed capture in
+// every state the capture holds, and compares the deterministic part of the
+// scrape against a golden file. Run with -update to regenerate the goldens.
+func TestGoldenMetrics(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range goldenCases(t) {
+		t.Run(testCase.goldenName, func(t *testing.T) {
+			t.Parallel()
+
+			capturePath, err := filepath.Abs(testCase.capturePath)
+			require.NoError(t, err)
+
+			baseURL := startExporter(t,
+				"--nvidia-smi-command="+fakeCommand(capturePath, "--state", testCase.state),
+				"--collect.compute-apps")
+
+			got := filterDeterministic(scrape(t, baseURL))
+			goldenPath := filepath.Join("testdata", testCase.goldenName)
+
+			if *update {
+				require.NoError(t, os.MkdirAll("testdata", 0o755))
+				require.NoError(t, os.WriteFile(goldenPath, []byte(got), 0o600))
+
+				return
+			}
+
+			want, err := os.ReadFile(goldenPath)
+			require.NoError(t, err,
+				"missing golden for a new capture? generate and review it with: go test ./integration/ -update")
+
+			assert.Equal(t, string(want), got)
+		})
+	}
+}
+
+// TestNoStaleGoldens fails when a committed golden file corresponds to no
+// capture/state pair anymore, e.g. after a capture rename or removal.
+func TestNoStaleGoldens(t *testing.T) {
+	t.Parallel()
+
+	expected := make(map[string]bool)
+	for _, testCase := range goldenCases(t) {
+		expected[testCase.goldenName] = true
+	}
+
+	goldens, err := filepath.Glob(filepath.Join("testdata", "*.metrics"))
+	require.NoError(t, err)
+
+	for _, golden := range goldens {
+		assert.True(t, expected[filepath.Base(golden)],
+			"stale golden %s: no capture/state produces it anymore, delete it", golden)
 	}
 }
 
