@@ -59,6 +59,8 @@ func TestMain(m *testing.M) {
 		panic(fmt.Sprintf("failed to build the fake nvidia-smi: %v\n%s", err, output))
 	}
 
+	// returning instead of os.Exit lets the deferred cleanup run; the test
+	// wrapper passes m.Run's result to os.Exit itself (Go 1.15+)
 	m.Run()
 }
 
