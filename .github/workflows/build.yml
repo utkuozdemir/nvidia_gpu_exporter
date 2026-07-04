@@ -10,9 +10,9 @@ on:
     paths-ignore:
       - "**.md"
       - ".gitignore"
-      - "samples/**"
-      - "grafana/**"
-      - "systemd/**"
+      - "docs/**"
+      - "hack/**"
+      - "install/**"
       - ".renovaterc.json"
   pull_request:
     branches:
@@ -20,9 +20,9 @@ on:
     paths-ignore:
       - "**.md"
       - ".gitignore"
-      - "samples/**"
-      - "grafana/**"
-      - "systemd/**"
+      - "docs/**"
+      - "hack/**"
+      - "install/**"
       - ".renovaterc.json"
 
 concurrency:
