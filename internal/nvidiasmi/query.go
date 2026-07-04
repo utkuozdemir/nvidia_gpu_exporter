@@ -53,7 +53,11 @@ func Query(ctx context.Context, command string, qFields []QField, run RunFunc) (
 // execQuery runs the nvidia-smi command with the given arguments appended,
 // returning its stdout and exit code.
 func execQuery(ctx context.Context, command string, run RunFunc, args ...string) (string, int, error) {
-	cmdAndArgs := strings.Fields(command)
+	cmdAndArgs, err := SplitCommand(command)
+	if err != nil {
+		return "", -1, err
+	}
+
 	cmdAndArgs = append(cmdAndArgs, args...)
 
 	var stdout bytes.Buffer
@@ -65,7 +69,7 @@ func execQuery(ctx context.Context, command string, run RunFunc, args ...string)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	err := run(cmd)
+	err = run(cmd)
 	if err != nil {
 		exitCode := -1
 
