@@ -432,6 +432,9 @@ func BuildFQNameAndMultiplier(
 	case strings.HasSuffix(rFieldStr, " [us]"):
 		suffixTransformed = split + "_seconds"
 		multiplier = 0.000001
+	case strings.HasSuffix(rFieldStr, " [ms]"):
+		suffixTransformed = split + "_seconds"
+		multiplier = 0.001
 	}
 
 	suffixTransformed = strings.ReplaceAll(suffixTransformed, ".", "_")
