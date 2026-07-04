@@ -53,7 +53,7 @@ datasources:
 "@
 scoop install grafana --global
 Invoke-WebRequest `
-  -Uri https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/master/grafana/dashboard.json `
+  -Uri https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/docs/grafana/dashboard.json `
   -OutFile C:\ProgramData\scoop\apps\grafana\current\public\dashboards\nvidia_gpu_exporter.json
 Set-Content `
   -Path C:\ProgramData\scoop\apps\grafana\current\conf\provisioning\datasources\prometheus.yaml `

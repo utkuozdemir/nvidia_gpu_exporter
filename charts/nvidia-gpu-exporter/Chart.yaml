@@ -7,7 +7,7 @@ type: application
 version: 0.0.0-dev
 appVersion: 0.0.0-dev
 home: https://github.com/utkuozdemir/nvidia_gpu_exporter
-icon: https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/img/nvidia.png
+icon: https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/docs/img/nvidia.png
 keywords:
   - nvidia
   - gpu
