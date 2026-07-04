@@ -15,9 +15,19 @@ spec:
     - name: wget
       image: busybox
       command:
-        - wget
+        - sh
+        - -c
+      # retried because the test can start before the exporter finishes its
+      # startup field detection and begins listening
       args:
-        - -qO-
-        - http://{{ include "nvidia-gpu-exporter.fullname" . }}:{{ .Values.service.port }}{{ .Values.telemetryPath }}
+        - |
+          url="http://{{ include "nvidia-gpu-exporter.fullname" . }}:{{ .Values.service.port }}{{ .Values.telemetryPath }}"
+          for attempt in $(seq 1 30); do
+            wget -qO- "$url" && exit 0
+            echo "attempt $attempt failed, retrying"
+            sleep 2
+          done
+          echo "the exporter never became reachable at $url"
+          exit 1
   restartPolicy: Never
 {{- end }}
