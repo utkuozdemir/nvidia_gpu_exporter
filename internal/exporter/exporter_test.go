@@ -107,6 +107,20 @@ func TestBuildFQNameAndMultiplierMicroseconds(t *testing.T) {
 	assert.Equal(t, "prefix_clocks_event_reasons_counters_sw_thermal_slowdown_seconds", fqName)
 }
 
+func TestBuildFQNameAndMultiplierMilliseconds(t *testing.T) {
+	t.Parallel()
+
+	// seen on driver 590.48: power_smoothing.window_multiplier [ms]
+	fqName, multiplier := exporter.BuildFQNameAndMultiplier(
+		"prefix",
+		"power_smoothing.window_multiplier [ms]",
+		slogt.New(t),
+	)
+
+	assertFloat(t, 0.001, multiplier)
+	assert.Equal(t, "prefix_power_smoothing_window_multiplier_seconds", fqName)
+}
+
 func TestBuildFQNameAndMultiplierNoPrefix(t *testing.T) {
 	t.Parallel()
 
