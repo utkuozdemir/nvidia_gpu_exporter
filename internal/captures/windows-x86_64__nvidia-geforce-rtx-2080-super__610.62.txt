@@ -1,15 +1,15 @@
 ################################################################################
 # nvidia_gpu_exporter GPU capture
-# https://github.com/utkuozdemir/nvidia_gpu_exporter - see testdata/captures/README.md
+# https://github.com/utkuozdemir/nvidia_gpu_exporter - see internal/captures/README.md
 ################################################################################
 # The GPU model and driver are in the filename. Every other nvidia-smi
 # value is in the raw sections below, not re-parsed here. This header only
 # carries what nvidia-smi does not report: collection time, mask status,
 # host OS (from uname), and the synthetic load used.
-collected_at:   2026-06-22T21:04:17Z
+collected_at:   2026-06-24T08:17:40Z
 masked:         yes
 os:             windows (Microsoft Windows)
-kernel:         10.0.22621.1105
+kernel:         10.0.26200.8655
 arch:           x86_64
 load:           ffmpeg NVENC x2 (1080p120 testsrc2)
 
@@ -18,17 +18,19 @@ load:           ffmpeg NVENC x2 (1080p120 testsrc2)
 # capabilities :: version
 # $ nvidia-smi --version
 ################################################################################
-NVIDIA-SMI version  : 591.86
-NVML version        : 591.86
-DRIVER version      : 591.86
-CUDA Version        : 13.1
+NVIDIA-SMI version  : 610.62
+NVML version        : 610.62
+DRIVER version      : Deprecated, see "KMD version" instead
+CUDA version        : Deprecated, see "CUDA UMD version" instead
+KMD version         : 610.62
+CUDA UMD version    : 13.3
 
 
 ################################################################################
 # capabilities :: help (-h)
 # $ nvidia-smi -h
 ################################################################################
-NVIDIA System Management Interface -- v591.86
+NVIDIA System Management Interface -- v610.62
 
 NVSMI provides monitoring information for Tesla and select Quadro devices.
 The data is presented in either a plain text or an XML format, via stdout or a file.
@@ -73,6 +75,8 @@ nvidia-smi [OPTION1 [ARG1]] [OPTION2 [ARG2]] ...
     -i,   --id=                 Target a specific GPU.
     -f,   --filename=           Log to a specified file, rather than to stdout.
     -l,   --loop=               Probe until Ctrl+C at specified second interval.
+          --show-all-processes  Show all GPU clients, including context-less operations
+                                and monitoring tools.
 
   QUERY OPTIONS:
 
@@ -96,6 +100,8 @@ nvidia-smi [OPTION1 [ARG1]] [OPTION2 [ARG2]] ...
                                 Sampling data with max/min/avg is also returned 
                                 for POWER, UTILIZATION and CLOCK display types.
                                 Doesn't work with -u or -x flags.
+          --show-all-processes  Show all GPU clients, including context-less operations
+                                and monitoring tools.
     -l,   --loop=               Probe until Ctrl+C at specified second interval.
 
     -lms, --loop-ms=            Probe until Ctrl+C at specified millisecond interval.
@@ -147,8 +153,13 @@ nvidia-smi [OPTION1 [ARG1]] [OPTION2 [ARG2]] ...
     -dm,  --driver-model=       Set the GPU driver model: 0/WDDM, 1/TCC, 2/MCDM
     -fdm, --force-driver-model= Set the GPU driver model: 0/WDDM, 1/TCC, 2/MCDM
                                 Ignores the error that display is connected.
+        --no-driver-restart     Skip driver restart when setting driver model.
           --gom=                Set GPU Operation Mode:
                                     0/ALL_ON, 1/COMPUTE, 2/LOW_DP
+    -r    --gpu-reset           On Windows, this restarts the NVIDIA display driver
+                                to reset GPU state. Requires administrator
+                                privileges. Use -i option to target specific GPUs,
+                                or omit to reset all GPUs.
     -lgc  --lock-gpu-clocks=    Specifies <minGpuClock,maxGpuClock> clocks as a
                                     pair (e.g. 1500,1500) that defines the range 
                                     of desired locked GPU clock speed in MHz.
@@ -161,6 +172,9 @@ nvidia-smi [OPTION1 [ARG1]] [OPTION2 [ARG2]] ...
                                     Valid modes: 0, 1
     -rgc  --reset-gpu-clocks
                                 Resets the GPU clocks to the default values.
+    -lmci --lock-memory-clocks-info=  Provides information regarding the support of
+                                      lock-memory-clocks and lock-memory-clocks-deferred
+                                      for the given GPU.
     -lmc  --lock-memory-clocks=  Specifies <minMemClock,maxMemClock> clocks as a
                                     pair (e.g. 5100,5100) that defines the range 
                                     of desired locked Memory clock speed in MHz.
@@ -180,6 +194,13 @@ nvidia-smi [OPTION1 [ARG1]] [OPTION2 [ARG2]] ...
                                     speed in MHz while running applications on a GPU.
     -rac  --reset-applications-clocks
                                 Resets the applications clocks to the default values.
+    -svfd  --set-vf-derate=      Applies a negative frequency offset in MHz to the
+                                    graphics clock VF curve for deterministic performance tuning.
+                                    Only supported on Rubin and newer architectures.
+                                    Requires administrator privileges.
+    -gvfd  --get-vf-derate-info  Displays the current VF derate offset and the
+                                    allowed graphics clock VF curve offset range.
+                                    Only supported on Rubin and newer architectures.
     -pl   --power-limit=        Specifies maximum power management limit in watts.
                                 Takes an optional argument --scope.
     -sc   --scope=              Specifies the device type for --scope: 0/GPU, 1/TOTAL_MODULE (Grace Hopper Only)
@@ -271,9 +292,11 @@ nvidia-smi [OPTION1 [ARG1]] [OPTION2 [ARG2]] ...
  BOOST SLIDER:
     boost-slider                Control and query boost sliders. "nvidia-smi boost-slider -h" for more information. 
 
- POWER HINT:    power-hint                  Estimates GPU power usage. "nvidia-smi power-hint -h" for more information. 
+ POWER HINT:
+    power-hint                  Estimates GPU power usage. "nvidia-smi power-hint -h" for more information. 
 
- BASE CLOCKS:    base-clocks                 Query GPU base clocks. "nvidia-smi base-clocks -h" for more information. 
+ BASE CLOCKS:
+    base-clocks                 Query GPU base clocks. "nvidia-smi base-clocks -h" for more information. 
 
  GPU PERFORMANCE MONITORING: 
     gpm                         Control and query GPU performance monitoring unit. "nvidia-smi gpm -h" for more information. 
@@ -300,6 +323,9 @@ List of valid properties to query for the switch "--query-gpu":
 The timestamp of when the query was made in format "YYYY/MM/DD HH:MM:SS.msec".
 
 "driver_version"
+The version of the installed NVIDIA display driver. This is an alphanumeric string. Deprecated; use "kmd_version" instead.
+
+"kmd_version"
 The version of the installed NVIDIA display driver. This is an alphanumeric string.
 
 Section about vgpu_driver_capability properties
@@ -758,8 +784,14 @@ NVIDIA GPUs can remap bank rows of GPU device memory when they become unreliable
 "remapped_rows.correctable" or "remapped_rows.sbe"
 The number of rows that have been remapped due to multiple single bit ECC errors.
 
+"remapped_rows.correctable_inactive"
+The number of rows that have been remapped due to multiple single bit ECC errors but are inactive.
+
 "remapped_rows.uncorrectable" or "remapped_rows.dbe"
 The number of rows that have been remapped due to a double bit ECC error.
+
+"remapped_rows.uncorrectable_inactive"
+The number of rows that have been remapped due to a double bit ECC error but are inactive.
 
 "remapped_rows.pending"
 Checks if any row remapping are pending on the next reboot.
@@ -842,8 +874,53 @@ The minimum value in watts that module power limit can be set to.
 "module.power.max_limit"
 The maximum value in watts that module power limit can be set to.
 
+"gpu.base.current"
+The current base GPU power setting requested by software like nvidia-smi, in watts.
+
+"gpu.base.requested"
+The base GPU power setting currently enforced by the power management algorithm, in watts.
+
+"gpu.base.default"
+The default base GPU power setting, in watts.
+
+"gpu.base.min"
+The minimum value in watts that base GPU power can be set to.
+
+"gpu.base.max"
+The maximum value in watts that base GPU power can be set to.
+
+Section about power_smoothing properties
+Information about power smoothing.
+
+"power_smoothing.tmp_floor"
+The applied TMP floor value in watts for power smoothing.
+
+"power_smoothing.tmp_ceil"
+The applied TMP ceiling value in watts for power smoothing.
+
+"power_smoothing.hw_lifetime_remaining_percent"
+Remaining lifetime percentage of the power smoothing hardware circuitry.
+
+"power_smoothing.enabled"
+Indicates whether power smoothing is enabled (Yes/No).
+
 "power_smoothing.delayed_power_smoothing_supported"
 Indicates whether delayed power smoothing is supported (Yes/No).
+
+"power_smoothing.soc_power_smoothing_enabled"
+State-Of-Charge Power Smoothing feature enabled status (Enabled/Disabled).
+
+"power_smoothing.priv_level"
+Power smoothing privilege level.
+
+"power_smoothing.imm_ramp_down"
+Immediate ramp down setting for power smoothing (Enabled/Disabled).
+
+"power_smoothing.max_percent_tmp_floor"
+Maximum percent TMP floor allowed for power smoothing.
+
+"power_smoothing.min_percent_tmp_floor"
+Minimum percent TMP floor allowed for power smoothing.
 
 "power_smoothing.primary_power_floor"
 Current primary Power floor value in watts for power smoothing.
@@ -860,6 +937,21 @@ Minimum primary floor activation point value in watts for power smoothing.
 "power_smoothing.window_multiplier"
 The window multiplier value in ms for power smoothing.
 
+"power_smoothing.num_preset_profiles"
+Number of preset power smoothing profiles supported.
+
+"power_smoothing.curr_profile.percent_tmp_floor"
+Current profile percent TMP floor.
+
+"power_smoothing.curr_profile.ramp_up_rate"
+Current profile ramp up rate in W/s.
+
+"power_smoothing.curr_profile.ramp_down_rate"
+Current profile ramp down rate in W/s.
+
+"power_smoothing.curr_profile.ramp_down_hysteresis"
+Current profile ramp down hysteresis in ms.
+
 "power_smoothing.curr_profile.secondary_power_floor"
 Current profile secondary power floor value in watts.
 
@@ -871,6 +963,21 @@ Current profile primary floor target window multiplier value.
 
 "power_smoothing.curr_profile.primary_floor_act_offset"
 Current profile primary floor activation offset value in watts.
+
+"power_smoothing.active_profile"
+Active preset profile number for power smoothing.
+
+"power_smoothing.admin_override.percent_tmp_floor"
+Admin override for percent TMP floor, if set.
+
+"power_smoothing.admin_override.ramp_up_rate"
+Admin override for ramp up rate in W/s, if set.
+
+"power_smoothing.admin_override.ramp_down_rate"
+Admin override for ramp down rate in W/s, if set.
+
+"power_smoothing.admin_override.ramp_down_hysteresis"
+Admin override for ramp down hysteresis in ms, if set.
 
 "power_smoothing.admin_override.secondary_power_floor"
 Admin override for secondary power floor value in watts, if set.
@@ -992,6 +1099,9 @@ Fabric Access Timeout Recovery
 "fabric.health.incorrect_configuration"
 Fabric Incorrect Configuration
 
+"fabric.health.partition_assigned"
+Fabric Partition Assigned
+
 Section about platform properties
 Platform Information.
 
@@ -1018,6 +1128,9 @@ Fabric ID for this GPU.
 
 "hostname"
 Hostname associated with the GPU.
+
+"bbx.time_run"
+Total time (in seconds) the GPU has been running since first initialization.
 
 
 
@@ -1151,10 +1264,18 @@ GPU 0: NVIDIA GeForce RTX 2080 SUPER (UUID: GPU-00000000-0000-0000-0000-00000000
 # capabilities :: topo -m
 # $ nvidia-smi topo -m
 ################################################################################
-ERROR: Option -m is missing its value. Please run 'nvidia-smi -h' for help.
+	[4mGPU0	CPU Affinity	NUMA Affinity	GPU NUMA ID[0m
+GPU0	 X 				N/A
 
+Legend:
 
-# (exit code: 255)
+  X    = Self
+  SYS  = Connection traversing PCIe as well as the SMP interconnect between NUMA nodes (e.g., QPI/UPI)
+  NODE = Connection traversing PCIe as well as the interconnect between PCIe Host Bridges within a NUMA node
+  PHB  = Connection traversing PCIe as well as a PCIe Host Bridge (typically the CPU)
+  PXB  = Connection traversing multiple PCIe bridges (without traversing the PCIe Host Bridge)
+  PIX  = Connection traversing at most a single PCIe bridge
+  NV#  = Connection traversing a bonded set of # NVLinks
 
 
 ################################################################################
@@ -1170,6 +1291,7 @@ NVML: Unable to retrieve Nvlink information as all links are inActive
 ################################################################################
 timestamp
 driver_version
+kmd_version
 vgpu_driver_capability.heterogenous_multivGPU
 count
 name
@@ -1299,7 +1421,9 @@ retired_pages.single_bit_ecc.count
 retired_pages.double_bit.count
 retired_pages.pending
 remapped_rows.correctable
+remapped_rows.correctable_inactive
 remapped_rows.uncorrectable
+remapped_rows.uncorrectable_inactive
 remapped_rows.pending
 remapped_rows.failure
 remapped_rows.histogram.max
@@ -1326,16 +1450,40 @@ module.enforced.power.limit
 module.power.default_limit
 module.power.min_limit
 module.power.max_limit
+gpu.base.current
+gpu.base.requested
+gpu.base.default
+gpu.base.min
+gpu.base.max
+power_smoothing.tmp_floor
+power_smoothing.tmp_ceil
+power_smoothing.hw_lifetime_remaining_percent
+power_smoothing.enabled
 power_smoothing.delayed_power_smoothing_supported
+power_smoothing.soc_power_smoothing_enabled
+power_smoothing.priv_level
+power_smoothing.imm_ramp_down
+power_smoothing.max_percent_tmp_floor
+power_smoothing.min_percent_tmp_floor
 power_smoothing.primary_power_floor
 power_smoothing.secondary_power_floor
 power_smoothing.min_primary_floor_activation_offset
 power_smoothing.min_primary_floor_activation_point
 power_smoothing.window_multiplier
+power_smoothing.num_preset_profiles
+power_smoothing.curr_profile.percent_tmp_floor
+power_smoothing.curr_profile.ramp_up_rate
+power_smoothing.curr_profile.ramp_down_rate
+power_smoothing.curr_profile.ramp_down_hysteresis
 power_smoothing.curr_profile.secondary_power_floor
 power_smoothing.curr_profile.primary_floor_act_window_multiplier
 power_smoothing.curr_profile.primary_floor_tar_window_multiplier
 power_smoothing.curr_profile.primary_floor_act_offset
+power_smoothing.active_profile
+power_smoothing.admin_override.percent_tmp_floor
+power_smoothing.admin_override.ramp_up_rate
+power_smoothing.admin_override.ramp_down_rate
+power_smoothing.admin_override.ramp_down_hysteresis
 power_smoothing.admin_override.secondary_power_floor
 power_smoothing.admin_override.primary_floor_act_window_multiplier
 power_smoothing.admin_override.primary_floor_tar_window_multiplier
@@ -1370,6 +1518,7 @@ fabric.health.route_recovery_in_progress
 fabric.health.route_unhealthy
 fabric.health.access_timeout_recovery
 fabric.health.incorrect_configuration
+fabric.health.partition_assigned
 platform.chassis_serial_number
 platform.slot_number
 platform.tray_index
@@ -1378,22 +1527,23 @@ platform.peer_type
 platform.module_id
 platform.gpu_fabric_guid
 hostname
+bbx.time_run
 
 
 ################################################################################
 # idle :: nvidia-smi (default table)
 # $ nvidia-smi 
 ################################################################################
-Mon Jun 22 23:04:18 2026       
+Wed Jun 24 10:17:41 2026       
 +-----------------------------------------------------------------------------------------+
-| NVIDIA-SMI 591.86                 Driver Version: 591.86         CUDA Version: 13.1     |
+| NVIDIA-SMI 610.62                 KMD Version: 610.62        CUDA UMD Version: 13.3     |
 +-----------------------------------------+------------------------+----------------------+
 | GPU  Name                  Driver-Model | Bus-Id          Disp.A | Volatile Uncorr. ECC |
 | Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
 |                                         |                        |               MIG M. |
 |=========================================+========================+======================|
-|   0  NVIDIA GeForce RTX 2080 ...  WDDM  |   00000000:0C:00.0 Off |                  N/A |
-| 37%   40C    P8             38W /  250W |     702MiB /   8192MiB |      0%      Default |
+|   0  NVIDIA GeForce RTX 2080 ...  WDDM  |   00000000:0C:00.0  On |                  N/A |
+| 38%   39C    P8             37W /  250W |     797MiB /   8192MiB |      0%      Default |
 |                                         |                        |                  N/A |
 +-----------------------------------------+------------------------+----------------------+
 
@@ -1402,16 +1552,25 @@ Mon Jun 22 23:04:18 2026
 |  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
 |        ID   ID                                                               Usage      |
 |=========================================================================================|
-|    0   N/A  N/A            2056    C+G   C:\Windows\System32\dwm.exe           N/A      |
-|    0   N/A  N/A            4680    C+G   ...e Experience\NVIDIA Share.exe      N/A      |
-|    0   N/A  N/A           12332    C+G   C:\Windows\explorer.exe               N/A      |
-|    0   N/A  N/A           12444    C+G   ...5n1h2txyewy\TextInputHost.exe      N/A      |
-|    0   N/A  N/A           14160    C+G   ..._cw5n1h2txyewy\SearchHost.exe      N/A      |
-|    0   N/A  N/A           14184    C+G   ...y\StartMenuExperienceHost.exe      N/A      |
-|    0   N/A  N/A           15076    C+G   ...xyewy\ShellExperienceHost.exe      N/A      |
-|    0   N/A  N/A           16280    C+G   ...anion\ControllerCompanion.exe      N/A      |
-|    0   N/A  N/A           20372    C+G   ...m Files\NZXT CAM\NZXT CAM.exe      N/A      |
-|    0   N/A  N/A           24804    C+G   ...ntrolPanel\SystemSettings.exe      N/A      |
+|    0   N/A  N/A            2140    C+G   C:\Windows\System32\dwm.exe           N/A      |
+|    0   N/A  N/A            2164    C+G   ...em32\ApplicationFrameHost.exe      N/A      |
+|    0   N/A  N/A           13092    C+G   ...ntrolPanel\SystemSettings.exe      N/A      |
+|    0   N/A  N/A           13160    C+G   C:\Windows\explorer.exe               N/A      |
+|    0   N/A  N/A           13264    C+G   ...indows\System32\ShellHost.exe      N/A      |
+|    0   N/A  N/A           13504    C+G   ...2txyewy\CrossDeviceResume.exe      N/A      |
+|    0   N/A  N/A           14808    C+G   ..._cw5n1h2txyewy\SearchHost.exe      N/A      |
+|    0   N/A  N/A           14872    C+G   ...y\StartMenuExperienceHost.exe      N/A      |
+|    0   N/A  N/A           15964    C+G   ...IA App\CEF\NVIDIA Overlay.exe      N/A      |
+|    0   N/A  N/A           16760    C+G   ...xyewy\ShellExperienceHost.exe      N/A      |
+|    0   N/A  N/A           17648    C+G   ...IA App\CEF\NVIDIA Overlay.exe      N/A      |
+|    0   N/A  N/A           17840    C+G   ....0.4022.80\msedgewebview2.exe      N/A      |
+|    0   N/A  N/A           19052    C+G   ...App_cw5n1h2txyewy\LockApp.exe      N/A      |
+|    0   N/A  N/A           19956    C+G   ...yb3d8bbwe\WindowsTerminal.exe      N/A      |
+|    0   N/A  N/A           20440    C+G   ...anion\ControllerCompanion.exe      N/A      |
+|    0   N/A  N/A           21912    C+G   ...8bbwe\PhoneExperienceHost.exe      N/A      |
+|    0   N/A  N/A           22412    C+G   ...5n1h2txyewy\TextInputHost.exe      N/A      |
+|    0   N/A  N/A           23480    C+G   ...__amwd9z03whsfe\1Password.exe      N/A      |
+|    0   N/A  N/A           23988    C+G   ...t\Edge\Application\msedge.exe      N/A      |
 +-----------------------------------------------------------------------------------------+
 
 
@@ -1422,9 +1581,11 @@ Mon Jun 22 23:04:18 2026
 
 ==============NVSMI LOG==============
 
-Timestamp                                              : Mon Jun 22 23:04:18 2026
-Driver Version                                         : 591.86
-CUDA Version                                           : 13.1
+Timestamp                                              : Wed Jun 24 10:17:41 2026
+Driver Version                                         : 610.62 [Deprecated; will be removed in CUDA 14.0. Use KMD Version instead]
+CUDA Version                                           : 13.3 [Deprecated; will be removed in CUDA 14.0. Use CUDA UMD Version instead]
+KMD Version                                            : 610.62
+CUDA UMD Version                                       : 13.3
 
 Attached GPUs                                          : 1
 GPU 00000000:0C:00.0
@@ -1433,7 +1594,7 @@ GPU 00000000:0C:00.0
     Product Architecture                               : Turing
     Display Mode                                       : Requested functionality has been deprecated
     Display Attached                                   : Yes
-    Display Active                                     : Disabled
+    Display Active                                     : Enabled
     Persistence Mode                                   : N/A
     Addressing Mode                                    : N/A
     MIG Mode
@@ -1470,6 +1631,8 @@ GPU 00000000:0C:00.0
     Inforom BBX Object Flush
         Latest Timestamp                               : N/A
         Latest Duration                                : N/A
+    Inforom Time Data
+        Time Run                                       : N/A
     GPU Operation Mode
         Current                                        : N/A
         Pending                                        : N/A
@@ -1504,7 +1667,7 @@ GPU 00000000:0C:00.0
             Firmware                                   : N/A
         Replays Since Reset                            : 0
         Replay Number Rollovers                        : 0
-        Tx Throughput                                  : 2880 KB/s
+        Tx Throughput                                  : 0 KB/s
         Rx Throughput                                  : 48 KB/s
         Atomic Caps Outbound                           : N/A
         Atomic Caps Inbound                            : N/A
@@ -1521,7 +1684,7 @@ GPU 00000000:0C:00.0
         SW Thermal Slowdown                            : Not Active
         Display Clock Setting                          : Not Active
     Clocks Event Reasons Counters
-        SW Power Capping                               : 5450731221 us
+        SW Power Capping                               : 824547036 us
         Sync Boost                                     : 0 us
         SW Thermal Slowdown                            : 0 us
         HW Thermal Slowdown                            : 0 us
@@ -1530,8 +1693,8 @@ GPU 00000000:0C:00.0
     FB Memory Usage
         Total                                          : 8192 MiB
         Reserved                                       : 205 MiB
-        Used                                           : 702 MiB
-        Free                                           : 7286 MiB
+        Used                                           : 797 MiB
+        Free                                           : 7191 MiB
     BAR1 Memory Usage
         Total                                          : 256 MiB
         Used                                           : 229 MiB
@@ -1543,7 +1706,7 @@ GPU 00000000:0C:00.0
     Compute Mode                                       : Default
     Utilization
         GPU                                            : 0 %
-        Memory                                         : 0 %
+        Memory                                         : 10 %
         Encoder                                        : 0 %
         Decoder                                        : 0 %
         JPEG                                           : 0 %
@@ -1579,20 +1742,25 @@ GPU 00000000:0C:00.0
         Pending Page Blacklist                         : N/A
     Remapped Rows                                      : N/A
     Temperature
-        GPU Current Temp                               : 40 C
-        GPU T.Limit Temp                               : N/A
+        GPU Current Temp                               : 39 C
+        GPU Current T.Limit Temp                       : N/A
         GPU Shutdown Temp                              : 100 C
         GPU Slowdown Temp                              : 97 C
         GPU Max Operating Temp                         : 89 C
-        GPU Target Temperature                         : 84 C
+        GPU Target Temperature Specification           : 84 C
         Memory Current Temp                            : N/A
         Memory Max Operating Temp                      : N/A
     GPU Power Readings
         Average Power Draw                             : N/A
-        Instantaneous Power Draw                       : 38.92 W
-        Current Power Limit                            : 250.00 W
-        Requested Power Limit                          : 250.00 W
-        Default Power Limit                            : 250.00 W
+        Instantaneous Power Draw                       : 37.21 W
+        GPU Ceiling Power Limit
+            Current Power Limit                        : 250.00 W
+            Requested Power Limit                      : 250.00 W
+            Default Power Limit                        : 250.00 W
+        GPU Base Power
+            Current Base Power                         : N/A
+            Requested Base Power                       : N/A
+            Default Base Power                         : N/A
         Min Power Limit                                : 105.00 W
         Max Power Limit                                : 350.00 W
     GPU Memory Power Readings 
@@ -1646,66 +1814,121 @@ GPU 00000000:0C:00.0
             Route Unhealthy                            : N/A
             Access Timeout Recovery                    : N/A
             Incorrect Configuration                    : N/A
+            Partition Assigned                         : N/A
     Processes
         GPU instance ID                   : N/A
         Compute instance ID               : N/A
-        Process ID                        : 2056
+        Process ID                        : 2140
             Type                          : C+G
             Name                          : C:\Windows\System32\dwm.exe
             Used GPU Memory               : Not available in WDDM driver model
         GPU instance ID                   : N/A
         Compute instance ID               : N/A
-        Process ID                        : 4680
+        Process ID                        : 2164
             Type                          : C+G
-            Name                          : C:\Program Files\NVIDIA Corporation\NVIDIA GeForce Experience\NVIDIA Share.exe
+            Name                          : C:\Windows\System32\ApplicationFrameHost.exe
             Used GPU Memory               : Not available in WDDM driver model
         GPU instance ID                   : N/A
         Compute instance ID               : N/A
-        Process ID                        : 12332
+        Process ID                        : 13092
+            Type                          : C+G
+            Name                          : C:\Windows\ImmersiveControlPanel\SystemSettings.exe
+            Used GPU Memory               : Not available in WDDM driver model
+        GPU instance ID                   : N/A
+        Compute instance ID               : N/A
+        Process ID                        : 13160
             Type                          : C+G
             Name                          : C:\Windows\explorer.exe
             Used GPU Memory               : Not available in WDDM driver model
         GPU instance ID                   : N/A
         Compute instance ID               : N/A
-        Process ID                        : 12444
+        Process ID                        : 13264
             Type                          : C+G
-            Name                          : C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\TextInputHost.exe
+            Name                          : C:\Windows\System32\ShellHost.exe
             Used GPU Memory               : Not available in WDDM driver model
         GPU instance ID                   : N/A
         Compute instance ID               : N/A
-        Process ID                        : 14160
+        Process ID                        : 13504
+            Type                          : C+G
+            Name                          : C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\CrossDeviceResume.exe
+            Used GPU Memory               : Not available in WDDM driver model
+        GPU instance ID                   : N/A
+        Compute instance ID               : N/A
+        Process ID                        : 14808
             Type                          : C+G
             Name                          : C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\SearchHost.exe
             Used GPU Memory               : Not available in WDDM driver model
         GPU instance ID                   : N/A
         Compute instance ID               : N/A
-        Process ID                        : 14184
+        Process ID                        : 14872
             Type                          : C+G
             Name                          : C:\Windows\SystemApps\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\StartMenuExperienceHost.exe
             Used GPU Memory               : Not available in WDDM driver model
         GPU instance ID                   : N/A
         Compute instance ID               : N/A
-        Process ID                        : 15076
+        Process ID                        : 15964
+            Type                          : C+G
+            Name                          : C:\Program Files\NVIDIA Corporation\NVIDIA App\CEF\NVIDIA Overlay.exe
+            Used GPU Memory               : Not available in WDDM driver model
+        GPU instance ID                   : N/A
+        Compute instance ID               : N/A
+        Process ID                        : 16760
             Type                          : C+G
             Name                          : C:\Windows\SystemApps\ShellExperienceHost_cw5n1h2txyewy\ShellExperienceHost.exe
             Used GPU Memory               : Not available in WDDM driver model
         GPU instance ID                   : N/A
         Compute instance ID               : N/A
-        Process ID                        : 16280
+        Process ID                        : 17648
+            Type                          : C+G
+            Name                          : C:\Program Files\NVIDIA Corporation\NVIDIA App\CEF\NVIDIA Overlay.exe
+            Used GPU Memory               : Not available in WDDM driver model
+        GPU instance ID                   : N/A
+        Compute instance ID               : N/A
+        Process ID                        : 17840
+            Type                          : C+G
+            Name                          : C:\Program Files (x86)\Microsoft\EdgeWebView\Application\149.0.4022.80\msedgewebview2.exe
+            Used GPU Memory               : Not available in WDDM driver model
+        GPU instance ID                   : N/A
+        Compute instance ID               : N/A
+        Process ID                        : 19052
+            Type                          : C+G
+            Name                          : C:\Windows\SystemApps\Microsoft.LockApp_cw5n1h2txyewy\LockApp.exe
+            Used GPU Memory               : Not available in WDDM driver model
+        GPU instance ID                   : N/A
+        Compute instance ID               : N/A
+        Process ID                        : 19956
+            Type                          : C+G
+            Name                          : C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.24.11321.0_x64__8wekyb3d8bbwe\WindowsTerminal.exe
+            Used GPU Memory               : Not available in WDDM driver model
+        GPU instance ID                   : N/A
+        Compute instance ID               : N/A
+        Process ID                        : 20440
             Type                          : C+G
             Name                          : C:\Program Files\Controller Companion\ControllerCompanion.exe
             Used GPU Memory               : Not available in WDDM driver model
         GPU instance ID                   : N/A
         Compute instance ID               : N/A
-        Process ID                        : 20372
+        Process ID                        : 21912
             Type                          : C+G
-            Name                          : C:\Program Files\NZXT CAM\NZXT CAM.exe
+            Name                          : C:\Program Files\WindowsApps\Microsoft.YourPhone_1.26042.99.0_x64__8wekyb3d8bbwe\PhoneExperienceHost.exe
             Used GPU Memory               : Not available in WDDM driver model
         GPU instance ID                   : N/A
         Compute instance ID               : N/A
-        Process ID                        : 24804
+        Process ID                        : 22412
             Type                          : C+G
-            Name                          : C:\Windows\ImmersiveControlPanel\SystemSettings.exe
+            Name                          : C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\TextInputHost.exe
+            Used GPU Memory               : Not available in WDDM driver model
+        GPU instance ID                   : N/A
+        Compute instance ID               : N/A
+        Process ID                        : 23480
+            Type                          : C+G
+            Name                          : C:\Program Files\WindowsApps\Agilebits.1Password_8.12.24.34_x64__amwd9z03whsfe\1Password.exe
+            Used GPU Memory               : Not available in WDDM driver model
+        GPU instance ID                   : N/A
+        Compute instance ID               : N/A
+        Process ID                        : 23988
+            Type                          : C+G
+            Name                          : C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
             Used GPU Memory               : Not available in WDDM driver model
     Capabilities
         EGM                                            : disabled
@@ -1714,10 +1937,10 @@ GPU 00000000:0C:00.0
 
 ################################################################################
 # idle :: query-gpu (csv, what the exporter parses)
-# $ nvidia-smi --query-gpu=timestamp,driver_version,vgpu_driver_capability.heterogenous_multivGPU,count,name,serial,uuid,pci.bus_id,pci.domain,pci.bus,pci.device,pci.device_id,pci.sub_device_id,vgpu_device_capability.fractional_multiVgpu,vgpu_device_capability.heterogeneous_timeSlice_profile,vgpu_device_capability.heterogeneous_timeSlice_sizes,vgpu_device_capability.homogeneous_placements,vgpu_device_capability.mig_timeSlicing,vgpu_device_capability.mig_timeSlicing_mode,pcie.link.gen.current,pcie.link.gen.gpucurrent,pcie.link.gen.max,pcie.link.gen.gpumax,pcie.link.gen.hostmax,pcie.link.width.current,pcie.link.width.max,index,display_mode,display_attached,display_active,persistence_mode,addressing_mode,accounting.mode,accounting.buffer_size,driver_model.current,driver_model.pending,vbios_version,inforom.img,inforom.oem,inforom.ecc,inforom.pwr,inforom.checksum_validation,gpu_recovery_action,gom.current,gom.pending,fan.speed,pstate,clocks_event_reasons.supported,clocks_event_reasons.active,clocks_event_reasons.gpu_idle,clocks_event_reasons.applications_clocks_setting,clocks_event_reasons.sw_power_cap,clocks_event_reasons.hw_slowdown,clocks_event_reasons.hw_thermal_slowdown,clocks_event_reasons.hw_power_brake_slowdown,clocks_event_reasons.sw_thermal_slowdown,clocks_event_reasons.sync_boost,clocks_event_reasons_counters.sw_power_cap,clocks_event_reasons_counters.sync_boost,clocks_event_reasons_counters.sw_thermal_slowdown,clocks_event_reasons_counters.hw_thermal_slowdown,clocks_event_reasons_counters.hw_power_brake_slowdown,memory.total,memory.reserved,memory.used,memory.free,compute_mode,compute_cap,utilization.gpu,utilization.memory,utilization.encoder,utilization.decoder,utilization.jpeg,utilization.ofa,encoder.stats.sessionCount,encoder.stats.averageFps,encoder.stats.averageLatency,dramEncryption.mode.current,dramEncryption.mode.pending,ecc.mode.current,ecc.mode.pending,ecc.errors.corrected.volatile.device_memory,ecc.errors.corrected.volatile.dram,ecc.errors.corrected.volatile.register_file,ecc.errors.corrected.volatile.l1_cache,ecc.errors.corrected.volatile.l2_cache,ecc.errors.corrected.volatile.texture_memory,ecc.errors.corrected.volatile.cbu,ecc.errors.corrected.volatile.sram,ecc.errors.corrected.volatile.total,ecc.errors.corrected.aggregate.device_memory,ecc.errors.corrected.aggregate.dram,ecc.errors.corrected.aggregate.register_file,ecc.errors.corrected.aggregate.l1_cache,ecc.errors.corrected.aggregate.l2_cache,ecc.errors.corrected.aggregate.texture_memory,ecc.errors.corrected.aggregate.cbu,ecc.errors.corrected.aggregate.sram,ecc.errors.corrected.aggregate.total,ecc.errors.uncorrected.volatile.device_memory,ecc.errors.uncorrected.volatile.dram,ecc.errors.uncorrected.volatile.register_file,ecc.errors.uncorrected.volatile.l1_cache,ecc.errors.uncorrected.volatile.l2_cache,ecc.errors.uncorrected.volatile.texture_memory,ecc.errors.uncorrected.volatile.cbu,ecc.errors.uncorrected.volatile.sram,ecc.errors.uncorrected.volatile.total,ecc.errors.uncorrected.aggregate.device_memory,ecc.errors.uncorrected.aggregate.dram,ecc.errors.uncorrected.aggregate.register_file,ecc.errors.uncorrected.aggregate.l1_cache,ecc.errors.uncorrected.aggregate.l2_cache,ecc.errors.uncorrected.aggregate.texture_memory,ecc.errors.uncorrected.aggregate.cbu,ecc.errors.uncorrected.aggregate.sram,ecc.errors.uncorrected.aggregate.total,ecc.errors.uncorrected.volatile.sram.parity,ecc.errors.uncorrected.volatile.sram.secded,ecc.errors.uncorrected.aggregate.sram.parity,ecc.errors.uncorrected.aggregate.sram.secded,ecc.errors.uncorrected.aggregate.sram.thresholdExceeded,ecc.errors.uncorrected.aggregate.sram.l2,ecc.errors.uncorrected.aggregate.sram.sm,ecc.errors.uncorrected.aggregate.sram.mcu,ecc.errors.uncorrected.aggregate.sram.pcie,ecc.errors.uncorrected.aggregate.sram.other,retired_pages.single_bit_ecc.count,retired_pages.double_bit.count,retired_pages.pending,remapped_rows.correctable,remapped_rows.uncorrectable,remapped_rows.pending,remapped_rows.failure,remapped_rows.histogram.max,remapped_rows.histogram.high,remapped_rows.histogram.partial,remapped_rows.histogram.low,remapped_rows.histogram.none,temperature.gpu,temperature.gpu.tlimit,temperature.memory,power.management,power.draw,power.draw.average,power.draw.instant,power.limit,enforced.power.limit,power.default_limit,power.min_limit,power.max_limit,module.power.draw.average,module.power.draw.instant,module.power.limit,module.enforced.power.limit,module.power.default_limit,module.power.min_limit,module.power.max_limit,power_smoothing.delayed_power_smoothing_supported,power_smoothing.primary_power_floor,power_smoothing.secondary_power_floor,power_smoothing.min_primary_floor_activation_offset,power_smoothing.min_primary_floor_activation_point,power_smoothing.window_multiplier,power_smoothing.curr_profile.secondary_power_floor,power_smoothing.curr_profile.primary_floor_act_window_multiplier,power_smoothing.curr_profile.primary_floor_tar_window_multiplier,power_smoothing.curr_profile.primary_floor_act_offset,power_smoothing.admin_override.secondary_power_floor,power_smoothing.admin_override.primary_floor_act_window_multiplier,power_smoothing.admin_override.primary_floor_tar_window_multiplier,power_smoothing.admin_override.primary_floor_act_offset,edpp_multiplier,clocks.current.graphics,clocks.current.sm,clocks.current.memory,clocks.current.video,clocks.applications.graphics,clocks.applications.memory,clocks.default_applications.graphics,clocks.default_applications.memory,clocks.max.graphics,clocks.max.sm,clocks.max.memory,mig.mode.current,mig.mode.pending,gsp.mode.current,gsp.mode.default,c2c.mode,protected_memory.total,protected_memory.used,protected_memory.free,fabric.state,fabric.status,fabric.cliqueId,fabric.clusterUuid,fabric.health.summary,fabric.health.bandwidth,fabric.health.route_recovery_in_progress,fabric.health.route_unhealthy,fabric.health.access_timeout_recovery,fabric.health.incorrect_configuration,platform.chassis_serial_number,platform.slot_number,platform.tray_index,platform.host_id,platform.peer_type,platform.module_id,platform.gpu_fabric_guid,hostname --format=csv
+# $ nvidia-smi --query-gpu=timestamp,driver_version,kmd_version,vgpu_driver_capability.heterogenous_multivGPU,count,name,serial,uuid,pci.bus_id,pci.domain,pci.bus,pci.device,pci.device_id,pci.sub_device_id,vgpu_device_capability.fractional_multiVgpu,vgpu_device_capability.heterogeneous_timeSlice_profile,vgpu_device_capability.heterogeneous_timeSlice_sizes,vgpu_device_capability.homogeneous_placements,vgpu_device_capability.mig_timeSlicing,vgpu_device_capability.mig_timeSlicing_mode,pcie.link.gen.current,pcie.link.gen.gpucurrent,pcie.link.gen.max,pcie.link.gen.gpumax,pcie.link.gen.hostmax,pcie.link.width.current,pcie.link.width.max,index,display_mode,display_attached,display_active,persistence_mode,addressing_mode,accounting.mode,accounting.buffer_size,driver_model.current,driver_model.pending,vbios_version,inforom.img,inforom.oem,inforom.ecc,inforom.pwr,inforom.checksum_validation,gpu_recovery_action,gom.current,gom.pending,fan.speed,pstate,clocks_event_reasons.supported,clocks_event_reasons.active,clocks_event_reasons.gpu_idle,clocks_event_reasons.applications_clocks_setting,clocks_event_reasons.sw_power_cap,clocks_event_reasons.hw_slowdown,clocks_event_reasons.hw_thermal_slowdown,clocks_event_reasons.hw_power_brake_slowdown,clocks_event_reasons.sw_thermal_slowdown,clocks_event_reasons.sync_boost,clocks_event_reasons_counters.sw_power_cap,clocks_event_reasons_counters.sync_boost,clocks_event_reasons_counters.sw_thermal_slowdown,clocks_event_reasons_counters.hw_thermal_slowdown,clocks_event_reasons_counters.hw_power_brake_slowdown,memory.total,memory.reserved,memory.used,memory.free,compute_mode,compute_cap,utilization.gpu,utilization.memory,utilization.encoder,utilization.decoder,utilization.jpeg,utilization.ofa,encoder.stats.sessionCount,encoder.stats.averageFps,encoder.stats.averageLatency,dramEncryption.mode.current,dramEncryption.mode.pending,ecc.mode.current,ecc.mode.pending,ecc.errors.corrected.volatile.device_memory,ecc.errors.corrected.volatile.dram,ecc.errors.corrected.volatile.register_file,ecc.errors.corrected.volatile.l1_cache,ecc.errors.corrected.volatile.l2_cache,ecc.errors.corrected.volatile.texture_memory,ecc.errors.corrected.volatile.cbu,ecc.errors.corrected.volatile.sram,ecc.errors.corrected.volatile.total,ecc.errors.corrected.aggregate.device_memory,ecc.errors.corrected.aggregate.dram,ecc.errors.corrected.aggregate.register_file,ecc.errors.corrected.aggregate.l1_cache,ecc.errors.corrected.aggregate.l2_cache,ecc.errors.corrected.aggregate.texture_memory,ecc.errors.corrected.aggregate.cbu,ecc.errors.corrected.aggregate.sram,ecc.errors.corrected.aggregate.total,ecc.errors.uncorrected.volatile.device_memory,ecc.errors.uncorrected.volatile.dram,ecc.errors.uncorrected.volatile.register_file,ecc.errors.uncorrected.volatile.l1_cache,ecc.errors.uncorrected.volatile.l2_cache,ecc.errors.uncorrected.volatile.texture_memory,ecc.errors.uncorrected.volatile.cbu,ecc.errors.uncorrected.volatile.sram,ecc.errors.uncorrected.volatile.total,ecc.errors.uncorrected.aggregate.device_memory,ecc.errors.uncorrected.aggregate.dram,ecc.errors.uncorrected.aggregate.register_file,ecc.errors.uncorrected.aggregate.l1_cache,ecc.errors.uncorrected.aggregate.l2_cache,ecc.errors.uncorrected.aggregate.texture_memory,ecc.errors.uncorrected.aggregate.cbu,ecc.errors.uncorrected.aggregate.sram,ecc.errors.uncorrected.aggregate.total,ecc.errors.uncorrected.volatile.sram.parity,ecc.errors.uncorrected.volatile.sram.secded,ecc.errors.uncorrected.aggregate.sram.parity,ecc.errors.uncorrected.aggregate.sram.secded,ecc.errors.uncorrected.aggregate.sram.thresholdExceeded,ecc.errors.uncorrected.aggregate.sram.l2,ecc.errors.uncorrected.aggregate.sram.sm,ecc.errors.uncorrected.aggregate.sram.mcu,ecc.errors.uncorrected.aggregate.sram.pcie,ecc.errors.uncorrected.aggregate.sram.other,retired_pages.single_bit_ecc.count,retired_pages.double_bit.count,retired_pages.pending,remapped_rows.correctable,remapped_rows.correctable_inactive,remapped_rows.uncorrectable,remapped_rows.uncorrectable_inactive,remapped_rows.pending,remapped_rows.failure,remapped_rows.histogram.max,remapped_rows.histogram.high,remapped_rows.histogram.partial,remapped_rows.histogram.low,remapped_rows.histogram.none,temperature.gpu,temperature.gpu.tlimit,temperature.memory,power.management,power.draw,power.draw.average,power.draw.instant,power.limit,enforced.power.limit,power.default_limit,power.min_limit,power.max_limit,module.power.draw.average,module.power.draw.instant,module.power.limit,module.enforced.power.limit,module.power.default_limit,module.power.min_limit,module.power.max_limit,gpu.base.current,gpu.base.requested,gpu.base.default,gpu.base.min,gpu.base.max,power_smoothing.tmp_floor,power_smoothing.tmp_ceil,power_smoothing.hw_lifetime_remaining_percent,power_smoothing.enabled,power_smoothing.delayed_power_smoothing_supported,power_smoothing.soc_power_smoothing_enabled,power_smoothing.priv_level,power_smoothing.imm_ramp_down,power_smoothing.max_percent_tmp_floor,power_smoothing.min_percent_tmp_floor,power_smoothing.primary_power_floor,power_smoothing.secondary_power_floor,power_smoothing.min_primary_floor_activation_offset,power_smoothing.min_primary_floor_activation_point,power_smoothing.window_multiplier,power_smoothing.num_preset_profiles,power_smoothing.curr_profile.percent_tmp_floor,power_smoothing.curr_profile.ramp_up_rate,power_smoothing.curr_profile.ramp_down_rate,power_smoothing.curr_profile.ramp_down_hysteresis,power_smoothing.curr_profile.secondary_power_floor,power_smoothing.curr_profile.primary_floor_act_window_multiplier,power_smoothing.curr_profile.primary_floor_tar_window_multiplier,power_smoothing.curr_profile.primary_floor_act_offset,power_smoothing.active_profile,power_smoothing.admin_override.percent_tmp_floor,power_smoothing.admin_override.ramp_up_rate,power_smoothing.admin_override.ramp_down_rate,power_smoothing.admin_override.ramp_down_hysteresis,power_smoothing.admin_override.secondary_power_floor,power_smoothing.admin_override.primary_floor_act_window_multiplier,power_smoothing.admin_override.primary_floor_tar_window_multiplier,power_smoothing.admin_override.primary_floor_act_offset,edpp_multiplier,clocks.current.graphics,clocks.current.sm,clocks.current.memory,clocks.current.video,clocks.applications.graphics,clocks.applications.memory,clocks.default_applications.graphics,clocks.default_applications.memory,clocks.max.graphics,clocks.max.sm,clocks.max.memory,mig.mode.current,mig.mode.pending,gsp.mode.current,gsp.mode.default,c2c.mode,protected_memory.total,protected_memory.used,protected_memory.free,fabric.state,fabric.status,fabric.cliqueId,fabric.clusterUuid,fabric.health.summary,fabric.health.bandwidth,fabric.health.route_recovery_in_progress,fabric.health.route_unhealthy,fabric.health.access_timeout_recovery,fabric.health.incorrect_configuration,fabric.health.partition_assigned,platform.chassis_serial_number,platform.slot_number,platform.tray_index,platform.host_id,platform.peer_type,platform.module_id,platform.gpu_fabric_guid,hostname,bbx.time_run --format=csv
 ################################################################################
-timestamp, driver_version, vgpu_driver_capability.heterogenous_multivGPU, count, name, serial, uuid, pci.bus_id, pci.domain, pci.bus, pci.device, pci.device_id, pci.sub_device_id, vgpu_device_capability.fractional_multiVgpu, vgpu_device_capability.heterogeneous_timeSlice_profile, vgpu_device_capability.heterogeneous_timeSlice_sizes, vgpu_device_capability.homogeneous_placements, vgpu_device_capability.mig_timeSlicing, vgpu_device_capability.mig_timeSlicing_mode, pcie.link.gen.current, pcie.link.gen.gpucurrent, pcie.link.gen.max, pcie.link.gen.gpumax, pcie.link.gen.hostmax, pcie.link.width.current, pcie.link.width.max, index, display_mode, display_attached, display_active, persistence_mode, addressing_mode, accounting.mode, accounting.buffer_size, driver_model.current, driver_model.pending, vbios_version, inforom.img, inforom.oem, inforom.ecc, inforom.pwr, inforom.checksum_validation, gpu_recovery_action, gom.current, gom.pending, fan.speed [%], pstate, clocks_event_reasons.supported, clocks_event_reasons.active, clocks_event_reasons.gpu_idle, clocks_event_reasons.applications_clocks_setting, clocks_event_reasons.sw_power_cap, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_power_brake_slowdown, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.sync_boost, clocks_event_reasons_counters.sw_power_cap [us], clocks_event_reasons_counters.sync_boost [us], clocks_event_reasons_counters.sw_thermal_slowdown [us], clocks_event_reasons_counters.hw_thermal_slowdown [us], clocks_event_reasons_counters.hw_power_brake_slowdown [us], memory.total [MiB], memory.reserved [MiB], memory.used [MiB], memory.free [MiB], compute_mode, compute_cap, utilization.gpu [%], utilization.memory [%], utilization.encoder [%], utilization.decoder [%], utilization.jpeg [%], utilization.ofa [%], encoder.stats.sessionCount, encoder.stats.averageFps, encoder.stats.averageLatency, dramEncryption.mode.current, dramEncryption.mode.pending, ecc.mode.current, ecc.mode.pending, ecc.errors.corrected.volatile.device_memory, ecc.errors.corrected.volatile.dram, ecc.errors.corrected.volatile.register_file, ecc.errors.corrected.volatile.l1_cache, ecc.errors.corrected.volatile.l2_cache, ecc.errors.corrected.volatile.texture_memory, ecc.errors.corrected.volatile.cbu, ecc.errors.corrected.volatile.sram, ecc.errors.corrected.volatile.total, ecc.errors.corrected.aggregate.device_memory, ecc.errors.corrected.aggregate.dram, ecc.errors.corrected.aggregate.register_file, ecc.errors.corrected.aggregate.l1_cache, ecc.errors.corrected.aggregate.l2_cache, ecc.errors.corrected.aggregate.texture_memory, ecc.errors.corrected.aggregate.cbu, ecc.errors.corrected.aggregate.sram, ecc.errors.corrected.aggregate.total, ecc.errors.uncorrected.volatile.device_memory, ecc.errors.uncorrected.volatile.dram, ecc.errors.uncorrected.volatile.register_file, ecc.errors.uncorrected.volatile.l1_cache, ecc.errors.uncorrected.volatile.l2_cache, ecc.errors.uncorrected.volatile.texture_memory, ecc.errors.uncorrected.volatile.cbu, ecc.errors.uncorrected.volatile.sram, ecc.errors.uncorrected.volatile.total, ecc.errors.uncorrected.aggregate.device_memory, ecc.errors.uncorrected.aggregate.dram, ecc.errors.uncorrected.aggregate.register_file, ecc.errors.uncorrected.aggregate.l1_cache, ecc.errors.uncorrected.aggregate.l2_cache, ecc.errors.uncorrected.aggregate.texture_memory, ecc.errors.uncorrected.aggregate.cbu, ecc.errors.uncorrected.aggregate.sram, ecc.errors.uncorrected.aggregate.total, ecc.errors.uncorrected.volatile.sram.parity, ecc.errors.uncorrected.volatile.sram.secded, ecc.errors.uncorrected.aggregate.sram.parity, ecc.errors.uncorrected.aggregate.sram.secded, ecc.errors.uncorrected.aggregate.sram.thresholdExceeded, ecc.errors.uncorrected.aggregate.sram.l2, ecc.errors.uncorrected.aggregate.sram.sm, ecc.errors.uncorrected.aggregate.sram.mcu, ecc.errors.uncorrected.aggregate.sram.pcie, ecc.errors.uncorrected.aggregate.sram.other, retired_pages.single_bit_ecc.count, retired_pages.double_bit.count, retired_pages.pending, remapped_rows.correctable, remapped_rows.uncorrectable, remapped_rows.pending, remapped_rows.failure, remapped_rows.histogram.max, remapped_rows.histogram.high, remapped_rows.histogram.partial, remapped_rows.histogram.low, remapped_rows.histogram.none, temperature.gpu, temperature.gpu.tlimit, temperature.memory, power.management, power.draw [W], power.draw.average [W], power.draw.instant [W], power.limit [W], enforced.power.limit [W], power.default_limit [W], power.min_limit [W], power.max_limit [W], module.power.draw.average [W], module.power.draw.instant [W], module.power.limit [W], module.enforced.power.limit [W], module.power.default_limit [W], module.power.min_limit [W], module.power.max_limit [W], power_smoothing.delayed_power_smoothing_supported, power_smoothing.primary_power_floor [W], power_smoothing.secondary_power_floor [W], power_smoothing.min_primary_floor_activation_offset [W], power_smoothing.min_primary_floor_activation_point [W], power_smoothing.window_multiplier [ms], power_smoothing.curr_profile.secondary_power_floor [W], power_smoothing.curr_profile.primary_floor_act_window_multiplier, power_smoothing.curr_profile.primary_floor_tar_window_multiplier, power_smoothing.curr_profile.primary_floor_act_offset [W], power_smoothing.admin_override.secondary_power_floor [W], power_smoothing.admin_override.primary_floor_act_window_multiplier, power_smoothing.admin_override.primary_floor_tar_window_multiplier, power_smoothing.admin_override.primary_floor_act_offset [W], edpp_multiplier [%], clocks.current.graphics [MHz], clocks.current.sm [MHz], clocks.current.memory [MHz], clocks.current.video [MHz], clocks.applications.graphics [MHz], clocks.applications.memory [MHz], clocks.default_applications.graphics [MHz], clocks.default_applications.memory [MHz], clocks.max.graphics [MHz], clocks.max.sm [MHz], clocks.max.memory [MHz], mig.mode.current, mig.mode.pending, gsp.mode.current, gsp.mode.default, c2c.mode, protected_memory.total [MiB], protected_memory.used [MiB], protected_memory.free [MiB], fabric.state, fabric.status, fabric.cliqueId, fabric.clusterUuid, fabric.health.summary, fabric.health.bandwidth, fabric.health.route_recovery_in_progress, fabric.health.route_unhealthy, fabric.health.access_timeout_recovery, fabric.health.incorrect_configuration, platform.chassis_serial_number, platform.slot_number, platform.tray_index, platform.host_id, platform.peer_type, platform.module_id, platform.gpu_fabric_guid, hostname
-2026/06/22 23:04:18.311, 591.86, [N/A], 1, NVIDIA GeForce RTX 2080 SUPER, [N/A], GPU-00000000-0000-0000-0000-000000000000, 00000000:0C:00.0, 0x0000, 0x0C, 0x00, 0x1E8110DE, 0x40051458, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], 3, 3, 3, 3, 4, 16, 16, 0, [Requested functionality has been deprecated], Yes, Disabled, [N/A], [N/A], Disabled, 4000, WDDM, WDDM, 90.04.7a.40.73, G001.0000.02.04, 1.1, [N/A], [N/A], valid, None, [N/A], [N/A], 37 %, P8, 0x00000000000001FF, 0x0000000000000001, Active, Not Active, Not Active, Not Active, Not Active, Not Active, Not Active, Not Active, 5451018134 us, 0 us, 0 us, 0 us, 0 us, 8192 MiB, 205 MiB, 702 MiB, 7286 MiB, Default, 7.5, 0 %, 0 %, 0 %, 0 %, 0 %, 0 %, 0, 0, 0, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], 40, [N/A], N/A, [Requested functionality has been deprecated], 38.92 W, [N/A], 38.92 W, 250.00 W, 250.00 W, 250.00 W, 105.00 W, 350.00 W, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], 300 MHz, 300 MHz, 405 MHz, 540 MHz, [Requested functionality has been deprecated], [Requested functionality has been deprecated], [Requested functionality has been deprecated], [Requested functionality has been deprecated], 2145 MHz, 2145 MHz, 7751 MHz, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], N/A, N/A, N/A, N/A, N/A, N/A, N/A, N/A, N/A, N/A, , 0, 0, 1, Direct Connected, 1, 0x0000000000000000, [N/A]
+timestamp, driver_version, kmd_version, vgpu_driver_capability.heterogenous_multivGPU, count, name, serial, uuid, pci.bus_id, pci.domain, pci.bus, pci.device, pci.device_id, pci.sub_device_id, vgpu_device_capability.fractional_multiVgpu, vgpu_device_capability.heterogeneous_timeSlice_profile, vgpu_device_capability.heterogeneous_timeSlice_sizes, vgpu_device_capability.homogeneous_placements, vgpu_device_capability.mig_timeSlicing, vgpu_device_capability.mig_timeSlicing_mode, pcie.link.gen.current, pcie.link.gen.gpucurrent, pcie.link.gen.max, pcie.link.gen.gpumax, pcie.link.gen.hostmax, pcie.link.width.current, pcie.link.width.max, index, display_mode, display_attached, display_active, persistence_mode, addressing_mode, accounting.mode, accounting.buffer_size, driver_model.current, driver_model.pending, vbios_version, inforom.img, inforom.oem, inforom.ecc, inforom.pwr, inforom.checksum_validation, gpu_recovery_action, gom.current, gom.pending, fan.speed [%], pstate, clocks_event_reasons.supported, clocks_event_reasons.active, clocks_event_reasons.gpu_idle, clocks_event_reasons.applications_clocks_setting, clocks_event_reasons.sw_power_cap, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_power_brake_slowdown, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.sync_boost, clocks_event_reasons_counters.sw_power_cap [us], clocks_event_reasons_counters.sync_boost [us], clocks_event_reasons_counters.sw_thermal_slowdown [us], clocks_event_reasons_counters.hw_thermal_slowdown [us], clocks_event_reasons_counters.hw_power_brake_slowdown [us], memory.total [MiB], memory.reserved [MiB], memory.used [MiB], memory.free [MiB], compute_mode, compute_cap, utilization.gpu [%], utilization.memory [%], utilization.encoder [%], utilization.decoder [%], utilization.jpeg [%], utilization.ofa [%], encoder.stats.sessionCount, encoder.stats.averageFps, encoder.stats.averageLatency, dramEncryption.mode.current, dramEncryption.mode.pending, ecc.mode.current, ecc.mode.pending, ecc.errors.corrected.volatile.device_memory, ecc.errors.corrected.volatile.dram, ecc.errors.corrected.volatile.register_file, ecc.errors.corrected.volatile.l1_cache, ecc.errors.corrected.volatile.l2_cache, ecc.errors.corrected.volatile.texture_memory, ecc.errors.corrected.volatile.cbu, ecc.errors.corrected.volatile.sram, ecc.errors.corrected.volatile.total, ecc.errors.corrected.aggregate.device_memory, ecc.errors.corrected.aggregate.dram, ecc.errors.corrected.aggregate.register_file, ecc.errors.corrected.aggregate.l1_cache, ecc.errors.corrected.aggregate.l2_cache, ecc.errors.corrected.aggregate.texture_memory, ecc.errors.corrected.aggregate.cbu, ecc.errors.corrected.aggregate.sram, ecc.errors.corrected.aggregate.total, ecc.errors.uncorrected.volatile.device_memory, ecc.errors.uncorrected.volatile.dram, ecc.errors.uncorrected.volatile.register_file, ecc.errors.uncorrected.volatile.l1_cache, ecc.errors.uncorrected.volatile.l2_cache, ecc.errors.uncorrected.volatile.texture_memory, ecc.errors.uncorrected.volatile.cbu, ecc.errors.uncorrected.volatile.sram, ecc.errors.uncorrected.volatile.total, ecc.errors.uncorrected.aggregate.device_memory, ecc.errors.uncorrected.aggregate.dram, ecc.errors.uncorrected.aggregate.register_file, ecc.errors.uncorrected.aggregate.l1_cache, ecc.errors.uncorrected.aggregate.l2_cache, ecc.errors.uncorrected.aggregate.texture_memory, ecc.errors.uncorrected.aggregate.cbu, ecc.errors.uncorrected.aggregate.sram, ecc.errors.uncorrected.aggregate.total, ecc.errors.uncorrected.volatile.sram.parity, ecc.errors.uncorrected.volatile.sram.secded, ecc.errors.uncorrected.aggregate.sram.parity, ecc.errors.uncorrected.aggregate.sram.secded, ecc.errors.uncorrected.aggregate.sram.thresholdExceeded, ecc.errors.uncorrected.aggregate.sram.l2, ecc.errors.uncorrected.aggregate.sram.sm, ecc.errors.uncorrected.aggregate.sram.mcu, ecc.errors.uncorrected.aggregate.sram.pcie, ecc.errors.uncorrected.aggregate.sram.other, retired_pages.single_bit_ecc.count, retired_pages.double_bit.count, retired_pages.pending, remapped_rows.correctable, remapped_rows.correctable_inactive, remapped_rows.uncorrectable, remapped_rows.uncorrectable_inactive, remapped_rows.pending, remapped_rows.failure, remapped_rows.histogram.max, remapped_rows.histogram.high, remapped_rows.histogram.partial, remapped_rows.histogram.low, remapped_rows.histogram.none, temperature.gpu, temperature.gpu.tlimit, temperature.memory, power.management, power.draw [W], power.draw.average [W], power.draw.instant [W], power.limit [W], enforced.power.limit [W], power.default_limit [W], power.min_limit [W], power.max_limit [W], module.power.draw.average [W], module.power.draw.instant [W], module.power.limit [W], module.enforced.power.limit [W], module.power.default_limit [W], module.power.min_limit [W], module.power.max_limit [W], gpu.base.current [W], gpu.base.requested [W], gpu.base.default [W], gpu.base.min [W], gpu.base.max [W], power_smoothing.tmp_floor [W], power_smoothing.tmp_ceil [W], power_smoothing.hw_lifetime_remaining_percent [%], power_smoothing.enabled, power_smoothing.delayed_power_smoothing_supported, power_smoothing.soc_power_smoothing_enabled, power_smoothing.priv_level, power_smoothing.imm_ramp_down, power_smoothing.max_percent_tmp_floor [%], power_smoothing.min_percent_tmp_floor [%], power_smoothing.primary_power_floor [W], power_smoothing.secondary_power_floor [W], power_smoothing.min_primary_floor_activation_offset [W], power_smoothing.min_primary_floor_activation_point [W], power_smoothing.window_multiplier [ms], power_smoothing.num_preset_profiles, power_smoothing.curr_profile.percent_tmp_floor [%], power_smoothing.curr_profile.ramp_up_rate [W/s], power_smoothing.curr_profile.ramp_down_rate [W/s], power_smoothing.curr_profile.ramp_down_hysteresis [ms], power_smoothing.curr_profile.secondary_power_floor [W], power_smoothing.curr_profile.primary_floor_act_window_multiplier, power_smoothing.curr_profile.primary_floor_tar_window_multiplier, power_smoothing.curr_profile.primary_floor_act_offset [W], power_smoothing.active_profile, power_smoothing.admin_override.percent_tmp_floor [%], power_smoothing.admin_override.ramp_up_rate [W/s], power_smoothing.admin_override.ramp_down_rate [W/s], power_smoothing.admin_override.ramp_down_hysteresis [ms], power_smoothing.admin_override.secondary_power_floor [W], power_smoothing.admin_override.primary_floor_act_window_multiplier, power_smoothing.admin_override.primary_floor_tar_window_multiplier, power_smoothing.admin_override.primary_floor_act_offset [W], edpp_multiplier [%], clocks.current.graphics [MHz], clocks.current.sm [MHz], clocks.current.memory [MHz], clocks.current.video [MHz], clocks.applications.graphics [MHz], clocks.applications.memory [MHz], clocks.default_applications.graphics [MHz], clocks.default_applications.memory [MHz], clocks.max.graphics [MHz], clocks.max.sm [MHz], clocks.max.memory [MHz], mig.mode.current, mig.mode.pending, gsp.mode.current, gsp.mode.default, c2c.mode, protected_memory.total [MiB], protected_memory.used [MiB], protected_memory.free [MiB], fabric.state, fabric.status, fabric.cliqueId, fabric.clusterUuid, fabric.health.summary, fabric.health.bandwidth, fabric.health.route_recovery_in_progress, fabric.health.route_unhealthy, fabric.health.access_timeout_recovery, fabric.health.incorrect_configuration, fabric.health.partition_assigned, platform.chassis_serial_number, platform.slot_number, platform.tray_index, platform.host_id, platform.peer_type, platform.module_id, platform.gpu_fabric_guid, hostname, bbx.time_run [seconds]
+2026/06/24 10:17:41.589, 610.62, 610.62, [N/A], 1, NVIDIA GeForce RTX 2080 SUPER, [N/A], GPU-00000000-0000-0000-0000-000000000000, 00000000:0C:00.0, 0x0000, 0x0C, 0x00, 0x1E8110DE, 0x40051458, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], 3, 3, 3, 3, 4, 16, 16, 0, [Requested functionality has been deprecated], Yes, Enabled, [N/A], [N/A], Disabled, 4000, WDDM, WDDM, 90.04.7a.40.73, G001.0000.02.04, 1.1, [N/A], [N/A], valid, None, [N/A], [N/A], 38 %, P8, 0x00000000000001FF, 0x0000000000000001, Active, Not Active, Not Active, Not Active, Not Active, Not Active, Not Active, Not Active, 824898457 us, 0 us, 0 us, 0 us, 0 us, 8192 MiB, 205 MiB, 797 MiB, 7191 MiB, Default, 7.5, 0 %, 10 %, 0 %, 0 %, 0 %, 0 %, 0, 0, 0, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], 40, [N/A], N/A, [Requested functionality has been deprecated], 39.25 W, [N/A], 39.25 W, 250.00 W, 250.00 W, 250.00 W, 105.00 W, 350.00 W, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], 300 MHz, 300 MHz, 405 MHz, 540 MHz, [Requested functionality has been deprecated], [Requested functionality has been deprecated], [Requested functionality has been deprecated], [Requested functionality has been deprecated], 2145 MHz, 2145 MHz, 7751 MHz, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], N/A, N/A, N/A, N/A, N/A, N/A, N/A, N/A, N/A, N/A, N/A, , 0, 0, 1, Direct Connected, 1, 0x0000000000000000, [N/A], [Function Not Found]
 
 
 ################################################################################
@@ -1725,16 +1948,25 @@ timestamp, driver_version, vgpu_driver_capability.heterogenous_multivGPU, count,
 # $ nvidia-smi --query-compute-apps=timestamp,gpu_name,gpu_bus_id,gpu_serial,gpu_uuid,pid,process_name,used_gpu_memory --format=csv
 ################################################################################
 timestamp, gpu_name, gpu_bus_id, gpu_serial, gpu_uuid, pid, process_name, used_gpu_memory [MiB]
-2026/06/22 23:04:18.593, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 12444, C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\TextInputHost.exe, [N/A]
-2026/06/22 23:04:18.593, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 15076, C:\Windows\SystemApps\ShellExperienceHost_cw5n1h2txyewy\ShellExperienceHost.exe, [N/A]
-2026/06/22 23:04:18.593, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 2056, C:\Windows\System32\dwm.exe, [N/A]
-2026/06/22 23:04:18.593, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 12332, C:\Windows\explorer.exe, [N/A]
-2026/06/22 23:04:18.593, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 20372, C:\Program Files\NZXT CAM\NZXT CAM.exe, [N/A]
-2026/06/22 23:04:18.593, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 4680, C:\Program Files\NVIDIA Corporation\NVIDIA GeForce Experience\NVIDIA Share.exe, [N/A]
-2026/06/22 23:04:18.593, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 14160, C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\SearchHost.exe, [N/A]
-2026/06/22 23:04:18.593, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 14184, C:\Windows\SystemApps\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\StartMenuExperienceHost.exe, [N/A]
-2026/06/22 23:04:18.593, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 16280, C:\Program Files\Controller Companion\ControllerCompanion.exe, [N/A]
-2026/06/22 23:04:18.593, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 24804, C:\Windows\ImmersiveControlPanel\SystemSettings.exe, [N/A]
+2026/06/24 10:17:41.921, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 2140, C:\Windows\System32\dwm.exe, [N/A]
+2026/06/24 10:17:41.921, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 13264, C:\Windows\System32\ShellHost.exe, [N/A]
+2026/06/24 10:17:41.921, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 13504, C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\CrossDeviceResume.exe, [N/A]
+2026/06/24 10:17:41.921, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 13160, C:\Windows\explorer.exe, [N/A]
+2026/06/24 10:17:41.921, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 14872, C:\Windows\SystemApps\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\StartMenuExperienceHost.exe, [N/A]
+2026/06/24 10:17:41.921, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 14808, C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\SearchHost.exe, [N/A]
+2026/06/24 10:17:41.921, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 16760, C:\Windows\SystemApps\ShellExperienceHost_cw5n1h2txyewy\ShellExperienceHost.exe, [N/A]
+2026/06/24 10:17:41.921, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 17648, C:\Program Files\NVIDIA Corporation\NVIDIA App\CEF\NVIDIA Overlay.exe, [N/A]
+2026/06/24 10:17:41.921, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 15964, C:\Program Files\NVIDIA Corporation\NVIDIA App\CEF\NVIDIA Overlay.exe, [N/A]
+2026/06/24 10:17:41.921, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 17840, C:\Program Files (x86)\Microsoft\EdgeWebView\Application\149.0.4022.80\msedgewebview2.exe, [N/A]
+2026/06/24 10:17:41.921, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 19052, C:\Windows\SystemApps\Microsoft.LockApp_cw5n1h2txyewy\LockApp.exe, [N/A]
+2026/06/24 10:17:41.921, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 20440, C:\Program Files\Controller Companion\ControllerCompanion.exe, [N/A]
+2026/06/24 10:17:41.921, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 21912, C:\Program Files\WindowsApps\Microsoft.YourPhone_1.26042.99.0_x64__8wekyb3d8bbwe\PhoneExperienceHost.exe, [N/A]
+2026/06/24 10:17:41.921, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 22412, C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\TextInputHost.exe, [N/A]
+2026/06/24 10:17:41.921, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 23480, C:\Program Files\WindowsApps\Agilebits.1Password_8.12.24.34_x64__amwd9z03whsfe\1Password.exe, [N/A]
+2026/06/24 10:17:41.921, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 23988, C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe, [N/A]
+2026/06/24 10:17:41.921, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 19956, C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.24.11321.0_x64__8wekyb3d8bbwe\WindowsTerminal.exe, [N/A]
+2026/06/24 10:17:41.921, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 2164, C:\Windows\System32\ApplicationFrameHost.exe, [N/A]
+2026/06/24 10:17:41.921, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 13092, C:\Windows\ImmersiveControlPanel\SystemSettings.exe, [N/A]
 
 
 ################################################################################
@@ -1749,8 +1981,8 @@ timestamp, gpu_name, gpu_bus_id, gpu_serial, gpu_uuid, pid, gpu_utilization [%],
 # $ nvidia-smi --query-retired-pages=timestamp,gpu_name,gpu_bus_id,gpu_serial,gpu_uuid,retired_pages.address,retired_pages.timestamp,retired_pages.cause --format=csv
 ################################################################################
 timestamp, gpu_name, gpu_bus_id, gpu_serial, gpu_uuid, retired_pages.address, retired_pages.timestamp, retired_pages.cause
-2026/06/22 23:04:18.687, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, [N/A], [N/A], Single Bit ECC
-2026/06/22 23:04:18.687, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, [N/A], [N/A], Double Bit ECC
+2026/06/24 10:17:42.047, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, [N/A], [N/A], Single Bit ECC
+2026/06/24 10:17:42.047, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, [N/A], [N/A], Double Bit ECC
 
 
 ################################################################################
@@ -1759,58 +1991,105 @@ timestamp, gpu_name, gpu_bus_id, gpu_serial, gpu_uuid, retired_pages.address, re
 ################################################################################
 # gpu         pid   type     sm    mem    enc    dec    jpg    ofa    command 
 # Idx           #    C/G      %      %      %      %      %      %    name 
-    0       2056   C+G      -      -      -      -      -      -    dwm.exe        
-    0       4680   C+G      -      -      -      -      -      -    NVIDIA Share.exe
-    0      12332   C+G      -      -      -      -      -      -    explorer.exe   
-    0      12444   C+G      -      -      -      -      -      -    TextInputHost.ex
-    0      14160   C+G      -      -      -      -      -      -    SearchHost.exe 
-    0      14184   C+G      -      -      -      -      -      -    StartMenuExperie
-    0      15076   C+G      -      -      -      -      -      -    ShellExperienceH
-    0      16280   C+G      -      -      -      -      -      -    ControllerCompan
-    0      20372   C+G      -      -      -      -      -      -    NZXT CAM.exe   
-    0      24804   C+G      -      -      -      -      -      -    SystemSettings.e
-    0       2056   C+G      -      -      -      -      -      -    dwm.exe        
-    0       4680   C+G      -      -      -      -      -      -    NVIDIA Share.exe
-    0      12332   C+G      -      -      -      -      -      -    explorer.exe   
-    0      12444   C+G      -      -      -      -      -      -    TextInputHost.ex
-    0      14160   C+G      -      -      -      -      -      -    SearchHost.exe 
-    0      14184   C+G      -      -      -      -      -      -    StartMenuExperie
-    0      15076   C+G      -      -      -      -      -      -    ShellExperienceH
-    0      16280   C+G      -      -      -      -      -      -    ControllerCompan
-    0      20372   C+G      -      -      -      -      -      -    NZXT CAM.exe   
-    0      24804   C+G      -      -      -      -      -      -    SystemSettings.e
-    0       2056   C+G      -      -      -      -      -      -    dwm.exe        
-    0       4680   C+G      -      -      -      -      -      -    NVIDIA Share.exe
-    0      12332   C+G      -      -      -      -      -      -    explorer.exe   
-    0      12444   C+G      -      -      -      -      -      -    TextInputHost.ex
-    0      14160   C+G      -      -      -      -      -      -    SearchHost.exe 
-    0      14184   C+G      -      -      -      -      -      -    StartMenuExperie
-    0      15076   C+G      -      -      -      -      -      -    ShellExperienceH
-    0      16280   C+G      -      -      -      -      -      -    ControllerCompan
-    0      20372   C+G      -      -      -      -      -      -    NZXT CAM.exe   
-    0      24804   C+G      -      -      -      -      -      -    SystemSettings.e
-    0       2056   C+G      -      -      -      -      -      -    dwm.exe        
-    0       4680   C+G      -      -      -      -      -      -    NVIDIA Share.exe
-    0      12332   C+G      -      -      -      -      -      -    explorer.exe   
-    0      12444   C+G      -      -      -      -      -      -    TextInputHost.ex
-    0      14160   C+G      -      -      -      -      -      -    SearchHost.exe 
-    0      14184   C+G      -      -      -      -      -      -    StartMenuExperie
-    0      15076   C+G      -      -      -      -      -      -    ShellExperienceH
-    0      16280   C+G      -      -      -      -      -      -    ControllerCompan
-    0      20372   C+G      -      -      -      -      -      -    NZXT CAM.exe   
-    0      24804   C+G      -      -      -      -      -      -    SystemSettings.e
-    0       2056   C+G      -      -      -      -      -      -    dwm.exe        
-    0       4680   C+G      -      -      -      -      -      -    NVIDIA Share.exe
-    0      12332   C+G      -      -      -      -      -      -    explorer.exe   
-    0      12444   C+G      -      -      -      -      -      -    TextInputHost.ex
+    0       2140   C+G      -      -      -      -      -      -    dwm.exe        
+    0       2164   C+G      -      -      -      -      -      -    ApplicationFram
+    0      13092   C+G      -      -      -      -      -      -    SystemSettings.
+    0      13160   C+G      -      -      -      -      -      -    explorer.exe   
+    0      13264   C+G      -      -      -      -      -      -    ShellHost.exe  
+    0      13504   C+G      -      -      -      -      -      -    CrossDeviceResu
+    0      14808   C+G      -      -      -      -      -      -    SearchHost.exe 
+    0      14872   C+G      -      -      -      -      -      -    StartMenuExperi
+    0      15964   C+G      -      -      -      -      -      -    NVIDIA Overlay.
+    0      16760   C+G      -      -      -      -      -      -    ShellExperience
+    0      17648   C+G      -      -      -      -      -      -    NVIDIA Overlay.
+    0      17840   C+G      -      -      -      -      -      -    msedgewebview2.
+    0      19052   C+G      -      -      -      -      -      -    LockApp.exe    
+    0      19956   C+G      -      -      -      -      -      -    WindowsTerminal
+    0      20440   C+G      -      -      -      -      -      -    ControllerCompa
+    0      21912   C+G      -      -      -      -      -      -    PhoneExperience
+    0      22412   C+G      -      -      -      -      -      -    TextInputHost.e
+    0      23480   C+G      -      -      -      -      -      -    1Password.exe  
+    0      23988   C+G      -      -      -      -      -      -    msedge.exe     
+    0       2140   C+G      -      -      -      -      -      -    dwm.exe        
+    0       2164   C+G      -      -      -      -      -      -    ApplicationFram
+    0      13092   C+G      -      -      -      -      -      -    SystemSettings.
+    0      13160   C+G      -      -      -      -      -      -    explorer.exe   
+    0      13264   C+G      -      -      -      -      -      -    ShellHost.exe  
+    0      13504   C+G      -      -      -      -      -      -    CrossDeviceResu
+    0      14808   C+G      -      -      -      -      -      -    SearchHost.exe 
+    0      14872   C+G      -      -      -      -      -      -    StartMenuExperi
+    0      15964   C+G      -      -      -      -      -      -    NVIDIA Overlay.
+    0      16760   C+G      -      -      -      -      -      -    ShellExperience
+    0      17648   C+G      -      -      -      -      -      -    NVIDIA Overlay.
+    0      17840   C+G      -      -      -      -      -      -    msedgewebview2.
+    0      19052   C+G      -      -      -      -      -      -    LockApp.exe    
+    0      19956   C+G      -      -      -      -      -      -    WindowsTerminal
+    0      20440   C+G      -      -      -      -      -      -    ControllerCompa
+    0      21912   C+G      -      -      -      -      -      -    PhoneExperience
+    0      22412   C+G      -      -      -      -      -      -    TextInputHost.e
+    0      23480   C+G      -      -      -      -      -      -    1Password.exe  
+    0      23988   C+G      -      -      -      -      -      -    msedge.exe     
+    0       2140   C+G      -      -      -      -      -      -    dwm.exe        
+    0       2164   C+G      -      -      -      -      -      -    ApplicationFram
+    0      13092   C+G      -      -      -      -      -      -    SystemSettings.
+    0      13160   C+G      -      -      -      -      -      -    explorer.exe   
+    0      13264   C+G      -      -      -      -      -      -    ShellHost.exe  
+    0      13504   C+G      -      -      -      -      -      -    CrossDeviceResu
 # gpu         pid   type     sm    mem    enc    dec    jpg    ofa    command 
 # Idx           #    C/G      %      %      %      %      %      %    name 
-    0      14160   C+G      -      -      -      -      -      -    SearchHost.exe 
-    0      14184   C+G      -      -      -      -      -      -    StartMenuExperie
-    0      15076   C+G      -      -      -      -      -      -    ShellExperienceH
-    0      16280   C+G      -      -      -      -      -      -    ControllerCompan
-    0      20372   C+G      -      -      -      -      -      -    NZXT CAM.exe   
-    0      24804   C+G      -      -      -      -      -      -    SystemSettings.e
+    0      14808   C+G      -      -      -      -      -      -    SearchHost.exe 
+    0      14872   C+G      -      -      -      -      -      -    StartMenuExperi
+    0      15964   C+G      -      -      -      -      -      -    NVIDIA Overlay.
+    0      16760   C+G      -      -      -      -      -      -    ShellExperience
+    0      17648   C+G      -      -      -      -      -      -    NVIDIA Overlay.
+    0      17840   C+G      -      -      -      -      -      -    msedgewebview2.
+    0      19052   C+G      -      -      -      -      -      -    LockApp.exe    
+    0      19956   C+G      -      -      -      -      -      -    WindowsTerminal
+    0      20440   C+G      -      -      -      -      -      -    ControllerCompa
+    0      21912   C+G      -      -      -      -      -      -    PhoneExperience
+    0      22412   C+G      -      -      -      -      -      -    TextInputHost.e
+    0      23480   C+G      -      -      -      -      -      -    1Password.exe  
+    0      23988   C+G      -      -      -      -      -      -    msedge.exe     
+    0       2140   C+G      -      -      -      -      -      -    dwm.exe        
+    0       2164   C+G      -      -      -      -      -      -    ApplicationFram
+    0      13092   C+G      -      -      -      -      -      -    SystemSettings.
+    0      13160   C+G      -      -      -      -      -      -    explorer.exe   
+    0      13264   C+G      -      -      -      -      -      -    ShellHost.exe  
+    0      13504   C+G      -      -      -      -      -      -    CrossDeviceResu
+    0      14808   C+G      -      -      -      -      -      -    SearchHost.exe 
+    0      14872   C+G      -      -      -      -      -      -    StartMenuExperi
+    0      15964   C+G      -      -      -      -      -      -    NVIDIA Overlay.
+    0      16760   C+G      -      -      -      -      -      -    ShellExperience
+    0      17648   C+G      -      -      -      -      -      -    NVIDIA Overlay.
+    0      17840   C+G      -      -      -      -      -      -    msedgewebview2.
+    0      19052   C+G      -      -      -      -      -      -    LockApp.exe    
+    0      19956   C+G      -      -      -      -      -      -    WindowsTerminal
+    0      20440   C+G      -      -      -      -      -      -    ControllerCompa
+    0      21912   C+G      -      -      -      -      -      -    PhoneExperience
+    0      22412   C+G      -      -      -      -      -      -    TextInputHost.e
+    0      23480   C+G      -      -      -      -      -      -    1Password.exe  
+    0      23988   C+G      -      -      -      -      -      -    msedge.exe     
+    0       2140   C+G      -      -      -      -      -      -    dwm.exe        
+    0       2164   C+G      -      -      -      -      -      -    ApplicationFram
+    0      13092   C+G      -      -      -      -      -      -    SystemSettings.
+    0      13160   C+G      -      -      -      -      -      -    explorer.exe   
+    0      13264   C+G      -      -      -      -      -      -    ShellHost.exe  
+    0      13504   C+G      -      -      -      -      -      -    CrossDeviceResu
+    0      14808   C+G      -      -      -      -      -      -    SearchHost.exe 
+    0      14872   C+G      -      -      -      -      -      -    StartMenuExperi
+    0      15964   C+G      -      -      -      -      -      -    NVIDIA Overlay.
+    0      16760   C+G      -      -      -      -      -      -    ShellExperience
+    0      17648   C+G      -      -      -      -      -      -    NVIDIA Overlay.
+    0      17840   C+G      -      -      -      -      -      -    msedgewebview2.
+# gpu         pid   type     sm    mem    enc    dec    jpg    ofa    command 
+# Idx           #    C/G      %      %      %      %      %      %    name 
+    0      19052   C+G      -      -      -      -      -      -    LockApp.exe    
+    0      19956   C+G      -      -      -      -      -      -    WindowsTerminal
+    0      20440   C+G      -      -      -      -      -      -    ControllerCompa
+    0      21912   C+G      -      -      -      -      -      -    PhoneExperience
+    0      22412   C+G      -      -      -      -      -      -    TextInputHost.e
+    0      23480   C+G      -      -      -      -      -      -    1Password.exe  
+    0      23988   C+G      -      -      -      -      -      -    msedge.exe     
 
 
 ################################################################################
@@ -1819,27 +2098,27 @@ timestamp, gpu_name, gpu_bus_id, gpu_serial, gpu_uuid, retired_pages.address, re
 ################################################################################
 # gpu    pwr  gtemp  mtemp     sm    mem    enc    dec    jpg    ofa   mclk   pclk 
 # Idx      W      C      C      %      %      %      %      %      %    MHz    MHz 
-    0     38     40      -      0      0      0      0      0      0    405    300 
-    0     38     40      -      0      0      0      0      0      0    405    300 
-    0     38     40      -      0      0      0      0      0      0    405    300 
-    0     38     40      -      0      0      0      0      0      0    405    300 
-    0     38     40      -      0      0      0      0      0      0    405    300 
+    0     37     39      -      0     10      0      0      0      0    405    300 
+    0     37     39      -      0     10      0      0      0      0    405    300 
+    0     37     39      -      0     10      0      0      0      0    405    300 
+    0     37     39      -      0     10      0      0      0      0    405    300 
+    0     37     39      -      0     10      0      0      0      0    405    300 
 
 
 ################################################################################
 # load :: nvidia-smi (default table)
 # $ nvidia-smi 
 ################################################################################
-Mon Jun 22 23:04:33 2026       
+Wed Jun 24 10:17:56 2026       
 +-----------------------------------------------------------------------------------------+
-| NVIDIA-SMI 591.86                 Driver Version: 591.86         CUDA Version: 13.1     |
+| NVIDIA-SMI 610.62                 KMD Version: 610.62        CUDA UMD Version: 13.3     |
 +-----------------------------------------+------------------------+----------------------+
 | GPU  Name                  Driver-Model | Bus-Id          Disp.A | Volatile Uncorr. ECC |
 | Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
 |                                         |                        |               MIG M. |
 |=========================================+========================+======================|
-|   0  NVIDIA GeForce RTX 2080 ...  WDDM  |   00000000:0C:00.0 Off |                  N/A |
-| 38%   45C    P2             97W /  250W |    1296MiB /   8192MiB |      7%      Default |
+|   0  NVIDIA GeForce RTX 2080 ...  WDDM  |   00000000:0C:00.0  On |                  N/A |
+| 38%   44C    P2             97W /  250W |    1366MiB /   8192MiB |      7%      Default |
 |                                         |                        |                  N/A |
 +-----------------------------------------+------------------------+----------------------+
 
@@ -1848,18 +2127,27 @@ Mon Jun 22 23:04:33 2026
 |  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
 |        ID   ID                                                               Usage      |
 |=========================================================================================|
-|    0   N/A  N/A            2056    C+G   C:\Windows\System32\dwm.exe           N/A      |
-|    0   N/A  N/A            4680    C+G   ...e Experience\NVIDIA Share.exe      N/A      |
-|    0   N/A  N/A           12332    C+G   C:\Windows\explorer.exe               N/A      |
-|    0   N/A  N/A           12444    C+G   ...5n1h2txyewy\TextInputHost.exe      N/A      |
-|    0   N/A  N/A           14160    C+G   ..._cw5n1h2txyewy\SearchHost.exe      N/A      |
-|    0   N/A  N/A           14184    C+G   ...y\StartMenuExperienceHost.exe      N/A      |
-|    0   N/A  N/A           15076    C+G   ...xyewy\ShellExperienceHost.exe      N/A      |
-|    0   N/A  N/A           16280    C+G   ...anion\ControllerCompanion.exe      N/A      |
-|    0   N/A  N/A           20372    C+G   ...m Files\NZXT CAM\NZXT CAM.exe      N/A      |
-|    0   N/A  N/A           24804    C+G   ...ntrolPanel\SystemSettings.exe      N/A      |
-|    0   N/A  N/A           25704      C   ...1.1-full_build\bin\ffmpeg.exe      N/A      |
-|    0   N/A  N/A           26660      C   ...1.1-full_build\bin\ffmpeg.exe      N/A      |
+|    0   N/A  N/A            2140    C+G   C:\Windows\System32\dwm.exe           N/A      |
+|    0   N/A  N/A            2164    C+G   ...em32\ApplicationFrameHost.exe      N/A      |
+|    0   N/A  N/A           12940      C   ...1.1-full_build\bin\ffmpeg.exe      N/A      |
+|    0   N/A  N/A           13092    C+G   ...ntrolPanel\SystemSettings.exe      N/A      |
+|    0   N/A  N/A           13160    C+G   C:\Windows\explorer.exe               N/A      |
+|    0   N/A  N/A           13264    C+G   ...indows\System32\ShellHost.exe      N/A      |
+|    0   N/A  N/A           13504    C+G   ...2txyewy\CrossDeviceResume.exe      N/A      |
+|    0   N/A  N/A           13820      C   ...1.1-full_build\bin\ffmpeg.exe      N/A      |
+|    0   N/A  N/A           14808    C+G   ..._cw5n1h2txyewy\SearchHost.exe      N/A      |
+|    0   N/A  N/A           14872    C+G   ...y\StartMenuExperienceHost.exe      N/A      |
+|    0   N/A  N/A           15964    C+G   ...IA App\CEF\NVIDIA Overlay.exe      N/A      |
+|    0   N/A  N/A           16760    C+G   ...xyewy\ShellExperienceHost.exe      N/A      |
+|    0   N/A  N/A           17648    C+G   ...IA App\CEF\NVIDIA Overlay.exe      N/A      |
+|    0   N/A  N/A           17840    C+G   ....0.4022.80\msedgewebview2.exe      N/A      |
+|    0   N/A  N/A           19052    C+G   ...App_cw5n1h2txyewy\LockApp.exe      N/A      |
+|    0   N/A  N/A           19956    C+G   ...yb3d8bbwe\WindowsTerminal.exe      N/A      |
+|    0   N/A  N/A           20440    C+G   ...anion\ControllerCompanion.exe      N/A      |
+|    0   N/A  N/A           21912    C+G   ...8bbwe\PhoneExperienceHost.exe      N/A      |
+|    0   N/A  N/A           22412    C+G   ...5n1h2txyewy\TextInputHost.exe      N/A      |
+|    0   N/A  N/A           23480    C+G   ...__amwd9z03whsfe\1Password.exe      N/A      |
+|    0   N/A  N/A           23988    C+G   ...t\Edge\Application\msedge.exe      N/A      |
 +-----------------------------------------------------------------------------------------+
 
 
@@ -1870,9 +2158,11 @@ Mon Jun 22 23:04:33 2026
 
 ==============NVSMI LOG==============
 
-Timestamp                                              : Mon Jun 22 23:04:33 2026
-Driver Version                                         : 591.86
-CUDA Version                                           : 13.1
+Timestamp                                              : Wed Jun 24 10:17:56 2026
+Driver Version                                         : 610.62 [Deprecated; will be removed in CUDA 14.0. Use KMD Version instead]
+CUDA Version                                           : 13.3 [Deprecated; will be removed in CUDA 14.0. Use CUDA UMD Version instead]
+KMD Version                                            : 610.62
+CUDA UMD Version                                       : 13.3
 
 Attached GPUs                                          : 1
 GPU 00000000:0C:00.0
@@ -1881,7 +2171,7 @@ GPU 00000000:0C:00.0
     Product Architecture                               : Turing
     Display Mode                                       : Requested functionality has been deprecated
     Display Attached                                   : Yes
-    Display Active                                     : Disabled
+    Display Active                                     : Enabled
     Persistence Mode                                   : N/A
     Addressing Mode                                    : N/A
     MIG Mode
@@ -1918,6 +2208,8 @@ GPU 00000000:0C:00.0
     Inforom BBX Object Flush
         Latest Timestamp                               : N/A
         Latest Duration                                : N/A
+    Inforom Time Data
+        Time Run                                       : N/A
     GPU Operation Mode
         Current                                        : N/A
         Pending                                        : N/A
@@ -1952,8 +2244,8 @@ GPU 00000000:0C:00.0
             Firmware                                   : N/A
         Replays Since Reset                            : 0
         Replay Number Rollovers                        : 0
-        Tx Throughput                                  : 121826 KB/s
-        Rx Throughput                                  : 1217138 KB/s
+        Tx Throughput                                  : 101025 KB/s
+        Rx Throughput                                  : 1042578 KB/s
         Atomic Caps Outbound                           : N/A
         Atomic Caps Inbound                            : N/A
     Fan Speed                                          : 38 %
@@ -1969,7 +2261,7 @@ GPU 00000000:0C:00.0
         SW Thermal Slowdown                            : Not Active
         Display Clock Setting                          : Not Active
     Clocks Event Reasons Counters
-        SW Power Capping                               : 5459682741 us
+        SW Power Capping                               : 834002687 us
         Sync Boost                                     : 0 us
         SW Thermal Slowdown                            : 0 us
         HW Thermal Slowdown                            : 0 us
@@ -1978,8 +2270,8 @@ GPU 00000000:0C:00.0
     FB Memory Usage
         Total                                          : 8192 MiB
         Reserved                                       : 205 MiB
-        Used                                           : 1296 MiB
-        Free                                           : 6692 MiB
+        Used                                           : 1366 MiB
+        Free                                           : 6622 MiB
     BAR1 Memory Usage
         Total                                          : 256 MiB
         Used                                           : 229 MiB
@@ -1998,8 +2290,8 @@ GPU 00000000:0C:00.0
         OFA                                            : 0 %
     Encoder Stats
         Active Sessions                                : 2
-        Average FPS                                    : 109
-        Average Latency                                : 4104
+        Average FPS                                    : 107
+        Average Latency                                : 4281
     FBC Stats
         Active Sessions                                : 0
         Average FPS                                    : 0
@@ -2027,20 +2319,25 @@ GPU 00000000:0C:00.0
         Pending Page Blacklist                         : N/A
     Remapped Rows                                      : N/A
     Temperature
-        GPU Current Temp                               : 45 C
-        GPU T.Limit Temp                               : N/A
+        GPU Current Temp                               : 44 C
+        GPU Current T.Limit Temp                       : N/A
         GPU Shutdown Temp                              : 100 C
         GPU Slowdown Temp                              : 97 C
         GPU Max Operating Temp                         : 89 C
-        GPU Target Temperature                         : 84 C
+        GPU Target Temperature Specification           : 84 C
         Memory Current Temp                            : N/A
         Memory Max Operating Temp                      : N/A
     GPU Power Readings
         Average Power Draw                             : N/A
-        Instantaneous Power Draw                       : 97.49 W
-        Current Power Limit                            : 250.00 W
-        Requested Power Limit                          : 250.00 W
-        Default Power Limit                            : 250.00 W
+        Instantaneous Power Draw                       : 97.99 W
+        GPU Ceiling Power Limit
+            Current Power Limit                        : 250.00 W
+            Requested Power Limit                      : 250.00 W
+            Default Power Limit                        : 250.00 W
+        GPU Base Power
+            Current Base Power                         : N/A
+            Requested Base Power                       : N/A
+            Default Base Power                         : N/A
         Min Power Limit                                : 105.00 W
         Max Power Limit                                : 350.00 W
     GPU Memory Power Readings 
@@ -2060,10 +2357,10 @@ GPU 00000000:0C:00.0
         Enforced Profiles                              : N/A
     EDPp Multiplier                                    : N/A
     Clocks
-        Graphics                                       : 2055 MHz
-        SM                                             : 2055 MHz
+        Graphics                                       : 2040 MHz
+        SM                                             : 2040 MHz
         Memory                                         : 7500 MHz
-        Video                                          : 1905 MHz
+        Video                                          : 1890 MHz
     Applications Clocks
         Graphics                                       : Requested functionality has been deprecated
         Memory                                         : Requested functionality has been deprecated
@@ -2094,78 +2391,133 @@ GPU 00000000:0C:00.0
             Route Unhealthy                            : N/A
             Access Timeout Recovery                    : N/A
             Incorrect Configuration                    : N/A
+            Partition Assigned                         : N/A
     Processes
         GPU instance ID                   : N/A
         Compute instance ID               : N/A
-        Process ID                        : 2056
+        Process ID                        : 2140
             Type                          : C+G
             Name                          : C:\Windows\System32\dwm.exe
             Used GPU Memory               : Not available in WDDM driver model
         GPU instance ID                   : N/A
         Compute instance ID               : N/A
-        Process ID                        : 4680
+        Process ID                        : 2164
             Type                          : C+G
-            Name                          : C:\Program Files\NVIDIA Corporation\NVIDIA GeForce Experience\NVIDIA Share.exe
+            Name                          : C:\Windows\System32\ApplicationFrameHost.exe
             Used GPU Memory               : Not available in WDDM driver model
         GPU instance ID                   : N/A
         Compute instance ID               : N/A
-        Process ID                        : 12332
-            Type                          : C+G
-            Name                          : C:\Windows\explorer.exe
+        Process ID                        : 12940
+            Type                          : C
+            Name                          : C:\Users\utku\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1.1-full_build\bin\ffmpeg.exe
             Used GPU Memory               : Not available in WDDM driver model
         GPU instance ID                   : N/A
         Compute instance ID               : N/A
-        Process ID                        : 12444
-            Type                          : C+G
-            Name                          : C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\TextInputHost.exe
-            Used GPU Memory               : Not available in WDDM driver model
-        GPU instance ID                   : N/A
-        Compute instance ID               : N/A
-        Process ID                        : 14160
-            Type                          : C+G
-            Name                          : C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\SearchHost.exe
-            Used GPU Memory               : Not available in WDDM driver model
-        GPU instance ID                   : N/A
-        Compute instance ID               : N/A
-        Process ID                        : 14184
-            Type                          : C+G
-            Name                          : C:\Windows\SystemApps\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\StartMenuExperienceHost.exe
-            Used GPU Memory               : Not available in WDDM driver model
-        GPU instance ID                   : N/A
-        Compute instance ID               : N/A
-        Process ID                        : 15076
-            Type                          : C+G
-            Name                          : C:\Windows\SystemApps\ShellExperienceHost_cw5n1h2txyewy\ShellExperienceHost.exe
-            Used GPU Memory               : Not available in WDDM driver model
-        GPU instance ID                   : N/A
-        Compute instance ID               : N/A
-        Process ID                        : 16280
-            Type                          : C+G
-            Name                          : C:\Program Files\Controller Companion\ControllerCompanion.exe
-            Used GPU Memory               : Not available in WDDM driver model
-        GPU instance ID                   : N/A
-        Compute instance ID               : N/A
-        Process ID                        : 20372
-            Type                          : C+G
-            Name                          : C:\Program Files\NZXT CAM\NZXT CAM.exe
-            Used GPU Memory               : Not available in WDDM driver model
-        GPU instance ID                   : N/A
-        Compute instance ID               : N/A
-        Process ID                        : 24804
+        Process ID                        : 13092
             Type                          : C+G
             Name                          : C:\Windows\ImmersiveControlPanel\SystemSettings.exe
             Used GPU Memory               : Not available in WDDM driver model
         GPU instance ID                   : N/A
         Compute instance ID               : N/A
-        Process ID                        : 25704
+        Process ID                        : 13160
+            Type                          : C+G
+            Name                          : C:\Windows\explorer.exe
+            Used GPU Memory               : Not available in WDDM driver model
+        GPU instance ID                   : N/A
+        Compute instance ID               : N/A
+        Process ID                        : 13264
+            Type                          : C+G
+            Name                          : C:\Windows\System32\ShellHost.exe
+            Used GPU Memory               : Not available in WDDM driver model
+        GPU instance ID                   : N/A
+        Compute instance ID               : N/A
+        Process ID                        : 13504
+            Type                          : C+G
+            Name                          : C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\CrossDeviceResume.exe
+            Used GPU Memory               : Not available in WDDM driver model
+        GPU instance ID                   : N/A
+        Compute instance ID               : N/A
+        Process ID                        : 13820
             Type                          : C
             Name                          : C:\Users\utku\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1.1-full_build\bin\ffmpeg.exe
             Used GPU Memory               : Not available in WDDM driver model
         GPU instance ID                   : N/A
         Compute instance ID               : N/A
-        Process ID                        : 26660
-            Type                          : C
-            Name                          : C:\Users\utku\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1.1-full_build\bin\ffmpeg.exe
+        Process ID                        : 14808
+            Type                          : C+G
+            Name                          : C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\SearchHost.exe
+            Used GPU Memory               : Not available in WDDM driver model
+        GPU instance ID                   : N/A
+        Compute instance ID               : N/A
+        Process ID                        : 14872
+            Type                          : C+G
+            Name                          : C:\Windows\SystemApps\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\StartMenuExperienceHost.exe
+            Used GPU Memory               : Not available in WDDM driver model
+        GPU instance ID                   : N/A
+        Compute instance ID               : N/A
+        Process ID                        : 15964
+            Type                          : C+G
+            Name                          : C:\Program Files\NVIDIA Corporation\NVIDIA App\CEF\NVIDIA Overlay.exe
+            Used GPU Memory               : Not available in WDDM driver model
+        GPU instance ID                   : N/A
+        Compute instance ID               : N/A
+        Process ID                        : 16760
+            Type                          : C+G
+            Name                          : C:\Windows\SystemApps\ShellExperienceHost_cw5n1h2txyewy\ShellExperienceHost.exe
+            Used GPU Memory               : Not available in WDDM driver model
+        GPU instance ID                   : N/A
+        Compute instance ID               : N/A
+        Process ID                        : 17648
+            Type                          : C+G
+            Name                          : C:\Program Files\NVIDIA Corporation\NVIDIA App\CEF\NVIDIA Overlay.exe
+            Used GPU Memory               : Not available in WDDM driver model
+        GPU instance ID                   : N/A
+        Compute instance ID               : N/A
+        Process ID                        : 17840
+            Type                          : C+G
+            Name                          : C:\Program Files (x86)\Microsoft\EdgeWebView\Application\149.0.4022.80\msedgewebview2.exe
+            Used GPU Memory               : Not available in WDDM driver model
+        GPU instance ID                   : N/A
+        Compute instance ID               : N/A
+        Process ID                        : 19052
+            Type                          : C+G
+            Name                          : C:\Windows\SystemApps\Microsoft.LockApp_cw5n1h2txyewy\LockApp.exe
+            Used GPU Memory               : Not available in WDDM driver model
+        GPU instance ID                   : N/A
+        Compute instance ID               : N/A
+        Process ID                        : 19956
+            Type                          : C+G
+            Name                          : C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.24.11321.0_x64__8wekyb3d8bbwe\WindowsTerminal.exe
+            Used GPU Memory               : Not available in WDDM driver model
+        GPU instance ID                   : N/A
+        Compute instance ID               : N/A
+        Process ID                        : 20440
+            Type                          : C+G
+            Name                          : C:\Program Files\Controller Companion\ControllerCompanion.exe
+            Used GPU Memory               : Not available in WDDM driver model
+        GPU instance ID                   : N/A
+        Compute instance ID               : N/A
+        Process ID                        : 21912
+            Type                          : C+G
+            Name                          : C:\Program Files\WindowsApps\Microsoft.YourPhone_1.26042.99.0_x64__8wekyb3d8bbwe\PhoneExperienceHost.exe
+            Used GPU Memory               : Not available in WDDM driver model
+        GPU instance ID                   : N/A
+        Compute instance ID               : N/A
+        Process ID                        : 22412
+            Type                          : C+G
+            Name                          : C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\TextInputHost.exe
+            Used GPU Memory               : Not available in WDDM driver model
+        GPU instance ID                   : N/A
+        Compute instance ID               : N/A
+        Process ID                        : 23480
+            Type                          : C+G
+            Name                          : C:\Program Files\WindowsApps\Agilebits.1Password_8.12.24.34_x64__amwd9z03whsfe\1Password.exe
+            Used GPU Memory               : Not available in WDDM driver model
+        GPU instance ID                   : N/A
+        Compute instance ID               : N/A
+        Process ID                        : 23988
+            Type                          : C+G
+            Name                          : C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
             Used GPU Memory               : Not available in WDDM driver model
     Capabilities
         EGM                                            : disabled
@@ -2174,10 +2526,10 @@ GPU 00000000:0C:00.0
 
 ################################################################################
 # load :: query-gpu (csv, what the exporter parses)
-# $ nvidia-smi --query-gpu=timestamp,driver_version,vgpu_driver_capability.heterogenous_multivGPU,count,name,serial,uuid,pci.bus_id,pci.domain,pci.bus,pci.device,pci.device_id,pci.sub_device_id,vgpu_device_capability.fractional_multiVgpu,vgpu_device_capability.heterogeneous_timeSlice_profile,vgpu_device_capability.heterogeneous_timeSlice_sizes,vgpu_device_capability.homogeneous_placements,vgpu_device_capability.mig_timeSlicing,vgpu_device_capability.mig_timeSlicing_mode,pcie.link.gen.current,pcie.link.gen.gpucurrent,pcie.link.gen.max,pcie.link.gen.gpumax,pcie.link.gen.hostmax,pcie.link.width.current,pcie.link.width.max,index,display_mode,display_attached,display_active,persistence_mode,addressing_mode,accounting.mode,accounting.buffer_size,driver_model.current,driver_model.pending,vbios_version,inforom.img,inforom.oem,inforom.ecc,inforom.pwr,inforom.checksum_validation,gpu_recovery_action,gom.current,gom.pending,fan.speed,pstate,clocks_event_reasons.supported,clocks_event_reasons.active,clocks_event_reasons.gpu_idle,clocks_event_reasons.applications_clocks_setting,clocks_event_reasons.sw_power_cap,clocks_event_reasons.hw_slowdown,clocks_event_reasons.hw_thermal_slowdown,clocks_event_reasons.hw_power_brake_slowdown,clocks_event_reasons.sw_thermal_slowdown,clocks_event_reasons.sync_boost,clocks_event_reasons_counters.sw_power_cap,clocks_event_reasons_counters.sync_boost,clocks_event_reasons_counters.sw_thermal_slowdown,clocks_event_reasons_counters.hw_thermal_slowdown,clocks_event_reasons_counters.hw_power_brake_slowdown,memory.total,memory.reserved,memory.used,memory.free,compute_mode,compute_cap,utilization.gpu,utilization.memory,utilization.encoder,utilization.decoder,utilization.jpeg,utilization.ofa,encoder.stats.sessionCount,encoder.stats.averageFps,encoder.stats.averageLatency,dramEncryption.mode.current,dramEncryption.mode.pending,ecc.mode.current,ecc.mode.pending,ecc.errors.corrected.volatile.device_memory,ecc.errors.corrected.volatile.dram,ecc.errors.corrected.volatile.register_file,ecc.errors.corrected.volatile.l1_cache,ecc.errors.corrected.volatile.l2_cache,ecc.errors.corrected.volatile.texture_memory,ecc.errors.corrected.volatile.cbu,ecc.errors.corrected.volatile.sram,ecc.errors.corrected.volatile.total,ecc.errors.corrected.aggregate.device_memory,ecc.errors.corrected.aggregate.dram,ecc.errors.corrected.aggregate.register_file,ecc.errors.corrected.aggregate.l1_cache,ecc.errors.corrected.aggregate.l2_cache,ecc.errors.corrected.aggregate.texture_memory,ecc.errors.corrected.aggregate.cbu,ecc.errors.corrected.aggregate.sram,ecc.errors.corrected.aggregate.total,ecc.errors.uncorrected.volatile.device_memory,ecc.errors.uncorrected.volatile.dram,ecc.errors.uncorrected.volatile.register_file,ecc.errors.uncorrected.volatile.l1_cache,ecc.errors.uncorrected.volatile.l2_cache,ecc.errors.uncorrected.volatile.texture_memory,ecc.errors.uncorrected.volatile.cbu,ecc.errors.uncorrected.volatile.sram,ecc.errors.uncorrected.volatile.total,ecc.errors.uncorrected.aggregate.device_memory,ecc.errors.uncorrected.aggregate.dram,ecc.errors.uncorrected.aggregate.register_file,ecc.errors.uncorrected.aggregate.l1_cache,ecc.errors.uncorrected.aggregate.l2_cache,ecc.errors.uncorrected.aggregate.texture_memory,ecc.errors.uncorrected.aggregate.cbu,ecc.errors.uncorrected.aggregate.sram,ecc.errors.uncorrected.aggregate.total,ecc.errors.uncorrected.volatile.sram.parity,ecc.errors.uncorrected.volatile.sram.secded,ecc.errors.uncorrected.aggregate.sram.parity,ecc.errors.uncorrected.aggregate.sram.secded,ecc.errors.uncorrected.aggregate.sram.thresholdExceeded,ecc.errors.uncorrected.aggregate.sram.l2,ecc.errors.uncorrected.aggregate.sram.sm,ecc.errors.uncorrected.aggregate.sram.mcu,ecc.errors.uncorrected.aggregate.sram.pcie,ecc.errors.uncorrected.aggregate.sram.other,retired_pages.single_bit_ecc.count,retired_pages.double_bit.count,retired_pages.pending,remapped_rows.correctable,remapped_rows.uncorrectable,remapped_rows.pending,remapped_rows.failure,remapped_rows.histogram.max,remapped_rows.histogram.high,remapped_rows.histogram.partial,remapped_rows.histogram.low,remapped_rows.histogram.none,temperature.gpu,temperature.gpu.tlimit,temperature.memory,power.management,power.draw,power.draw.average,power.draw.instant,power.limit,enforced.power.limit,power.default_limit,power.min_limit,power.max_limit,module.power.draw.average,module.power.draw.instant,module.power.limit,module.enforced.power.limit,module.power.default_limit,module.power.min_limit,module.power.max_limit,power_smoothing.delayed_power_smoothing_supported,power_smoothing.primary_power_floor,power_smoothing.secondary_power_floor,power_smoothing.min_primary_floor_activation_offset,power_smoothing.min_primary_floor_activation_point,power_smoothing.window_multiplier,power_smoothing.curr_profile.secondary_power_floor,power_smoothing.curr_profile.primary_floor_act_window_multiplier,power_smoothing.curr_profile.primary_floor_tar_window_multiplier,power_smoothing.curr_profile.primary_floor_act_offset,power_smoothing.admin_override.secondary_power_floor,power_smoothing.admin_override.primary_floor_act_window_multiplier,power_smoothing.admin_override.primary_floor_tar_window_multiplier,power_smoothing.admin_override.primary_floor_act_offset,edpp_multiplier,clocks.current.graphics,clocks.current.sm,clocks.current.memory,clocks.current.video,clocks.applications.graphics,clocks.applications.memory,clocks.default_applications.graphics,clocks.default_applications.memory,clocks.max.graphics,clocks.max.sm,clocks.max.memory,mig.mode.current,mig.mode.pending,gsp.mode.current,gsp.mode.default,c2c.mode,protected_memory.total,protected_memory.used,protected_memory.free,fabric.state,fabric.status,fabric.cliqueId,fabric.clusterUuid,fabric.health.summary,fabric.health.bandwidth,fabric.health.route_recovery_in_progress,fabric.health.route_unhealthy,fabric.health.access_timeout_recovery,fabric.health.incorrect_configuration,platform.chassis_serial_number,platform.slot_number,platform.tray_index,platform.host_id,platform.peer_type,platform.module_id,platform.gpu_fabric_guid,hostname --format=csv
+# $ nvidia-smi --query-gpu=timestamp,driver_version,kmd_version,vgpu_driver_capability.heterogenous_multivGPU,count,name,serial,uuid,pci.bus_id,pci.domain,pci.bus,pci.device,pci.device_id,pci.sub_device_id,vgpu_device_capability.fractional_multiVgpu,vgpu_device_capability.heterogeneous_timeSlice_profile,vgpu_device_capability.heterogeneous_timeSlice_sizes,vgpu_device_capability.homogeneous_placements,vgpu_device_capability.mig_timeSlicing,vgpu_device_capability.mig_timeSlicing_mode,pcie.link.gen.current,pcie.link.gen.gpucurrent,pcie.link.gen.max,pcie.link.gen.gpumax,pcie.link.gen.hostmax,pcie.link.width.current,pcie.link.width.max,index,display_mode,display_attached,display_active,persistence_mode,addressing_mode,accounting.mode,accounting.buffer_size,driver_model.current,driver_model.pending,vbios_version,inforom.img,inforom.oem,inforom.ecc,inforom.pwr,inforom.checksum_validation,gpu_recovery_action,gom.current,gom.pending,fan.speed,pstate,clocks_event_reasons.supported,clocks_event_reasons.active,clocks_event_reasons.gpu_idle,clocks_event_reasons.applications_clocks_setting,clocks_event_reasons.sw_power_cap,clocks_event_reasons.hw_slowdown,clocks_event_reasons.hw_thermal_slowdown,clocks_event_reasons.hw_power_brake_slowdown,clocks_event_reasons.sw_thermal_slowdown,clocks_event_reasons.sync_boost,clocks_event_reasons_counters.sw_power_cap,clocks_event_reasons_counters.sync_boost,clocks_event_reasons_counters.sw_thermal_slowdown,clocks_event_reasons_counters.hw_thermal_slowdown,clocks_event_reasons_counters.hw_power_brake_slowdown,memory.total,memory.reserved,memory.used,memory.free,compute_mode,compute_cap,utilization.gpu,utilization.memory,utilization.encoder,utilization.decoder,utilization.jpeg,utilization.ofa,encoder.stats.sessionCount,encoder.stats.averageFps,encoder.stats.averageLatency,dramEncryption.mode.current,dramEncryption.mode.pending,ecc.mode.current,ecc.mode.pending,ecc.errors.corrected.volatile.device_memory,ecc.errors.corrected.volatile.dram,ecc.errors.corrected.volatile.register_file,ecc.errors.corrected.volatile.l1_cache,ecc.errors.corrected.volatile.l2_cache,ecc.errors.corrected.volatile.texture_memory,ecc.errors.corrected.volatile.cbu,ecc.errors.corrected.volatile.sram,ecc.errors.corrected.volatile.total,ecc.errors.corrected.aggregate.device_memory,ecc.errors.corrected.aggregate.dram,ecc.errors.corrected.aggregate.register_file,ecc.errors.corrected.aggregate.l1_cache,ecc.errors.corrected.aggregate.l2_cache,ecc.errors.corrected.aggregate.texture_memory,ecc.errors.corrected.aggregate.cbu,ecc.errors.corrected.aggregate.sram,ecc.errors.corrected.aggregate.total,ecc.errors.uncorrected.volatile.device_memory,ecc.errors.uncorrected.volatile.dram,ecc.errors.uncorrected.volatile.register_file,ecc.errors.uncorrected.volatile.l1_cache,ecc.errors.uncorrected.volatile.l2_cache,ecc.errors.uncorrected.volatile.texture_memory,ecc.errors.uncorrected.volatile.cbu,ecc.errors.uncorrected.volatile.sram,ecc.errors.uncorrected.volatile.total,ecc.errors.uncorrected.aggregate.device_memory,ecc.errors.uncorrected.aggregate.dram,ecc.errors.uncorrected.aggregate.register_file,ecc.errors.uncorrected.aggregate.l1_cache,ecc.errors.uncorrected.aggregate.l2_cache,ecc.errors.uncorrected.aggregate.texture_memory,ecc.errors.uncorrected.aggregate.cbu,ecc.errors.uncorrected.aggregate.sram,ecc.errors.uncorrected.aggregate.total,ecc.errors.uncorrected.volatile.sram.parity,ecc.errors.uncorrected.volatile.sram.secded,ecc.errors.uncorrected.aggregate.sram.parity,ecc.errors.uncorrected.aggregate.sram.secded,ecc.errors.uncorrected.aggregate.sram.thresholdExceeded,ecc.errors.uncorrected.aggregate.sram.l2,ecc.errors.uncorrected.aggregate.sram.sm,ecc.errors.uncorrected.aggregate.sram.mcu,ecc.errors.uncorrected.aggregate.sram.pcie,ecc.errors.uncorrected.aggregate.sram.other,retired_pages.single_bit_ecc.count,retired_pages.double_bit.count,retired_pages.pending,remapped_rows.correctable,remapped_rows.correctable_inactive,remapped_rows.uncorrectable,remapped_rows.uncorrectable_inactive,remapped_rows.pending,remapped_rows.failure,remapped_rows.histogram.max,remapped_rows.histogram.high,remapped_rows.histogram.partial,remapped_rows.histogram.low,remapped_rows.histogram.none,temperature.gpu,temperature.gpu.tlimit,temperature.memory,power.management,power.draw,power.draw.average,power.draw.instant,power.limit,enforced.power.limit,power.default_limit,power.min_limit,power.max_limit,module.power.draw.average,module.power.draw.instant,module.power.limit,module.enforced.power.limit,module.power.default_limit,module.power.min_limit,module.power.max_limit,gpu.base.current,gpu.base.requested,gpu.base.default,gpu.base.min,gpu.base.max,power_smoothing.tmp_floor,power_smoothing.tmp_ceil,power_smoothing.hw_lifetime_remaining_percent,power_smoothing.enabled,power_smoothing.delayed_power_smoothing_supported,power_smoothing.soc_power_smoothing_enabled,power_smoothing.priv_level,power_smoothing.imm_ramp_down,power_smoothing.max_percent_tmp_floor,power_smoothing.min_percent_tmp_floor,power_smoothing.primary_power_floor,power_smoothing.secondary_power_floor,power_smoothing.min_primary_floor_activation_offset,power_smoothing.min_primary_floor_activation_point,power_smoothing.window_multiplier,power_smoothing.num_preset_profiles,power_smoothing.curr_profile.percent_tmp_floor,power_smoothing.curr_profile.ramp_up_rate,power_smoothing.curr_profile.ramp_down_rate,power_smoothing.curr_profile.ramp_down_hysteresis,power_smoothing.curr_profile.secondary_power_floor,power_smoothing.curr_profile.primary_floor_act_window_multiplier,power_smoothing.curr_profile.primary_floor_tar_window_multiplier,power_smoothing.curr_profile.primary_floor_act_offset,power_smoothing.active_profile,power_smoothing.admin_override.percent_tmp_floor,power_smoothing.admin_override.ramp_up_rate,power_smoothing.admin_override.ramp_down_rate,power_smoothing.admin_override.ramp_down_hysteresis,power_smoothing.admin_override.secondary_power_floor,power_smoothing.admin_override.primary_floor_act_window_multiplier,power_smoothing.admin_override.primary_floor_tar_window_multiplier,power_smoothing.admin_override.primary_floor_act_offset,edpp_multiplier,clocks.current.graphics,clocks.current.sm,clocks.current.memory,clocks.current.video,clocks.applications.graphics,clocks.applications.memory,clocks.default_applications.graphics,clocks.default_applications.memory,clocks.max.graphics,clocks.max.sm,clocks.max.memory,mig.mode.current,mig.mode.pending,gsp.mode.current,gsp.mode.default,c2c.mode,protected_memory.total,protected_memory.used,protected_memory.free,fabric.state,fabric.status,fabric.cliqueId,fabric.clusterUuid,fabric.health.summary,fabric.health.bandwidth,fabric.health.route_recovery_in_progress,fabric.health.route_unhealthy,fabric.health.access_timeout_recovery,fabric.health.incorrect_configuration,fabric.health.partition_assigned,platform.chassis_serial_number,platform.slot_number,platform.tray_index,platform.host_id,platform.peer_type,platform.module_id,platform.gpu_fabric_guid,hostname,bbx.time_run --format=csv
 ################################################################################
-timestamp, driver_version, vgpu_driver_capability.heterogenous_multivGPU, count, name, serial, uuid, pci.bus_id, pci.domain, pci.bus, pci.device, pci.device_id, pci.sub_device_id, vgpu_device_capability.fractional_multiVgpu, vgpu_device_capability.heterogeneous_timeSlice_profile, vgpu_device_capability.heterogeneous_timeSlice_sizes, vgpu_device_capability.homogeneous_placements, vgpu_device_capability.mig_timeSlicing, vgpu_device_capability.mig_timeSlicing_mode, pcie.link.gen.current, pcie.link.gen.gpucurrent, pcie.link.gen.max, pcie.link.gen.gpumax, pcie.link.gen.hostmax, pcie.link.width.current, pcie.link.width.max, index, display_mode, display_attached, display_active, persistence_mode, addressing_mode, accounting.mode, accounting.buffer_size, driver_model.current, driver_model.pending, vbios_version, inforom.img, inforom.oem, inforom.ecc, inforom.pwr, inforom.checksum_validation, gpu_recovery_action, gom.current, gom.pending, fan.speed [%], pstate, clocks_event_reasons.supported, clocks_event_reasons.active, clocks_event_reasons.gpu_idle, clocks_event_reasons.applications_clocks_setting, clocks_event_reasons.sw_power_cap, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_power_brake_slowdown, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.sync_boost, clocks_event_reasons_counters.sw_power_cap [us], clocks_event_reasons_counters.sync_boost [us], clocks_event_reasons_counters.sw_thermal_slowdown [us], clocks_event_reasons_counters.hw_thermal_slowdown [us], clocks_event_reasons_counters.hw_power_brake_slowdown [us], memory.total [MiB], memory.reserved [MiB], memory.used [MiB], memory.free [MiB], compute_mode, compute_cap, utilization.gpu [%], utilization.memory [%], utilization.encoder [%], utilization.decoder [%], utilization.jpeg [%], utilization.ofa [%], encoder.stats.sessionCount, encoder.stats.averageFps, encoder.stats.averageLatency, dramEncryption.mode.current, dramEncryption.mode.pending, ecc.mode.current, ecc.mode.pending, ecc.errors.corrected.volatile.device_memory, ecc.errors.corrected.volatile.dram, ecc.errors.corrected.volatile.register_file, ecc.errors.corrected.volatile.l1_cache, ecc.errors.corrected.volatile.l2_cache, ecc.errors.corrected.volatile.texture_memory, ecc.errors.corrected.volatile.cbu, ecc.errors.corrected.volatile.sram, ecc.errors.corrected.volatile.total, ecc.errors.corrected.aggregate.device_memory, ecc.errors.corrected.aggregate.dram, ecc.errors.corrected.aggregate.register_file, ecc.errors.corrected.aggregate.l1_cache, ecc.errors.corrected.aggregate.l2_cache, ecc.errors.corrected.aggregate.texture_memory, ecc.errors.corrected.aggregate.cbu, ecc.errors.corrected.aggregate.sram, ecc.errors.corrected.aggregate.total, ecc.errors.uncorrected.volatile.device_memory, ecc.errors.uncorrected.volatile.dram, ecc.errors.uncorrected.volatile.register_file, ecc.errors.uncorrected.volatile.l1_cache, ecc.errors.uncorrected.volatile.l2_cache, ecc.errors.uncorrected.volatile.texture_memory, ecc.errors.uncorrected.volatile.cbu, ecc.errors.uncorrected.volatile.sram, ecc.errors.uncorrected.volatile.total, ecc.errors.uncorrected.aggregate.device_memory, ecc.errors.uncorrected.aggregate.dram, ecc.errors.uncorrected.aggregate.register_file, ecc.errors.uncorrected.aggregate.l1_cache, ecc.errors.uncorrected.aggregate.l2_cache, ecc.errors.uncorrected.aggregate.texture_memory, ecc.errors.uncorrected.aggregate.cbu, ecc.errors.uncorrected.aggregate.sram, ecc.errors.uncorrected.aggregate.total, ecc.errors.uncorrected.volatile.sram.parity, ecc.errors.uncorrected.volatile.sram.secded, ecc.errors.uncorrected.aggregate.sram.parity, ecc.errors.uncorrected.aggregate.sram.secded, ecc.errors.uncorrected.aggregate.sram.thresholdExceeded, ecc.errors.uncorrected.aggregate.sram.l2, ecc.errors.uncorrected.aggregate.sram.sm, ecc.errors.uncorrected.aggregate.sram.mcu, ecc.errors.uncorrected.aggregate.sram.pcie, ecc.errors.uncorrected.aggregate.sram.other, retired_pages.single_bit_ecc.count, retired_pages.double_bit.count, retired_pages.pending, remapped_rows.correctable, remapped_rows.uncorrectable, remapped_rows.pending, remapped_rows.failure, remapped_rows.histogram.max, remapped_rows.histogram.high, remapped_rows.histogram.partial, remapped_rows.histogram.low, remapped_rows.histogram.none, temperature.gpu, temperature.gpu.tlimit, temperature.memory, power.management, power.draw [W], power.draw.average [W], power.draw.instant [W], power.limit [W], enforced.power.limit [W], power.default_limit [W], power.min_limit [W], power.max_limit [W], module.power.draw.average [W], module.power.draw.instant [W], module.power.limit [W], module.enforced.power.limit [W], module.power.default_limit [W], module.power.min_limit [W], module.power.max_limit [W], power_smoothing.delayed_power_smoothing_supported, power_smoothing.primary_power_floor [W], power_smoothing.secondary_power_floor [W], power_smoothing.min_primary_floor_activation_offset [W], power_smoothing.min_primary_floor_activation_point [W], power_smoothing.window_multiplier [ms], power_smoothing.curr_profile.secondary_power_floor [W], power_smoothing.curr_profile.primary_floor_act_window_multiplier, power_smoothing.curr_profile.primary_floor_tar_window_multiplier, power_smoothing.curr_profile.primary_floor_act_offset [W], power_smoothing.admin_override.secondary_power_floor [W], power_smoothing.admin_override.primary_floor_act_window_multiplier, power_smoothing.admin_override.primary_floor_tar_window_multiplier, power_smoothing.admin_override.primary_floor_act_offset [W], edpp_multiplier [%], clocks.current.graphics [MHz], clocks.current.sm [MHz], clocks.current.memory [MHz], clocks.current.video [MHz], clocks.applications.graphics [MHz], clocks.applications.memory [MHz], clocks.default_applications.graphics [MHz], clocks.default_applications.memory [MHz], clocks.max.graphics [MHz], clocks.max.sm [MHz], clocks.max.memory [MHz], mig.mode.current, mig.mode.pending, gsp.mode.current, gsp.mode.default, c2c.mode, protected_memory.total [MiB], protected_memory.used [MiB], protected_memory.free [MiB], fabric.state, fabric.status, fabric.cliqueId, fabric.clusterUuid, fabric.health.summary, fabric.health.bandwidth, fabric.health.route_recovery_in_progress, fabric.health.route_unhealthy, fabric.health.access_timeout_recovery, fabric.health.incorrect_configuration, platform.chassis_serial_number, platform.slot_number, platform.tray_index, platform.host_id, platform.peer_type, platform.module_id, platform.gpu_fabric_guid, hostname
-2026/06/22 23:04:33.297, 591.86, [N/A], 1, NVIDIA GeForce RTX 2080 SUPER, [N/A], GPU-00000000-0000-0000-0000-000000000000, 00000000:0C:00.0, 0x0000, 0x0C, 0x00, 0x1E8110DE, 0x40051458, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], 3, 3, 3, 3, 4, 16, 16, 0, [Requested functionality has been deprecated], Yes, Disabled, [N/A], [N/A], Disabled, 4000, WDDM, WDDM, 90.04.7a.40.73, G001.0000.02.04, 1.1, [N/A], [N/A], valid, None, [N/A], [N/A], 38 %, P2, 0x00000000000001FF, 0x0000000000000001, Active, Not Active, Not Active, Not Active, Not Active, Not Active, Not Active, Not Active, 5459682741 us, 0 us, 0 us, 0 us, 0 us, 8192 MiB, 205 MiB, 1296 MiB, 6692 MiB, Default, 7.5, 7 %, 3 %, 100 %, 0 %, 0 %, 0 %, 2, 110, 4191, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], 45, [N/A], N/A, [Requested functionality has been deprecated], 97.43 W, [N/A], 97.43 W, 250.00 W, 250.00 W, 250.00 W, 105.00 W, 350.00 W, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], 2055 MHz, 2055 MHz, 7500 MHz, 1905 MHz, [Requested functionality has been deprecated], [Requested functionality has been deprecated], [Requested functionality has been deprecated], [Requested functionality has been deprecated], 2145 MHz, 2145 MHz, 7751 MHz, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], N/A, N/A, N/A, N/A, N/A, N/A, N/A, N/A, N/A, N/A, , 0, 0, 1, Direct Connected, 1, 0x0000000000000000, [N/A]
+timestamp, driver_version, kmd_version, vgpu_driver_capability.heterogenous_multivGPU, count, name, serial, uuid, pci.bus_id, pci.domain, pci.bus, pci.device, pci.device_id, pci.sub_device_id, vgpu_device_capability.fractional_multiVgpu, vgpu_device_capability.heterogeneous_timeSlice_profile, vgpu_device_capability.heterogeneous_timeSlice_sizes, vgpu_device_capability.homogeneous_placements, vgpu_device_capability.mig_timeSlicing, vgpu_device_capability.mig_timeSlicing_mode, pcie.link.gen.current, pcie.link.gen.gpucurrent, pcie.link.gen.max, pcie.link.gen.gpumax, pcie.link.gen.hostmax, pcie.link.width.current, pcie.link.width.max, index, display_mode, display_attached, display_active, persistence_mode, addressing_mode, accounting.mode, accounting.buffer_size, driver_model.current, driver_model.pending, vbios_version, inforom.img, inforom.oem, inforom.ecc, inforom.pwr, inforom.checksum_validation, gpu_recovery_action, gom.current, gom.pending, fan.speed [%], pstate, clocks_event_reasons.supported, clocks_event_reasons.active, clocks_event_reasons.gpu_idle, clocks_event_reasons.applications_clocks_setting, clocks_event_reasons.sw_power_cap, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_power_brake_slowdown, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.sync_boost, clocks_event_reasons_counters.sw_power_cap [us], clocks_event_reasons_counters.sync_boost [us], clocks_event_reasons_counters.sw_thermal_slowdown [us], clocks_event_reasons_counters.hw_thermal_slowdown [us], clocks_event_reasons_counters.hw_power_brake_slowdown [us], memory.total [MiB], memory.reserved [MiB], memory.used [MiB], memory.free [MiB], compute_mode, compute_cap, utilization.gpu [%], utilization.memory [%], utilization.encoder [%], utilization.decoder [%], utilization.jpeg [%], utilization.ofa [%], encoder.stats.sessionCount, encoder.stats.averageFps, encoder.stats.averageLatency, dramEncryption.mode.current, dramEncryption.mode.pending, ecc.mode.current, ecc.mode.pending, ecc.errors.corrected.volatile.device_memory, ecc.errors.corrected.volatile.dram, ecc.errors.corrected.volatile.register_file, ecc.errors.corrected.volatile.l1_cache, ecc.errors.corrected.volatile.l2_cache, ecc.errors.corrected.volatile.texture_memory, ecc.errors.corrected.volatile.cbu, ecc.errors.corrected.volatile.sram, ecc.errors.corrected.volatile.total, ecc.errors.corrected.aggregate.device_memory, ecc.errors.corrected.aggregate.dram, ecc.errors.corrected.aggregate.register_file, ecc.errors.corrected.aggregate.l1_cache, ecc.errors.corrected.aggregate.l2_cache, ecc.errors.corrected.aggregate.texture_memory, ecc.errors.corrected.aggregate.cbu, ecc.errors.corrected.aggregate.sram, ecc.errors.corrected.aggregate.total, ecc.errors.uncorrected.volatile.device_memory, ecc.errors.uncorrected.volatile.dram, ecc.errors.uncorrected.volatile.register_file, ecc.errors.uncorrected.volatile.l1_cache, ecc.errors.uncorrected.volatile.l2_cache, ecc.errors.uncorrected.volatile.texture_memory, ecc.errors.uncorrected.volatile.cbu, ecc.errors.uncorrected.volatile.sram, ecc.errors.uncorrected.volatile.total, ecc.errors.uncorrected.aggregate.device_memory, ecc.errors.uncorrected.aggregate.dram, ecc.errors.uncorrected.aggregate.register_file, ecc.errors.uncorrected.aggregate.l1_cache, ecc.errors.uncorrected.aggregate.l2_cache, ecc.errors.uncorrected.aggregate.texture_memory, ecc.errors.uncorrected.aggregate.cbu, ecc.errors.uncorrected.aggregate.sram, ecc.errors.uncorrected.aggregate.total, ecc.errors.uncorrected.volatile.sram.parity, ecc.errors.uncorrected.volatile.sram.secded, ecc.errors.uncorrected.aggregate.sram.parity, ecc.errors.uncorrected.aggregate.sram.secded, ecc.errors.uncorrected.aggregate.sram.thresholdExceeded, ecc.errors.uncorrected.aggregate.sram.l2, ecc.errors.uncorrected.aggregate.sram.sm, ecc.errors.uncorrected.aggregate.sram.mcu, ecc.errors.uncorrected.aggregate.sram.pcie, ecc.errors.uncorrected.aggregate.sram.other, retired_pages.single_bit_ecc.count, retired_pages.double_bit.count, retired_pages.pending, remapped_rows.correctable, remapped_rows.correctable_inactive, remapped_rows.uncorrectable, remapped_rows.uncorrectable_inactive, remapped_rows.pending, remapped_rows.failure, remapped_rows.histogram.max, remapped_rows.histogram.high, remapped_rows.histogram.partial, remapped_rows.histogram.low, remapped_rows.histogram.none, temperature.gpu, temperature.gpu.tlimit, temperature.memory, power.management, power.draw [W], power.draw.average [W], power.draw.instant [W], power.limit [W], enforced.power.limit [W], power.default_limit [W], power.min_limit [W], power.max_limit [W], module.power.draw.average [W], module.power.draw.instant [W], module.power.limit [W], module.enforced.power.limit [W], module.power.default_limit [W], module.power.min_limit [W], module.power.max_limit [W], gpu.base.current [W], gpu.base.requested [W], gpu.base.default [W], gpu.base.min [W], gpu.base.max [W], power_smoothing.tmp_floor [W], power_smoothing.tmp_ceil [W], power_smoothing.hw_lifetime_remaining_percent [%], power_smoothing.enabled, power_smoothing.delayed_power_smoothing_supported, power_smoothing.soc_power_smoothing_enabled, power_smoothing.priv_level, power_smoothing.imm_ramp_down, power_smoothing.max_percent_tmp_floor [%], power_smoothing.min_percent_tmp_floor [%], power_smoothing.primary_power_floor [W], power_smoothing.secondary_power_floor [W], power_smoothing.min_primary_floor_activation_offset [W], power_smoothing.min_primary_floor_activation_point [W], power_smoothing.window_multiplier [ms], power_smoothing.num_preset_profiles, power_smoothing.curr_profile.percent_tmp_floor [%], power_smoothing.curr_profile.ramp_up_rate [W/s], power_smoothing.curr_profile.ramp_down_rate [W/s], power_smoothing.curr_profile.ramp_down_hysteresis [ms], power_smoothing.curr_profile.secondary_power_floor [W], power_smoothing.curr_profile.primary_floor_act_window_multiplier, power_smoothing.curr_profile.primary_floor_tar_window_multiplier, power_smoothing.curr_profile.primary_floor_act_offset [W], power_smoothing.active_profile, power_smoothing.admin_override.percent_tmp_floor [%], power_smoothing.admin_override.ramp_up_rate [W/s], power_smoothing.admin_override.ramp_down_rate [W/s], power_smoothing.admin_override.ramp_down_hysteresis [ms], power_smoothing.admin_override.secondary_power_floor [W], power_smoothing.admin_override.primary_floor_act_window_multiplier, power_smoothing.admin_override.primary_floor_tar_window_multiplier, power_smoothing.admin_override.primary_floor_act_offset [W], edpp_multiplier [%], clocks.current.graphics [MHz], clocks.current.sm [MHz], clocks.current.memory [MHz], clocks.current.video [MHz], clocks.applications.graphics [MHz], clocks.applications.memory [MHz], clocks.default_applications.graphics [MHz], clocks.default_applications.memory [MHz], clocks.max.graphics [MHz], clocks.max.sm [MHz], clocks.max.memory [MHz], mig.mode.current, mig.mode.pending, gsp.mode.current, gsp.mode.default, c2c.mode, protected_memory.total [MiB], protected_memory.used [MiB], protected_memory.free [MiB], fabric.state, fabric.status, fabric.cliqueId, fabric.clusterUuid, fabric.health.summary, fabric.health.bandwidth, fabric.health.route_recovery_in_progress, fabric.health.route_unhealthy, fabric.health.access_timeout_recovery, fabric.health.incorrect_configuration, fabric.health.partition_assigned, platform.chassis_serial_number, platform.slot_number, platform.tray_index, platform.host_id, platform.peer_type, platform.module_id, platform.gpu_fabric_guid, hostname, bbx.time_run [seconds]
+2026/06/24 10:17:56.770, 610.62, 610.62, [N/A], 1, NVIDIA GeForce RTX 2080 SUPER, [N/A], GPU-00000000-0000-0000-0000-000000000000, 00000000:0C:00.0, 0x0000, 0x0C, 0x00, 0x1E8110DE, 0x40051458, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], 3, 3, 3, 3, 4, 16, 16, 0, [Requested functionality has been deprecated], Yes, Enabled, [N/A], [N/A], Disabled, 4000, WDDM, WDDM, 90.04.7a.40.73, G001.0000.02.04, 1.1, [N/A], [N/A], valid, None, [N/A], [N/A], 38 %, P2, 0x00000000000001FF, 0x0000000000000000, Not Active, Not Active, Not Active, Not Active, Not Active, Not Active, Not Active, Not Active, 834002687 us, 0 us, 0 us, 0 us, 0 us, 8192 MiB, 205 MiB, 1366 MiB, 6622 MiB, Default, 7.5, 7 %, 3 %, 99 %, 0 %, 0 %, 0 %, 2, 108, 4373, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], 44, [N/A], N/A, [Requested functionality has been deprecated], 97.99 W, [N/A], 97.99 W, 250.00 W, 250.00 W, 250.00 W, 105.00 W, 350.00 W, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], 2040 MHz, 2040 MHz, 7500 MHz, 1890 MHz, [Requested functionality has been deprecated], [Requested functionality has been deprecated], [Requested functionality has been deprecated], [Requested functionality has been deprecated], 2145 MHz, 2145 MHz, 7751 MHz, [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], [N/A], N/A, N/A, N/A, N/A, N/A, N/A, N/A, N/A, N/A, N/A, N/A, , 0, 0, 1, Direct Connected, 1, 0x0000000000000000, [N/A], [Function Not Found]
 
 
 ################################################################################
@@ -2185,18 +2537,27 @@ timestamp, driver_version, vgpu_driver_capability.heterogenous_multivGPU, count,
 # $ nvidia-smi --query-compute-apps=timestamp,gpu_name,gpu_bus_id,gpu_serial,gpu_uuid,pid,process_name,used_gpu_memory --format=csv
 ################################################################################
 timestamp, gpu_name, gpu_bus_id, gpu_serial, gpu_uuid, pid, process_name, used_gpu_memory [MiB]
-2026/06/22 23:04:33.535, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 12444, C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\TextInputHost.exe, [N/A]
-2026/06/22 23:04:33.535, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 15076, C:\Windows\SystemApps\ShellExperienceHost_cw5n1h2txyewy\ShellExperienceHost.exe, [N/A]
-2026/06/22 23:04:33.535, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 2056, C:\Windows\System32\dwm.exe, [N/A]
-2026/06/22 23:04:33.535, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 12332, C:\Windows\explorer.exe, [N/A]
-2026/06/22 23:04:33.535, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 20372, C:\Program Files\NZXT CAM\NZXT CAM.exe, [N/A]
-2026/06/22 23:04:33.535, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 4680, C:\Program Files\NVIDIA Corporation\NVIDIA GeForce Experience\NVIDIA Share.exe, [N/A]
-2026/06/22 23:04:33.535, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 14160, C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\SearchHost.exe, [N/A]
-2026/06/22 23:04:33.535, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 14184, C:\Windows\SystemApps\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\StartMenuExperienceHost.exe, [N/A]
-2026/06/22 23:04:33.535, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 16280, C:\Program Files\Controller Companion\ControllerCompanion.exe, [N/A]
-2026/06/22 23:04:33.535, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 24804, C:\Windows\ImmersiveControlPanel\SystemSettings.exe, [N/A]
-2026/06/22 23:04:33.535, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 25704, C:\Users\utku\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1.1-full_build\bin\ffmpeg.exe, [N/A]
-2026/06/22 23:04:33.535, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 26660, C:\Users\utku\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1.1-full_build\bin\ffmpeg.exe, [N/A]
+2026/06/24 10:17:57.038, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 2140, C:\Windows\System32\dwm.exe, [N/A]
+2026/06/24 10:17:57.038, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 13264, C:\Windows\System32\ShellHost.exe, [N/A]
+2026/06/24 10:17:57.038, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 13504, C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\CrossDeviceResume.exe, [N/A]
+2026/06/24 10:17:57.038, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 13160, C:\Windows\explorer.exe, [N/A]
+2026/06/24 10:17:57.038, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 14872, C:\Windows\SystemApps\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\StartMenuExperienceHost.exe, [N/A]
+2026/06/24 10:17:57.038, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 14808, C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\SearchHost.exe, [N/A]
+2026/06/24 10:17:57.038, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 16760, C:\Windows\SystemApps\ShellExperienceHost_cw5n1h2txyewy\ShellExperienceHost.exe, [N/A]
+2026/06/24 10:17:57.038, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 17648, C:\Program Files\NVIDIA Corporation\NVIDIA App\CEF\NVIDIA Overlay.exe, [N/A]
+2026/06/24 10:17:57.038, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 15964, C:\Program Files\NVIDIA Corporation\NVIDIA App\CEF\NVIDIA Overlay.exe, [N/A]
+2026/06/24 10:17:57.038, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 17840, C:\Program Files (x86)\Microsoft\EdgeWebView\Application\149.0.4022.80\msedgewebview2.exe, [N/A]
+2026/06/24 10:17:57.038, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 19052, C:\Windows\SystemApps\Microsoft.LockApp_cw5n1h2txyewy\LockApp.exe, [N/A]
+2026/06/24 10:17:57.038, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 20440, C:\Program Files\Controller Companion\ControllerCompanion.exe, [N/A]
+2026/06/24 10:17:57.038, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 21912, C:\Program Files\WindowsApps\Microsoft.YourPhone_1.26042.99.0_x64__8wekyb3d8bbwe\PhoneExperienceHost.exe, [N/A]
+2026/06/24 10:17:57.038, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 22412, C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\TextInputHost.exe, [N/A]
+2026/06/24 10:17:57.038, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 23480, C:\Program Files\WindowsApps\Agilebits.1Password_8.12.24.34_x64__amwd9z03whsfe\1Password.exe, [N/A]
+2026/06/24 10:17:57.038, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 23988, C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe, [N/A]
+2026/06/24 10:17:57.038, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 19956, C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.24.11321.0_x64__8wekyb3d8bbwe\WindowsTerminal.exe, [N/A]
+2026/06/24 10:17:57.038, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 2164, C:\Windows\System32\ApplicationFrameHost.exe, [N/A]
+2026/06/24 10:17:57.038, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 13092, C:\Windows\ImmersiveControlPanel\SystemSettings.exe, [N/A]
+2026/06/24 10:17:57.038, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 12940, C:\Users\utku\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1.1-full_build\bin\ffmpeg.exe, [N/A]
+2026/06/24 10:17:57.038, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, 13820, C:\Users\utku\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1.1-full_build\bin\ffmpeg.exe, [N/A]
 
 
 ################################################################################
@@ -2211,8 +2572,8 @@ timestamp, gpu_name, gpu_bus_id, gpu_serial, gpu_uuid, pid, gpu_utilization [%],
 # $ nvidia-smi --query-retired-pages=timestamp,gpu_name,gpu_bus_id,gpu_serial,gpu_uuid,retired_pages.address,retired_pages.timestamp,retired_pages.cause --format=csv
 ################################################################################
 timestamp, gpu_name, gpu_bus_id, gpu_serial, gpu_uuid, retired_pages.address, retired_pages.timestamp, retired_pages.cause
-2026/06/22 23:04:33.630, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, [N/A], [N/A], Single Bit ECC
-2026/06/22 23:04:33.630, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, [N/A], [N/A], Double Bit ECC
+2026/06/24 10:17:57.179, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, [N/A], [N/A], Single Bit ECC
+2026/06/24 10:17:57.179, NVIDIA GeForce RTX 2080 SUPER, 00000000:0C:00.0, [N/A], GPU-00000000-0000-0000-0000-000000000000, [N/A], [N/A], Double Bit ECC
 
 
 ################################################################################
@@ -2221,68 +2582,115 @@ timestamp, gpu_name, gpu_bus_id, gpu_serial, gpu_uuid, retired_pages.address, re
 ################################################################################
 # gpu         pid   type     sm    mem    enc    dec    jpg    ofa    command 
 # Idx           #    C/G      %      %      %      %      %      %    name 
-    0       2056   C+G      -      -      -      -      -      -    dwm.exe        
-    0       4680   C+G      -      -      -      -      -      -    NVIDIA Share.exe
-    0      12332   C+G      -      -      -      -      -      -    explorer.exe   
-    0      12444   C+G      -      -      -      -      -      -    TextInputHost.ex
-    0      14160   C+G      -      -      -      -      -      -    SearchHost.exe 
-    0      14184   C+G      -      -      -      -      -      -    StartMenuExperie
-    0      15076   C+G      -      -      -      -      -      -    ShellExperienceH
-    0      16280   C+G      -      -      -      -      -      -    ControllerCompan
-    0      20372   C+G      -      -      -      -      -      -    NZXT CAM.exe   
-    0      24804   C+G      -      -      -      -      -      -    SystemSettings.e
-    0      25704     C      3      1     49      -      -      -    ffmpeg.exe     
-    0      26660     C      3      1     49      -      -      -    ffmpeg.exe     
-    0       2056   C+G      -      -      -      -      -      -    dwm.exe        
-    0       4680   C+G      -      -      -      -      -      -    NVIDIA Share.exe
-    0      12332   C+G      -      -      -      -      -      -    explorer.exe   
-    0      12444   C+G      -      -      -      -      -      -    TextInputHost.ex
-    0      14160   C+G      -      -      -      -      -      -    SearchHost.exe 
-    0      14184   C+G      -      -      -      -      -      -    StartMenuExperie
-    0      15076   C+G      -      -      -      -      -      -    ShellExperienceH
-    0      16280   C+G      -      -      -      -      -      -    ControllerCompan
-    0      20372   C+G      -      -      -      -      -      -    NZXT CAM.exe   
-    0      24804   C+G      -      -      -      -      -      -    SystemSettings.e
-    0      25704     C      3      1      -      -      -      -    ffmpeg.exe     
-    0      26660     C      3      1     99      -      -      -    ffmpeg.exe     
-    0       2056   C+G      -      -      -      -      -      -    dwm.exe        
-    0       4680   C+G      -      -      -      -      -      -    NVIDIA Share.exe
-    0      12332   C+G      -      -      -      -      -      -    explorer.exe   
-    0      12444   C+G      -      -      -      -      -      -    TextInputHost.ex
-    0      14160   C+G      -      -      -      -      -      -    SearchHost.exe 
-    0      14184   C+G      -      -      -      -      -      -    StartMenuExperie
-    0      15076   C+G      -      -      -      -      -      -    ShellExperienceH
-    0      16280   C+G      -      -      -      -      -      -    ControllerCompan
-    0      20372   C+G      -      -      -      -      -      -    NZXT CAM.exe   
-    0      24804   C+G      -      -      -      -      -      -    SystemSettings.e
-    0      25704     C      7      2      -      -      -      -    ffmpeg.exe     
-    0      26660     C      -      -     99      -      -      -    ffmpeg.exe     
-    0       2056   C+G      -      -      -      -      -      -    dwm.exe        
-    0       4680   C+G      -      -      -      -      -      -    NVIDIA Share.exe
-    0      12332   C+G      -      -      -      -      -      -    explorer.exe   
-    0      12444   C+G      -      -      -      -      -      -    TextInputHost.ex
-    0      14160   C+G      -      -      -      -      -      -    SearchHost.exe 
-    0      14184   C+G      -      -      -      -      -      -    StartMenuExperie
-    0      15076   C+G      -      -      -      -      -      -    ShellExperienceH
-    0      16280   C+G      -      -      -      -      -      -    ControllerCompan
+    0       2140   C+G      -      -      -      -      -      -    dwm.exe        
+    0       2164   C+G      -      -      -      -      -      -    ApplicationFram
+    0      12940     C      -      -     99      -      -      -    ffmpeg.exe     
+    0      13092   C+G      -      -      -      -      -      -    SystemSettings.
+    0      13160   C+G      -      -      -      -      -      -    explorer.exe   
+    0      13264   C+G      -      -      -      -      -      -    ShellHost.exe  
+    0      13504   C+G      -      -      -      -      -      -    CrossDeviceResu
+    0      13820     C      7      3      -      -      -      -    ffmpeg.exe     
+    0      14808   C+G      -      -      -      -      -      -    SearchHost.exe 
+    0      14872   C+G      -      -      -      -      -      -    StartMenuExperi
+    0      15964   C+G      -      -      -      -      -      -    NVIDIA Overlay.
+    0      16760   C+G      -      -      -      -      -      -    ShellExperience
+    0      17648   C+G      -      -      -      -      -      -    NVIDIA Overlay.
+    0      17840   C+G      -      -      -      -      -      -    msedgewebview2.
+    0      19052   C+G      -      -      -      -      -      -    LockApp.exe    
+    0      19956   C+G      -      -      -      -      -      -    WindowsTerminal
+    0      20440   C+G      -      -      -      -      -      -    ControllerCompa
+    0      21912   C+G      -      -      -      -      -      -    PhoneExperience
+    0      22412   C+G      -      -      -      -      -      -    TextInputHost.e
+    0      23480   C+G      -      -      -      -      -      -    1Password.exe  
+    0      23988   C+G      -      -      -      -      -      -    msedge.exe     
+    0       2140   C+G      -      -      -      -      -      -    dwm.exe        
+    0       2164   C+G      -      -      -      -      -      -    ApplicationFram
+    0      12940     C      7      3      -      -      -      -    ffmpeg.exe     
+    0      13092   C+G      -      -      -      -      -      -    SystemSettings.
+    0      13160   C+G      -      -      -      -      -      -    explorer.exe   
+    0      13264   C+G      -      -      -      -      -      -    ShellHost.exe  
+    0      13504   C+G      -      -      -      -      -      -    CrossDeviceResu
+    0      13820     C      -      -     99      -      -      -    ffmpeg.exe     
+    0      14808   C+G      -      -      -      -      -      -    SearchHost.exe 
+    0      14872   C+G      -      -      -      -      -      -    StartMenuExperi
+    0      15964   C+G      -      -      -      -      -      -    NVIDIA Overlay.
+    0      16760   C+G      -      -      -      -      -      -    ShellExperience
+    0      17648   C+G      -      -      -      -      -      -    NVIDIA Overlay.
+    0      17840   C+G      -      -      -      -      -      -    msedgewebview2.
+    0      19052   C+G      -      -      -      -      -      -    LockApp.exe    
+    0      19956   C+G      -      -      -      -      -      -    WindowsTerminal
+    0      20440   C+G      -      -      -      -      -      -    ControllerCompa
+    0      21912   C+G      -      -      -      -      -      -    PhoneExperience
+    0      22412   C+G      -      -      -      -      -      -    TextInputHost.e
+    0      23480   C+G      -      -      -      -      -      -    1Password.exe  
+    0      23988   C+G      -      -      -      -      -      -    msedge.exe     
+    0       2140   C+G      -      -      -      -      -      -    dwm.exe        
+    0       2164   C+G      -      -      -      -      -      -    ApplicationFram
 # gpu         pid   type     sm    mem    enc    dec    jpg    ofa    command 
 # Idx           #    C/G      %      %      %      %      %      %    name 
-    0      20372   C+G      -      -      -      -      -      -    NZXT CAM.exe   
-    0      24804   C+G      -      -      -      -      -      -    SystemSettings.e
-    0      25704     C      7      2      -      -      -      -    ffmpeg.exe     
-    0      26660     C      -      -     99      -      -      -    ffmpeg.exe     
-    0       2056   C+G      -      -      -      -      -      -    dwm.exe        
-    0       4680   C+G      -      -      -      -      -      -    NVIDIA Share.exe
-    0      12332   C+G      -      -      -      -      -      -    explorer.exe   
-    0      12444   C+G      -      -      -      -      -      -    TextInputHost.ex
-    0      14160   C+G      -      -      -      -      -      -    SearchHost.exe 
-    0      14184   C+G      -      -      -      -      -      -    StartMenuExperie
-    0      15076   C+G      -      -      -      -      -      -    ShellExperienceH
-    0      16280   C+G      -      -      -      -      -      -    ControllerCompan
-    0      20372   C+G      -      -      -      -      -      -    NZXT CAM.exe   
-    0      24804   C+G      -      -      -      -      -      -    SystemSettings.e
-    0      25704     C      7      2      -      -      -      -    ffmpeg.exe     
-    0      26660     C      -      -     99      -      -      -    ffmpeg.exe     
+    0      12940     C      3      1     49      -      -      -    ffmpeg.exe     
+    0      13092   C+G      -      -      -      -      -      -    SystemSettings.
+    0      13160   C+G      -      -      -      -      -      -    explorer.exe   
+    0      13264   C+G      -      -      -      -      -      -    ShellHost.exe  
+    0      13504   C+G      -      -      -      -      -      -    CrossDeviceResu
+    0      13820     C      3      1     49      -      -      -    ffmpeg.exe     
+    0      14808   C+G      -      -      -      -      -      -    SearchHost.exe 
+    0      14872   C+G      -      -      -      -      -      -    StartMenuExperi
+    0      15964   C+G      -      -      -      -      -      -    NVIDIA Overlay.
+    0      16760   C+G      -      -      -      -      -      -    ShellExperience
+    0      17648   C+G      -      -      -      -      -      -    NVIDIA Overlay.
+    0      17840   C+G      -      -      -      -      -      -    msedgewebview2.
+    0      19052   C+G      -      -      -      -      -      -    LockApp.exe    
+    0      19956   C+G      -      -      -      -      -      -    WindowsTerminal
+    0      20440   C+G      -      -      -      -      -      -    ControllerCompa
+    0      21912   C+G      -      -      -      -      -      -    PhoneExperience
+    0      22412   C+G      -      -      -      -      -      -    TextInputHost.e
+    0      23480   C+G      -      -      -      -      -      -    1Password.exe  
+    0      23988   C+G      -      -      -      -      -      -    msedge.exe     
+    0       2140   C+G      -      -      -      -      -      -    dwm.exe        
+    0       2164   C+G      -      -      -      -      -      -    ApplicationFram
+    0      12940     C      3      1     99      -      -      -    ffmpeg.exe     
+    0      13092   C+G      -      -      -      -      -      -    SystemSettings.
+    0      13160   C+G      -      -      -      -      -      -    explorer.exe   
+    0      13264   C+G      -      -      -      -      -      -    ShellHost.exe  
+    0      13504   C+G      -      -      -      -      -      -    CrossDeviceResu
+    0      13820     C      3      1      -      -      -      -    ffmpeg.exe     
+    0      14808   C+G      -      -      -      -      -      -    SearchHost.exe 
+    0      14872   C+G      -      -      -      -      -      -    StartMenuExperi
+    0      15964   C+G      -      -      -      -      -      -    NVIDIA Overlay.
+    0      16760   C+G      -      -      -      -      -      -    ShellExperience
+    0      17648   C+G      -      -      -      -      -      -    NVIDIA Overlay.
+    0      17840   C+G      -      -      -      -      -      -    msedgewebview2.
+    0      19052   C+G      -      -      -      -      -      -    LockApp.exe    
+    0      19956   C+G      -      -      -      -      -      -    WindowsTerminal
+    0      20440   C+G      -      -      -      -      -      -    ControllerCompa
+    0      21912   C+G      -      -      -      -      -      -    PhoneExperience
+    0      22412   C+G      -      -      -      -      -      -    TextInputHost.e
+    0      23480   C+G      -      -      -      -      -      -    1Password.exe  
+    0      23988   C+G      -      -      -      -      -      -    msedge.exe     
+    0       2140   C+G      -      -      -      -      -      -    dwm.exe        
+    0       2164   C+G      -      -      -      -      -      -    ApplicationFram
+    0      12940     C      3      1     49      -      -      -    ffmpeg.exe     
+    0      13092   C+G      -      -      -      -      -      -    SystemSettings.
+# gpu         pid   type     sm    mem    enc    dec    jpg    ofa    command 
+# Idx           #    C/G      %      %      %      %      %      %    name 
+    0      13160   C+G      -      -      -      -      -      -    explorer.exe   
+    0      13264   C+G      -      -      -      -      -      -    ShellHost.exe  
+    0      13504   C+G      -      -      -      -      -      -    CrossDeviceResu
+    0      13820     C      3      1     49      -      -      -    ffmpeg.exe     
+    0      14808   C+G      -      -      -      -      -      -    SearchHost.exe 
+    0      14872   C+G      -      -      -      -      -      -    StartMenuExperi
+    0      15964   C+G      -      -      -      -      -      -    NVIDIA Overlay.
+    0      16760   C+G      -      -      -      -      -      -    ShellExperience
+    0      17648   C+G      -      -      -      -      -      -    NVIDIA Overlay.
+    0      17840   C+G      -      -      -      -      -      -    msedgewebview2.
+    0      19052   C+G      -      -      -      -      -      -    LockApp.exe    
+    0      19956   C+G      -      -      -      -      -      -    WindowsTerminal
+    0      20440   C+G      -      -      -      -      -      -    ControllerCompa
+    0      21912   C+G      -      -      -      -      -      -    PhoneExperience
+    0      22412   C+G      -      -      -      -      -      -    TextInputHost.e
+    0      23480   C+G      -      -      -      -      -      -    1Password.exe  
+    0      23988   C+G      -      -      -      -      -      -    msedge.exe     
 
 
 ################################################################################
@@ -2291,8 +2699,8 @@ timestamp, gpu_name, gpu_bus_id, gpu_serial, gpu_uuid, retired_pages.address, re
 ################################################################################
 # gpu    pwr  gtemp  mtemp     sm    mem    enc    dec    jpg    ofa   mclk   pclk 
 # Idx      W      C      C      %      %      %      %      %      %    MHz    MHz 
-    0     97     45      -      7      3    100      0      0      0   7500   2055 
-    0     97     45      -      7      3    100      0      0      0   7500   2055 
-    0     97     45      -      7      3    100      0      0      0   7500   2055 
-    0     97     45      -      7      3    100      0      0      0   7500   2055 
-    0     97     45      -      7      3    100      0      0      0   7500   2055 
+    0     97     44      -      7      3    100      0      0      0   7500   2040 
+    0     97     44      -      7      3    100      0      0      0   7500   2040 
+    0     97     44      -      7      3    100      0      0      0   7500   2040 
+    0     98     44      -      7      3    100      0      0      0   7500   2040 
+    0     97     44      -      7      3    100      0      0      0   7500   2040 

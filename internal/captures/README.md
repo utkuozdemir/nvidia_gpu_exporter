@@ -21,8 +21,8 @@ Each capture is a single self-contained `.txt` file, named by its keys
 (`<os>-<arch>__<model>__<driver>`):
 
 ```text
-testdata/captures/<os>-<arch>__<model>__<driver>.txt
-e.g. testdata/captures/linux-x86_64__nvidia-geforce-rtx-2080-super__595.71.05.txt
+internal/captures/<os>-<arch>__<model>__<driver>.txt
+e.g. internal/captures/linux-x86_64__nvidia-geforce-rtx-2080-super__595.71.05.txt
 ```
 
 That one file is the whole unit: you attach it to a bug report, and you commit it
@@ -92,8 +92,8 @@ on Windows. `ffmpeg` is optional, for the under-load capture.
 
 ```bash
 # from a clone of the repo:
-./testdata/captures/collect.sh          # idle only
-./testdata/captures/collect.sh --load   # also capture an under-load sample (needs ffmpeg)
+./internal/captures/collect.sh          # idle only
+./internal/captures/collect.sh --load   # also capture an under-load sample (needs ffmpeg)
 ```
 
 It runs read-only commands (it changes nothing), masks identifiers by default,
@@ -149,7 +149,7 @@ The fake is also handy for local development without a GPU:
 ```bash
 go build -o fake-nvidia-smi ./cmd/fake-nvidia-smi
 go run ./cmd/nvidia_gpu_exporter --nvidia-smi-command \
-  "./fake-nvidia-smi --capture testdata/captures/<file>.txt --state load"
+  "./fake-nvidia-smi --capture internal/captures/<file>.txt --state load"
 ```
 
 Beyond that:

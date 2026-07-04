@@ -1,23 +1,23 @@
-// Package fakesmi implements a fake nvidia-smi that replays a capture file
-// from testdata/captures. It answers the invocations the exporter makes (and
-// any other invocation the capture has a recorded section for) purely from
-// the capture content, with no baked-in knowledge of GPUs, drivers or fields,
-// so a newly contributed capture works without any code change.
+// Package fakesmi implements a fake nvidia-smi that replays a capture,
+// either one embedded from internal/captures or a capture file from disk. It
+// answers the invocations the exporter makes (and any other invocation the
+// capture has a recorded section for) purely from the capture content, with
+// no baked-in knowledge of GPUs, drivers or fields, so a newly contributed
+// capture works without any code change.
 package fakesmi
 
 import (
 	"fmt"
 	"io"
+	"io/fs"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/capture"
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/captures"
 )
-
-// DefaultCapture is the capture replayed when none is given: a common setup,
-// relative to the repository root for `go run ./cmd/fake-nvidia-smi` use.
-const DefaultCapture = "testdata/captures/linux-x86_64__nvidia-geforce-rtx-2080-super__595.71.05.txt"
 
 // DefaultState is the capture state replayed when none is given.
 const DefaultState = "idle"
@@ -70,7 +70,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return errorExitCode
 	}
 
-	capt, err := capture.Load(cfg.capturePath)
+	capt, err := loadCapture(cfg.capturePath)
 	if err != nil {
 		fmt.Fprintf(stderr, "fake-nvidia-smi: %v\n", err)
 
@@ -80,12 +80,46 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	return answer(capt, cfg.state, rest, stdout, stderr)
 }
 
+// loadCapture resolves the --capture value: a path (anything with a path
+// separator, or naming an existing file) loads from disk, anything else
+// names an embedded capture from internal/captures, the .txt suffix
+// optional.
+func loadCapture(value string) (*capture.Capture, error) {
+	_, statErr := os.Stat(value)
+
+	if statErr == nil || strings.ContainsRune(value, '/') || strings.ContainsRune(value, os.PathSeparator) {
+		capt, err := capture.Load(value)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load capture from disk: %w", err)
+		}
+
+		return capt, nil
+	}
+
+	name := value
+	if !strings.HasSuffix(name, ".txt") {
+		name += ".txt"
+	}
+
+	data, err := fs.ReadFile(captures.FS, name)
+	if err != nil {
+		return nil, fmt.Errorf("capture %q is neither a file on disk nor an embedded capture", value)
+	}
+
+	parsed, err := capture.Parse(string(data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse embedded capture %q: %w", name, err)
+	}
+
+	return parsed, nil
+}
+
 // parseFlags consumes the fake's own flags from the front of args, returning
 // the remaining arguments, which form the nvidia-smi invocation to replay.
 //
 //nolint:cyclop
 func parseFlags(args []string) (config, []string, error) {
-	cfg := config{capturePath: DefaultCapture, state: DefaultState}
+	cfg := config{capturePath: captures.Default, state: DefaultState}
 
 	for len(args) > 0 {
 		name, value, hasValue := strings.Cut(args[0], "=")
