@@ -68,7 +68,7 @@ nfpms:
       - deb
       - rpm
     contents:
-      - src: ./systemd/nvidia_gpu_exporter.service
+      - src: ./install/systemd/nvidia_gpu_exporter.service
         dst: /usr/lib/systemd/system/nvidia_gpu_exporter.service
         file_info:
           owner: root
@@ -81,10 +81,10 @@ nfpms:
           group: root
           mode: 0644
     scripts:
-      preinstall: scripts/pre-install.sh
-      postinstall: scripts/post-install.sh
-      preremove: scripts/pre-remove.sh
-      postremove: scripts/post-remove.sh
+      preinstall: install/scripts/pre-install.sh
+      postinstall: install/scripts/post-install.sh
+      preremove: install/scripts/pre-remove.sh
+      postremove: install/scripts/post-remove.sh
     deb:
       lintian_overrides:
         - statically-linked-binary
