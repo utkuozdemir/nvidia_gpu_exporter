@@ -1,0 +1,301 @@
+# HELP nvidia_smi_accounting_buffer_size accounting.buffer_size
+# TYPE nvidia_smi_accounting_buffer_size gauge
+nvidia_smi_accounting_buffer_size{uuid="00000000-0000-0000-0000-000000000000"} 4000
+# HELP nvidia_smi_accounting_mode accounting.mode
+# TYPE nvidia_smi_accounting_mode gauge
+nvidia_smi_accounting_mode{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_clocks_current_graphics_clock_hz clocks.current.graphics [MHz]
+# TYPE nvidia_smi_clocks_current_graphics_clock_hz gauge
+nvidia_smi_clocks_current_graphics_clock_hz{uuid="00000000-0000-0000-0000-000000000000"} 2.805e+09
+# HELP nvidia_smi_clocks_current_memory_clock_hz clocks.current.memory [MHz]
+# TYPE nvidia_smi_clocks_current_memory_clock_hz gauge
+nvidia_smi_clocks_current_memory_clock_hz{uuid="00000000-0000-0000-0000-000000000000"} 1.1251e+10
+# HELP nvidia_smi_clocks_current_sm_clock_hz clocks.current.sm [MHz]
+# TYPE nvidia_smi_clocks_current_sm_clock_hz gauge
+nvidia_smi_clocks_current_sm_clock_hz{uuid="00000000-0000-0000-0000-000000000000"} 2.805e+09
+# HELP nvidia_smi_clocks_current_video_clock_hz clocks.current.video [MHz]
+# TYPE nvidia_smi_clocks_current_video_clock_hz gauge
+nvidia_smi_clocks_current_video_clock_hz{uuid="00000000-0000-0000-0000-000000000000"} 2.145e+09
+# HELP nvidia_smi_clocks_event_reasons_active clocks_event_reasons.active
+# TYPE nvidia_smi_clocks_event_reasons_active gauge
+nvidia_smi_clocks_event_reasons_active{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_clocks_event_reasons_applications_clocks_setting clocks_event_reasons.applications_clocks_setting
+# TYPE nvidia_smi_clocks_event_reasons_applications_clocks_setting gauge
+nvidia_smi_clocks_event_reasons_applications_clocks_setting{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_clocks_event_reasons_counters_hw_power_brake_slowdown_seconds clocks_event_reasons_counters.hw_power_brake_slowdown [us]
+# TYPE nvidia_smi_clocks_event_reasons_counters_hw_power_brake_slowdown_seconds gauge
+nvidia_smi_clocks_event_reasons_counters_hw_power_brake_slowdown_seconds{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_clocks_event_reasons_counters_hw_thermal_slowdown_seconds clocks_event_reasons_counters.hw_thermal_slowdown [us]
+# TYPE nvidia_smi_clocks_event_reasons_counters_hw_thermal_slowdown_seconds gauge
+nvidia_smi_clocks_event_reasons_counters_hw_thermal_slowdown_seconds{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_clocks_event_reasons_counters_sw_power_cap_seconds clocks_event_reasons_counters.sw_power_cap [us]
+# TYPE nvidia_smi_clocks_event_reasons_counters_sw_power_cap_seconds gauge
+nvidia_smi_clocks_event_reasons_counters_sw_power_cap_seconds{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_clocks_event_reasons_counters_sw_thermal_slowdown_seconds clocks_event_reasons_counters.sw_thermal_slowdown [us]
+# TYPE nvidia_smi_clocks_event_reasons_counters_sw_thermal_slowdown_seconds gauge
+nvidia_smi_clocks_event_reasons_counters_sw_thermal_slowdown_seconds{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_clocks_event_reasons_counters_sync_boost_seconds clocks_event_reasons_counters.sync_boost [us]
+# TYPE nvidia_smi_clocks_event_reasons_counters_sync_boost_seconds gauge
+nvidia_smi_clocks_event_reasons_counters_sync_boost_seconds{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_clocks_event_reasons_gpu_idle clocks_event_reasons.gpu_idle
+# TYPE nvidia_smi_clocks_event_reasons_gpu_idle gauge
+nvidia_smi_clocks_event_reasons_gpu_idle{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_clocks_event_reasons_hw_power_brake_slowdown clocks_event_reasons.hw_power_brake_slowdown
+# TYPE nvidia_smi_clocks_event_reasons_hw_power_brake_slowdown gauge
+nvidia_smi_clocks_event_reasons_hw_power_brake_slowdown{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_clocks_event_reasons_hw_slowdown clocks_event_reasons.hw_slowdown
+# TYPE nvidia_smi_clocks_event_reasons_hw_slowdown gauge
+nvidia_smi_clocks_event_reasons_hw_slowdown{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_clocks_event_reasons_hw_thermal_slowdown clocks_event_reasons.hw_thermal_slowdown
+# TYPE nvidia_smi_clocks_event_reasons_hw_thermal_slowdown gauge
+nvidia_smi_clocks_event_reasons_hw_thermal_slowdown{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_clocks_event_reasons_supported clocks_event_reasons.supported
+# TYPE nvidia_smi_clocks_event_reasons_supported gauge
+nvidia_smi_clocks_event_reasons_supported{uuid="00000000-0000-0000-0000-000000000000"} 511
+# HELP nvidia_smi_clocks_event_reasons_sw_power_cap clocks_event_reasons.sw_power_cap
+# TYPE nvidia_smi_clocks_event_reasons_sw_power_cap gauge
+nvidia_smi_clocks_event_reasons_sw_power_cap{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_clocks_event_reasons_sw_thermal_slowdown clocks_event_reasons.sw_thermal_slowdown
+# TYPE nvidia_smi_clocks_event_reasons_sw_thermal_slowdown gauge
+nvidia_smi_clocks_event_reasons_sw_thermal_slowdown{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_clocks_event_reasons_sync_boost clocks_event_reasons.sync_boost
+# TYPE nvidia_smi_clocks_event_reasons_sync_boost gauge
+nvidia_smi_clocks_event_reasons_sync_boost{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_clocks_max_graphics_clock_hz clocks.max.graphics [MHz]
+# TYPE nvidia_smi_clocks_max_graphics_clock_hz gauge
+nvidia_smi_clocks_max_graphics_clock_hz{uuid="00000000-0000-0000-0000-000000000000"} 3.165e+09
+# HELP nvidia_smi_clocks_max_memory_clock_hz clocks.max.memory [MHz]
+# TYPE nvidia_smi_clocks_max_memory_clock_hz gauge
+nvidia_smi_clocks_max_memory_clock_hz{uuid="00000000-0000-0000-0000-000000000000"} 1.1501e+10
+# HELP nvidia_smi_clocks_max_sm_clock_hz clocks.max.sm [MHz]
+# TYPE nvidia_smi_clocks_max_sm_clock_hz gauge
+nvidia_smi_clocks_max_sm_clock_hz{uuid="00000000-0000-0000-0000-000000000000"} 3.165e+09
+# HELP nvidia_smi_command_exit_code Exit code of the most recent nvidia-smi run
+# TYPE nvidia_smi_command_exit_code gauge
+nvidia_smi_command_exit_code 0
+# HELP nvidia_smi_compute_app_info A metric with a constant '1' value labeled by the identity of a process with a compute context on a GPU.
+# TYPE nvidia_smi_compute_app_info gauge
+nvidia_smi_compute_app_info{pid="2165",process_name="/usr/bin/kwin_wayland",uuid="00000000-0000-0000-0000-000000000000"} 1
+nvidia_smi_compute_app_info{pid="5021",process_name="ffmpeg",uuid="00000000-0000-0000-0000-000000000000"} 1
+nvidia_smi_compute_app_info{pid="5022",process_name="ffmpeg",uuid="00000000-0000-0000-0000-000000000000"} 1
+# HELP nvidia_smi_compute_app_used_memory_bytes GPU memory used by the process. Absent when the driver cannot report it (e.g. Windows WDDM).
+# TYPE nvidia_smi_compute_app_used_memory_bytes gauge
+nvidia_smi_compute_app_used_memory_bytes{pid="2165",process_name="/usr/bin/kwin_wayland",uuid="00000000-0000-0000-0000-000000000000"} 2.62144e+07
+nvidia_smi_compute_app_used_memory_bytes{pid="5021",process_name="ffmpeg",uuid="00000000-0000-0000-0000-000000000000"} 3.7748736e+08
+nvidia_smi_compute_app_used_memory_bytes{pid="5022",process_name="ffmpeg",uuid="00000000-0000-0000-0000-000000000000"} 5.27433728e+08
+# HELP nvidia_smi_compute_apps Number of processes with a compute context on the GPU.
+# TYPE nvidia_smi_compute_apps gauge
+nvidia_smi_compute_apps{uuid="00000000-0000-0000-0000-000000000000"} 3
+# HELP nvidia_smi_compute_apps_last_collect_success Whether the most recent per-process collection succeeded (1) or not (0)
+# TYPE nvidia_smi_compute_apps_last_collect_success gauge
+nvidia_smi_compute_apps_last_collect_success 1
+# HELP nvidia_smi_compute_cap compute_cap
+# TYPE nvidia_smi_compute_cap gauge
+nvidia_smi_compute_cap{uuid="00000000-0000-0000-0000-000000000000"} 8.9
+# HELP nvidia_smi_compute_mode compute_mode
+# TYPE nvidia_smi_compute_mode gauge
+nvidia_smi_compute_mode{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_count count
+# TYPE nvidia_smi_count gauge
+nvidia_smi_count{uuid="00000000-0000-0000-0000-000000000000"} 1
+# HELP nvidia_smi_display_active display_active
+# TYPE nvidia_smi_display_active gauge
+nvidia_smi_display_active{uuid="00000000-0000-0000-0000-000000000000"} 1
+# HELP nvidia_smi_display_attached display_attached
+# TYPE nvidia_smi_display_attached gauge
+nvidia_smi_display_attached{uuid="00000000-0000-0000-0000-000000000000"} 1
+# HELP nvidia_smi_ecc_errors_uncorrected_aggregate_sram_l2 ecc.errors.uncorrected.aggregate.sram.l2
+# TYPE nvidia_smi_ecc_errors_uncorrected_aggregate_sram_l2 gauge
+nvidia_smi_ecc_errors_uncorrected_aggregate_sram_l2{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_ecc_errors_uncorrected_aggregate_sram_mcu ecc.errors.uncorrected.aggregate.sram.mcu
+# TYPE nvidia_smi_ecc_errors_uncorrected_aggregate_sram_mcu gauge
+nvidia_smi_ecc_errors_uncorrected_aggregate_sram_mcu{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_ecc_errors_uncorrected_aggregate_sram_other ecc.errors.uncorrected.aggregate.sram.other
+# TYPE nvidia_smi_ecc_errors_uncorrected_aggregate_sram_other gauge
+nvidia_smi_ecc_errors_uncorrected_aggregate_sram_other{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_ecc_errors_uncorrected_aggregate_sram_parity ecc.errors.uncorrected.aggregate.sram.parity
+# TYPE nvidia_smi_ecc_errors_uncorrected_aggregate_sram_parity gauge
+nvidia_smi_ecc_errors_uncorrected_aggregate_sram_parity{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_ecc_errors_uncorrected_aggregate_sram_pcie ecc.errors.uncorrected.aggregate.sram.pcie
+# TYPE nvidia_smi_ecc_errors_uncorrected_aggregate_sram_pcie gauge
+nvidia_smi_ecc_errors_uncorrected_aggregate_sram_pcie{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_ecc_errors_uncorrected_aggregate_sram_secded ecc.errors.uncorrected.aggregate.sram.secded
+# TYPE nvidia_smi_ecc_errors_uncorrected_aggregate_sram_secded gauge
+nvidia_smi_ecc_errors_uncorrected_aggregate_sram_secded{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_ecc_errors_uncorrected_aggregate_sram_sm ecc.errors.uncorrected.aggregate.sram.sm
+# TYPE nvidia_smi_ecc_errors_uncorrected_aggregate_sram_sm gauge
+nvidia_smi_ecc_errors_uncorrected_aggregate_sram_sm{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_ecc_errors_uncorrected_aggregate_sram_threshold_exceeded ecc.errors.uncorrected.aggregate.sram.thresholdExceeded
+# TYPE nvidia_smi_ecc_errors_uncorrected_aggregate_sram_threshold_exceeded gauge
+nvidia_smi_ecc_errors_uncorrected_aggregate_sram_threshold_exceeded{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_ecc_errors_uncorrected_volatile_sram_parity ecc.errors.uncorrected.volatile.sram.parity
+# TYPE nvidia_smi_ecc_errors_uncorrected_volatile_sram_parity gauge
+nvidia_smi_ecc_errors_uncorrected_volatile_sram_parity{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_ecc_errors_uncorrected_volatile_sram_secded ecc.errors.uncorrected.volatile.sram.secded
+# TYPE nvidia_smi_ecc_errors_uncorrected_volatile_sram_secded gauge
+nvidia_smi_ecc_errors_uncorrected_volatile_sram_secded{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_encoder_stats_average_fps encoder.stats.averageFps
+# TYPE nvidia_smi_encoder_stats_average_fps gauge
+nvidia_smi_encoder_stats_average_fps{uuid="00000000-0000-0000-0000-000000000000"} 184
+# HELP nvidia_smi_encoder_stats_average_latency encoder.stats.averageLatency
+# TYPE nvidia_smi_encoder_stats_average_latency gauge
+nvidia_smi_encoder_stats_average_latency{uuid="00000000-0000-0000-0000-000000000000"} 62844
+# HELP nvidia_smi_encoder_stats_session_count encoder.stats.sessionCount
+# TYPE nvidia_smi_encoder_stats_session_count gauge
+nvidia_smi_encoder_stats_session_count{uuid="00000000-0000-0000-0000-000000000000"} 2
+# HELP nvidia_smi_enforced_power_limit_watts enforced.power.limit [W]
+# TYPE nvidia_smi_enforced_power_limit_watts gauge
+nvidia_smi_enforced_power_limit_watts{uuid="00000000-0000-0000-0000-000000000000"} 320
+# HELP nvidia_smi_failed_scrapes_total Number of failed collections
+# TYPE nvidia_smi_failed_scrapes_total counter
+nvidia_smi_failed_scrapes_total 0
+# HELP nvidia_smi_fan_speed_ratio fan.speed [%]
+# TYPE nvidia_smi_fan_speed_ratio gauge
+nvidia_smi_fan_speed_ratio{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_gpu_info A metric with a constant '1' value labeled by gpu uuid, name, driver_model_current, driver_model_pending, vbios_version, driver_version, pci_bus_id, serial, compute_cap, pci_sub_device_id, index.
+# TYPE nvidia_smi_gpu_info gauge
+nvidia_smi_gpu_info{compute_cap="8.9",driver_model_current="[N/A]",driver_model_pending="[N/A]",driver_version="595.71.05",index="0",name="NVIDIA GeForce RTX 4080 SUPER",pci_bus_id="00000000:01:00.0",pci_sub_device_id="0x51101462",serial="[N/A]",uuid="00000000-0000-0000-0000-000000000000",vbios_version="95.03.44.00.B2"} 1
+# HELP nvidia_smi_gsp_mode_current gsp.mode.current
+# TYPE nvidia_smi_gsp_mode_current gauge
+nvidia_smi_gsp_mode_current{uuid="00000000-0000-0000-0000-000000000000"} 1
+# HELP nvidia_smi_gsp_mode_default gsp.mode.default
+# TYPE nvidia_smi_gsp_mode_default gauge
+nvidia_smi_gsp_mode_default{uuid="00000000-0000-0000-0000-000000000000"} 1
+# HELP nvidia_smi_index index
+# TYPE nvidia_smi_index gauge
+nvidia_smi_index{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_inforom_oem inforom.oem
+# TYPE nvidia_smi_inforom_oem gauge
+nvidia_smi_inforom_oem{uuid="00000000-0000-0000-0000-000000000000"} 2
+# HELP nvidia_smi_last_collect_success Whether the most recent collection succeeded (1) or not (0)
+# TYPE nvidia_smi_last_collect_success gauge
+nvidia_smi_last_collect_success 1
+# HELP nvidia_smi_memory_free_bytes memory.free [MiB]
+# TYPE nvidia_smi_memory_free_bytes gauge
+nvidia_smi_memory_free_bytes{uuid="00000000-0000-0000-0000-000000000000"} 1.517289472e+10
+# HELP nvidia_smi_memory_reserved_bytes memory.reserved [MiB]
+# TYPE nvidia_smi_memory_reserved_bytes gauge
+nvidia_smi_memory_reserved_bytes{uuid="00000000-0000-0000-0000-000000000000"} 4.55081984e+08
+# HELP nvidia_smi_memory_total_bytes memory.total [MiB]
+# TYPE nvidia_smi_memory_total_bytes gauge
+nvidia_smi_memory_total_bytes{uuid="00000000-0000-0000-0000-000000000000"} 1.7171480576e+10
+# HELP nvidia_smi_memory_used_bytes memory.used [MiB]
+# TYPE nvidia_smi_memory_used_bytes gauge
+nvidia_smi_memory_used_bytes{uuid="00000000-0000-0000-0000-000000000000"} 1.545601024e+09
+# HELP nvidia_smi_name name
+# TYPE nvidia_smi_name gauge
+nvidia_smi_name{uuid="00000000-0000-0000-0000-000000000000"} 4080
+# HELP nvidia_smi_pci_base_class pci.baseClass
+# TYPE nvidia_smi_pci_base_class gauge
+nvidia_smi_pci_base_class{uuid="00000000-0000-0000-0000-000000000000"} 3
+# HELP nvidia_smi_pci_bus pci.bus
+# TYPE nvidia_smi_pci_bus gauge
+nvidia_smi_pci_bus{uuid="00000000-0000-0000-0000-000000000000"} 1
+# HELP nvidia_smi_pci_device pci.device
+# TYPE nvidia_smi_pci_device gauge
+nvidia_smi_pci_device{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_pci_device_id pci.device_id
+# TYPE nvidia_smi_pci_device_id gauge
+nvidia_smi_pci_device_id{uuid="00000000-0000-0000-0000-000000000000"} 6.54446814e+08
+# HELP nvidia_smi_pci_domain pci.domain
+# TYPE nvidia_smi_pci_domain gauge
+nvidia_smi_pci_domain{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_pci_sub_class pci.subClass
+# TYPE nvidia_smi_pci_sub_class gauge
+nvidia_smi_pci_sub_class{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_pci_sub_device_id pci.sub_device_id
+# TYPE nvidia_smi_pci_sub_device_id gauge
+nvidia_smi_pci_sub_device_id{uuid="00000000-0000-0000-0000-000000000000"} 1.36000829e+09
+# HELP nvidia_smi_pcie_link_gen_current pcie.link.gen.current
+# TYPE nvidia_smi_pcie_link_gen_current gauge
+nvidia_smi_pcie_link_gen_current{uuid="00000000-0000-0000-0000-000000000000"} 4
+# HELP nvidia_smi_pcie_link_gen_gpucurrent pcie.link.gen.gpucurrent
+# TYPE nvidia_smi_pcie_link_gen_gpucurrent gauge
+nvidia_smi_pcie_link_gen_gpucurrent{uuid="00000000-0000-0000-0000-000000000000"} 4
+# HELP nvidia_smi_pcie_link_gen_gpumax pcie.link.gen.gpumax
+# TYPE nvidia_smi_pcie_link_gen_gpumax gauge
+nvidia_smi_pcie_link_gen_gpumax{uuid="00000000-0000-0000-0000-000000000000"} 4
+# HELP nvidia_smi_pcie_link_gen_hostmax pcie.link.gen.hostmax
+# TYPE nvidia_smi_pcie_link_gen_hostmax gauge
+nvidia_smi_pcie_link_gen_hostmax{uuid="00000000-0000-0000-0000-000000000000"} 5
+# HELP nvidia_smi_pcie_link_gen_max pcie.link.gen.max
+# TYPE nvidia_smi_pcie_link_gen_max gauge
+nvidia_smi_pcie_link_gen_max{uuid="00000000-0000-0000-0000-000000000000"} 4
+# HELP nvidia_smi_pcie_link_width_current pcie.link.width.current
+# TYPE nvidia_smi_pcie_link_width_current gauge
+nvidia_smi_pcie_link_width_current{uuid="00000000-0000-0000-0000-000000000000"} 16
+# HELP nvidia_smi_pcie_link_width_max pcie.link.width.max
+# TYPE nvidia_smi_pcie_link_width_max gauge
+nvidia_smi_pcie_link_width_max{uuid="00000000-0000-0000-0000-000000000000"} 16
+# HELP nvidia_smi_persistence_mode persistence_mode
+# TYPE nvidia_smi_persistence_mode gauge
+nvidia_smi_persistence_mode{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_platform_gpu_fabric_guid platform.gpu_fabric_guid
+# TYPE nvidia_smi_platform_gpu_fabric_guid gauge
+nvidia_smi_platform_gpu_fabric_guid{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_platform_host_id platform.host_id
+# TYPE nvidia_smi_platform_host_id gauge
+nvidia_smi_platform_host_id{uuid="00000000-0000-0000-0000-000000000000"} 1
+# HELP nvidia_smi_platform_module_id platform.module_id
+# TYPE nvidia_smi_platform_module_id gauge
+nvidia_smi_platform_module_id{uuid="00000000-0000-0000-0000-000000000000"} 1
+# HELP nvidia_smi_platform_slot_number platform.slot_number
+# TYPE nvidia_smi_platform_slot_number gauge
+nvidia_smi_platform_slot_number{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_platform_tray_index platform.tray_index
+# TYPE nvidia_smi_platform_tray_index gauge
+nvidia_smi_platform_tray_index{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_power_default_limit_watts power.default_limit [W]
+# TYPE nvidia_smi_power_default_limit_watts gauge
+nvidia_smi_power_default_limit_watts{uuid="00000000-0000-0000-0000-000000000000"} 320
+# HELP nvidia_smi_power_draw_average_watts power.draw.average [W]
+# TYPE nvidia_smi_power_draw_average_watts gauge
+nvidia_smi_power_draw_average_watts{uuid="00000000-0000-0000-0000-000000000000"} 84.24
+# HELP nvidia_smi_power_draw_instant_watts power.draw.instant [W]
+# TYPE nvidia_smi_power_draw_instant_watts gauge
+nvidia_smi_power_draw_instant_watts{uuid="00000000-0000-0000-0000-000000000000"} 86.41
+# HELP nvidia_smi_power_draw_watts power.draw [W]
+# TYPE nvidia_smi_power_draw_watts gauge
+nvidia_smi_power_draw_watts{uuid="00000000-0000-0000-0000-000000000000"} 84.24
+# HELP nvidia_smi_power_limit_watts power.limit [W]
+# TYPE nvidia_smi_power_limit_watts gauge
+nvidia_smi_power_limit_watts{uuid="00000000-0000-0000-0000-000000000000"} 320
+# HELP nvidia_smi_power_max_limit_watts power.max_limit [W]
+# TYPE nvidia_smi_power_max_limit_watts gauge
+nvidia_smi_power_max_limit_watts{uuid="00000000-0000-0000-0000-000000000000"} 400
+# HELP nvidia_smi_power_min_limit_watts power.min_limit [W]
+# TYPE nvidia_smi_power_min_limit_watts gauge
+nvidia_smi_power_min_limit_watts{uuid="00000000-0000-0000-0000-000000000000"} 150
+# HELP nvidia_smi_protected_memory_free_bytes protected_memory.free [MiB]
+# TYPE nvidia_smi_protected_memory_free_bytes gauge
+nvidia_smi_protected_memory_free_bytes{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_protected_memory_total_bytes protected_memory.total [MiB]
+# TYPE nvidia_smi_protected_memory_total_bytes gauge
+nvidia_smi_protected_memory_total_bytes{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_protected_memory_used_bytes protected_memory.used [MiB]
+# TYPE nvidia_smi_protected_memory_used_bytes gauge
+nvidia_smi_protected_memory_used_bytes{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_pstate pstate
+# TYPE nvidia_smi_pstate gauge
+nvidia_smi_pstate{uuid="00000000-0000-0000-0000-000000000000"} 2
+# HELP nvidia_smi_temperature_gpu temperature.gpu
+# TYPE nvidia_smi_temperature_gpu gauge
+nvidia_smi_temperature_gpu{uuid="00000000-0000-0000-0000-000000000000"} 46
+# HELP nvidia_smi_utilization_decoder_ratio utilization.decoder [%]
+# TYPE nvidia_smi_utilization_decoder_ratio gauge
+nvidia_smi_utilization_decoder_ratio{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_utilization_encoder_ratio utilization.encoder [%]
+# TYPE nvidia_smi_utilization_encoder_ratio gauge
+nvidia_smi_utilization_encoder_ratio{uuid="00000000-0000-0000-0000-000000000000"} 0.72
+# HELP nvidia_smi_utilization_gpu_ratio utilization.gpu [%]
+# TYPE nvidia_smi_utilization_gpu_ratio gauge
+nvidia_smi_utilization_gpu_ratio{uuid="00000000-0000-0000-0000-000000000000"} 0.07
+# HELP nvidia_smi_utilization_jpeg_ratio utilization.jpeg [%]
+# TYPE nvidia_smi_utilization_jpeg_ratio gauge
+nvidia_smi_utilization_jpeg_ratio{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_utilization_memory_ratio utilization.memory [%]
+# TYPE nvidia_smi_utilization_memory_ratio gauge
+nvidia_smi_utilization_memory_ratio{uuid="00000000-0000-0000-0000-000000000000"} 0.02
+# HELP nvidia_smi_utilization_ofa_ratio utilization.ofa [%]
+# TYPE nvidia_smi_utilization_ofa_ratio gauge
+nvidia_smi_utilization_ofa_ratio{uuid="00000000-0000-0000-0000-000000000000"} 0
