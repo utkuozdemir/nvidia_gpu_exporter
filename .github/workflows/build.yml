@@ -43,7 +43,7 @@ jobs:
           args: --timeout=3m0s
           install-mode: goinstall
       - name: Set up Task
-        uses: arduino/setup-task@v2.0.0
+        uses: arduino/setup-task@v3.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install asset linters
