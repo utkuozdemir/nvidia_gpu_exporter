@@ -1,6 +1,6 @@
-# The captures are raw recorded nvidia-smi output and the goldens are exact
-# expected scrapes: both are compared byte for byte by the integration tests,
-# so they must never be CRLF-converted on checkout (core.autocrlf on Windows
-# would otherwise break the whole suite).
+# The captures are raw recorded nvidia-smi output, and the .metrics files are
+# the exact scrapes the integration tests expect: both are compared byte for
+# byte, so they must never be CRLF-converted on checkout (core.autocrlf on
+# Windows would otherwise break the whole suite).
 internal/captures/*.txt text eol=lf
 internal/integration/testdata/*.metrics text eol=lf

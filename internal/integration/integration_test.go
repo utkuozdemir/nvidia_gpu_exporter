@@ -24,13 +24,13 @@ import (
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/captures"
 )
 
-// update regenerates the golden files instead of comparing against them.
-var update = flag.Bool("update", false, "update the golden files")
+// update regenerates the expected output files instead of comparing against them.
+var update = flag.Bool("update", false, "update the expected output files")
 
 const startupTimeout = 30 * time.Second
 
 // wallClockFamilies are derived from the current time and elapsed durations,
-// so they are excluded from the goldens and asserted separately.
+// so they are excluded from the expected outputs and asserted separately.
 var wallClockFamilies = map[string]bool{
 	"nvidia_smi_last_collect_duration_seconds":          true,
 	"nvidia_smi_last_collect_success_timestamp_seconds": true,
@@ -184,24 +184,24 @@ func filterDeterministic(metrics string) string {
 	return strings.Join(kept, "\n") + "\n"
 }
 
-// goldenCase is one cell of the golden matrix: a capture in one of its
-// states, and the golden file pinning the exporter's output for it.
-type goldenCase struct {
-	captureName string
-	state       string
-	goldenName  string
+// replayCase is one cell of the replay matrix: a capture in one of its
+// states, and the file holding the expected scrape output for it.
+type replayCase struct {
+	captureName  string
+	state        string
+	expectedFile string
 }
 
-// goldenCases discovers the golden matrix from the embedded corpus itself:
+// replayCases discovers the replay matrix from the embedded corpus itself:
 // every committed capture, in every state it holds sections for.
-func goldenCases(t *testing.T) []goldenCase {
+func replayCases(t *testing.T) []replayCase {
 	t.Helper()
 
 	names, err := fs.Glob(captures.FS, "*.txt")
 	require.NoError(t, err)
 	require.NotEmpty(t, names)
 
-	var cases []goldenCase
+	var cases []replayCase
 
 	for _, name := range names {
 		content, err := fs.ReadFile(captures.FS, name)
@@ -215,10 +215,10 @@ func goldenCases(t *testing.T) []goldenCase {
 				continue
 			}
 
-			cases = append(cases, goldenCase{
-				captureName: name,
-				state:       state,
-				goldenName:  strings.TrimSuffix(name, ".txt") + "__" + state + ".metrics",
+			cases = append(cases, replayCase{
+				captureName:  name,
+				state:        state,
+				expectedFile: strings.TrimSuffix(name, ".txt") + "__" + state + ".metrics",
 			})
 		}
 	}
@@ -226,14 +226,14 @@ func goldenCases(t *testing.T) []goldenCase {
 	return cases
 }
 
-// TestGoldenMetrics runs the exporter against every committed capture in
+// TestExpectedMetrics runs the exporter against every committed capture in
 // every state the capture holds, and compares the deterministic part of the
-// scrape against a golden file. Run with -update to regenerate the goldens.
-func TestGoldenMetrics(t *testing.T) {
+// scrape against the expected output file. Run with -update to regenerate them.
+func TestExpectedMetrics(t *testing.T) {
 	t.Parallel()
 
-	for _, testCase := range goldenCases(t) {
-		t.Run(testCase.goldenName, func(t *testing.T) {
+	for _, testCase := range replayCases(t) {
+		t.Run(testCase.expectedFile, func(t *testing.T) {
 			t.Parallel()
 
 			baseURL := startExporter(t,
@@ -241,20 +241,20 @@ func TestGoldenMetrics(t *testing.T) {
 				"--collect.compute-apps")
 
 			got := filterDeterministic(scrape(t, baseURL))
-			goldenPath := filepath.Join("testdata", testCase.goldenName)
+			expectedPath := filepath.Join("testdata", testCase.expectedFile)
 
 			if *update {
 				require.NoError(t, os.MkdirAll("testdata", 0o755))
-				require.NoError(t, os.WriteFile(goldenPath, []byte(got), 0o600))
+				require.NoError(t, os.WriteFile(expectedPath, []byte(got), 0o600))
 
 				return
 			}
 
-			want, err := os.ReadFile(goldenPath)
+			want, err := os.ReadFile(expectedPath)
 			require.NoError(
 				t,
 				err,
-				"missing golden for a new capture? generate and review it with: go test ./internal/integration/ -update",
+				"missing expected output for a new capture? generate and review it with: go test ./internal/integration/ -update",
 			)
 
 			assert.Equal(t, string(want), got)
@@ -262,26 +262,26 @@ func TestGoldenMetrics(t *testing.T) {
 	}
 }
 
-// TestNoStaleGoldens fails when a committed golden file corresponds to no
+// TestNoStaleExpectedFiles fails when a committed expected output file corresponds to no
 // capture/state pair anymore, e.g. after a capture rename or removal.
-func TestNoStaleGoldens(t *testing.T) {
+func TestNoStaleExpectedFiles(t *testing.T) {
 	t.Parallel()
 
 	expected := make(map[string]bool)
-	for _, testCase := range goldenCases(t) {
-		expected[testCase.goldenName] = true
+	for _, testCase := range replayCases(t) {
+		expected[testCase.expectedFile] = true
 	}
 
-	goldens, err := filepath.Glob(filepath.Join("testdata", "*.metrics"))
+	files, err := filepath.Glob(filepath.Join("testdata", "*.metrics"))
 	require.NoError(t, err)
 
-	for _, golden := range goldens {
-		assert.True(t, expected[filepath.Base(golden)],
-			"stale golden %s: no capture/state produces it anymore, delete it", golden)
+	for _, file := range files {
+		assert.True(t, expected[filepath.Base(file)],
+			"stale expected output %s: no capture/state produces it anymore, delete it", file)
 	}
 }
 
-// TestWallClockFamilies covers the families the goldens exclude.
+// TestWallClockFamilies covers the families the expected outputs exclude.
 func TestWallClockFamilies(t *testing.T) {
 	t.Parallel()
 
@@ -312,10 +312,10 @@ func TestComputeAppsDisabled(t *testing.T) {
 }
 
 // TestCachedModeMatchesLive proves background collection serves the same
-// deterministic content as the synchronous mode, pinned by the same golden.
+// deterministic content as the synchronous mode, pinned by the same expected output file.
 func TestCachedModeMatchesLive(t *testing.T) {
 	if *update {
-		t.Skip("goldens are being regenerated in this run")
+		t.Skip("expected outputs are being regenerated in this run")
 	}
 
 	t.Parallel()

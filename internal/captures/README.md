@@ -132,17 +132,17 @@ that replays a capture file as-is: it serves the recorded sections verbatim and
 answers `--query-gpu`/`--query-compute-apps` for any field subset by projecting
 columns out of the recorded CSV. The integration tests under `internal/integration/` run
 the real exporter against the fake for **every capture in this directory** and
-compare the scraped metrics against a golden file, so contributing a capture
-automatically extends the test suite. A new capture fails the suite until its
-golden file is generated and reviewed:
+compare the scraped metrics against a checked-in expected output, so
+contributing a capture automatically extends the test suite. A new capture
+fails the suite until its expected output is generated and reviewed:
 
 ```bash
 go test ./internal/integration/ -update   # generates internal/integration/testdata/<capture>__<state>.metrics
 git diff internal/integration/testdata/   # eyeball what the exporter makes of the new capture
 ```
 
-(Contributors don't have to do this — attaching the capture to an issue or PR is
-enough, maintainers take it from there.)
+(Contributors don't have to do this. Attaching the capture to an issue or PR
+is enough, maintainers take it from there.)
 
 The fake is also handy for local development without a GPU. The whole corpus
 is embedded into it, so `--capture` takes a capture name (or a path to an
