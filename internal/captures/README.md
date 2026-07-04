@@ -130,7 +130,7 @@ falls back to H.264/HEVC on its own).
 **These captures are executable.** `cmd/fake-nvidia-smi` is a fake nvidia-smi
 that replays a capture file as-is: it serves the recorded sections verbatim and
 answers `--query-gpu`/`--query-compute-apps` for any field subset by projecting
-columns out of the recorded CSV. The integration tests under `integration/` run
+columns out of the recorded CSV. The integration tests under `internal/integration/` run
 the real exporter against the fake for **every capture in this directory** and
 compare the scraped metrics against a golden file, so contributing a capture
 automatically extends the test suite. A new capture fails the suite until its

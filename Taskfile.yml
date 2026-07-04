@@ -23,12 +23,13 @@ tasks:
       - go mod tidy --diff
       - golangci-lint run ./...
 
-  # runs in CI as its own step; shell linting targets tracked files only, so
-  # local scratch space and generated output stay out of scope
+  # runs in CI as its own step; lints tracked files only, so local scratch
+  # space and generated output stay out of scope, and dot-directories like
+  # .github are covered (filesystem globs would skip them)
   lint:assets:
     desc: lint markdown and shell scripts
     cmds:
-      - markdownlint '**/*.md'
+      - git ls-files '*.md' | xargs markdownlint
       - git ls-files '*.sh' | xargs shellcheck
       - git ls-files '*.sh' | xargs shfmt -d -i 2 -ci -sr
 

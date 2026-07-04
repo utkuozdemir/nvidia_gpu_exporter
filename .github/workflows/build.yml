@@ -1,29 +1,19 @@
 ---
 name: build
 
+# no paths-ignore on purpose: the build check is required, so a PR touching
+# only ignored paths could never merge (the check would stay pending forever),
+# and the asset linting in this workflow must run exactly when docs, scripts
+# or install assets change
 on:
   workflow_dispatch: {}
   push:
     branches:
       - main
       - renovate/**
-    paths-ignore:
-      - "**.md"
-      - ".gitignore"
-      - "docs/**"
-      - "hack/**"
-      - "install/**"
-      - ".renovaterc.json"
   pull_request:
     branches:
       - main
-    paths-ignore:
-      - "**.md"
-      - ".gitignore"
-      - "docs/**"
-      - "hack/**"
-      - "install/**"
-      - ".renovaterc.json"
 
 concurrency:
   group: build-${{ github.event.pull_request.number || github.ref }}
@@ -60,7 +50,7 @@ jobs:
         run: |
           # renovate: depName=markdownlint-cli datasource=npm
           npm install --global markdownlint-cli@0.49.0
-          # renovate: depName=mvdan/sh datasource=github-releases
+          # renovate: depName=mvdan.cc/sh/v3 datasource=go
           go install mvdan.cc/sh/v3/cmd/shfmt@v3.13.1
       - name: Lint markdown and shell scripts
         run: task lint:assets
@@ -73,12 +63,16 @@ jobs:
         with:
           files: coverage.out
           token: ${{ secrets.CODECOV_TOKEN }}
-      - name: Build with Goreleaser
+      # a full snapshot release (unpublished) rather than a single-target
+      # build, so the packaging inputs (systemd unit, nfpm scriptlets) are
+      # validated in CI instead of failing for the first time on a real
+      # release
+      - name: Build and package with Goreleaser
         uses: goreleaser/goreleaser-action@v7.2.3
         with:
           # renovate: depName=goreleaser/goreleaser datasource=github-releases
           version: v2.16.0
-          args: build --snapshot --clean --single-target
+          args: release --snapshot --clean --skip=publish,docker,sign,sbom
         env:
           PRIVATE_ACCESS_TOKEN: placeholder
       - name: Check for dirty files
