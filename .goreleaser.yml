@@ -97,6 +97,29 @@ checksum:
   name_template: checksums.txt
   algorithm: sha256
 
+# One detached signature over checksums.txt covers every binary, archive and
+# package, since the file lists their sha256 sums. The passphrase comes in on
+# stdin so it never lands on the process command line or in the logs. Skipped
+# in snapshot builds, so no key is needed for PR CI.
+signs:
+  - id: checksums
+    cmd: gpg
+    artifacts: checksum
+    signature: "${artifact}.asc"
+    stdin: "{{ .Env.GPG_PASSPHRASE }}"
+    args:
+      - "--batch"
+      - "--no-tty"
+      - "--pinentry-mode=loopback"
+      - "--passphrase-fd=0"
+      - "--local-user"
+      - "{{ .Env.GPG_FINGERPRINT }}"
+      - "--armor"
+      - "--output"
+      - "${signature}"
+      - "--detach-sign"
+      - "${artifact}"
+
 git:
   ignore_tags: # skip prereleases when finding the previous tag for the changelog
     - "*-*"

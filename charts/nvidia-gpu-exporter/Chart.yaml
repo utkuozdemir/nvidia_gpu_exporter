@@ -22,6 +22,9 @@ maintainers:
     url: https://utkuozdemir.org
 annotations:
   artifacthub.io/license: MIT
+  artifacthub.io/signKey: |
+    fingerprint: 93122B2C53431C2F60964EB7EAC49314A32B9205
+    url: https://utkuozdemir.github.io/nvidia_gpu_exporter/pubkey.asc
   artifacthub.io/links: |
     - name: Grafana dashboard
       url: https://grafana.com/grafana/dashboards/14574
