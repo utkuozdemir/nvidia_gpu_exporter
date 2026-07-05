@@ -54,6 +54,18 @@ mv nvidia_gpu_exporter /usr/bin
 nvidia_gpu_exporter --help
 ```
 
+### Verifying the download
+
+Each release also ships a `checksums.txt` and a detached GPG signature
+`checksums.txt.asc` that covers it. Import the public key once, then check the
+signature and the checksum of what you downloaded:
+
+```bash
+curl -fsSL https://utkuozdemir.github.io/nvidia_gpu_exporter/pubkey.asc | gpg --import
+gpg --verify checksums.txt.asc checksums.txt
+sha256sum --ignore-missing -c checksums.txt
+```
+
 ## Installing with winget (Windows)
 
 On Windows the exporter is also available through
@@ -260,6 +272,18 @@ environment instead.
 > the container runs on the default runtime and no GPU access is injected. In
 > that case the exporter still comes up, but it serves only its own health
 > metrics with `nvidia_smi_last_collect_success 0`.
+
+### Verifying the image
+
+The images on Docker Hub and GHCR are signed keyless with cosign. Verify one
+(replace `VERSION` with a tag released after signing was introduced) with:
+
+```bash
+cosign verify \
+  --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp='^https://github\.com/utkuozdemir/nvidia_gpu_exporter/\.github/workflows/release\.yml@refs/tags/v.*$' \
+  utkuozdemir/nvidia_gpu_exporter:VERSION
+```
 
 ### Fallback without the NVIDIA Container Toolkit
 

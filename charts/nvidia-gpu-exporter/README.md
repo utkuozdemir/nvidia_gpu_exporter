@@ -30,6 +30,30 @@ helm install nvidia-gpu-exporter nvidia-gpu-exporter/nvidia-gpu-exporter \
   --set runtimeClassName=nvidia
 ```
 
+### Verifying the chart signature
+
+Releases from the classic repository are signed with GPG provenance files
+(key fingerprint `93122B2C53431C2F60964EB7EAC49314A32B9205`). To verify,
+fetch the public key once and pass it to helm:
+
+```bash
+curl -fsSL https://utkuozdemir.github.io/nvidia_gpu_exporter/pubkey.asc | gpg --dearmor > nvidia-gpu-exporter.gpg
+helm install nvidia-gpu-exporter nvidia-gpu-exporter/nvidia-gpu-exporter \
+  --verify --keyring nvidia-gpu-exporter.gpg \
+  --set runtimeClassName=nvidia
+```
+
+Helm's provenance check only covers classic-repository installs. The OCI
+artifact on GHCR is signed separately with cosign (keyless), so verify an OCI
+install like this (replace `CHART_VERSION` with the version you are pulling):
+
+```bash
+cosign verify \
+  --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp='^https://github\.com/utkuozdemir/nvidia_gpu_exporter/\.github/workflows/release\.yml@refs/tags/v.*$' \
+  ghcr.io/utkuozdemir/charts/nvidia-gpu-exporter:CHART_VERSION
+```
+
 ## Per-process GPU metrics
 
 Enable `computeApps.enabled` to also export per-process GPU metrics

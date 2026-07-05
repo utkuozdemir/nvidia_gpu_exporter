@@ -52,6 +52,20 @@ Here's how it looks like:
 
 See [INSTALL.md](docs/INSTALL.md) for details.
 
+## Verifying releases
+
+Release artifacts are signed so you can check they came from this project's
+release pipeline:
+
+- The `checksums.txt` file attached to each release is signed with GPG
+  (`checksums.txt.asc`), which covers every binary, archive and package.
+- The container images and the Helm chart are signed keyless with
+  [cosign](https://github.com/sigstore/cosign), tied to the release workflow's
+  identity.
+
+See [INSTALL.md](docs/INSTALL.md) for the exact verification commands, and the
+[chart README](charts/nvidia-gpu-exporter/README.md) for the chart.
+
 ## Configuration
 
 See [CONFIGURE.md](docs/CONFIGURE.md) for details.
