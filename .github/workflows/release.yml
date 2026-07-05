@@ -12,6 +12,10 @@ defaults:
 jobs:
   release:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write # create the GitHub release
+      packages: write # push images to GHCR
+      id-token: write # cosign keyless image signing (OIDC)
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.0
@@ -38,6 +42,29 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.10.0
+        with:
+          # renovate: depName=sigstore/cosign datasource=github-releases
+          cosign-release: v2.6.1
+      - name: Import the signing key
+        # no xtrace: this step handles the private key
+        shell: bash --noprofile --norc -euo pipefail {0}
+        run: |
+          mkdir -p ~/.gnupg && chmod 700 ~/.gnupg
+          echo "allow-loopback-pinentry" >> ~/.gnupg/gpg-agent.conf
+          gpgconf --kill gpg-agent || true
+          echo "${GPG_PRIVATE_KEY}" | gpg --batch --import
+          fpr="$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/{print $10; exit}')"
+          # fail loudly if the secret is not the key the docs and chart advertise
+          expected="$(awk '/signKey:/{f=1} f&&/fingerprint:/{print $2; exit}' charts/nvidia-gpu-exporter/Chart.yaml)"
+          if [ "${fpr}" != "${expected}" ]; then
+            echo "imported key ${fpr} does not match the documented fingerprint ${expected}" >&2
+            exit 1
+          fi
+          echo "GPG_FINGERPRINT=${fpr}" >>"${GITHUB_ENV}"
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
       - name: GoReleaser
         uses: goreleaser/goreleaser-action@v7.2.3
         with:
@@ -47,6 +74,28 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PRIVATE_ACCESS_TOKEN: ${{ secrets.PRIVATE_ACCESS_TOKEN }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      - name: Sign the container images
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          for repo in \
+            docker.io/utkuozdemir/nvidia_gpu_exporter \
+            ghcr.io/utkuozdemir/nvidia_gpu_exporter; do
+            # the tag was just pushed; retry the registry read to avoid a race
+            digest=""
+            for _ in 1 2 3 4 5; do
+              if digest="$(docker buildx imagetools inspect "${repo}:${version}" \
+                --format '{{ .Manifest.Digest }}')"; then
+                break
+              fi
+              sleep 5
+            done
+            if [ -z "${digest}" ]; then
+              echo "could not resolve a digest for ${repo}:${version}" >&2
+              exit 1
+            fi
+            cosign sign --yes "${repo}@${digest}"
+          done
 
   helm-chart:
     runs-on: ubuntu-24.04
@@ -54,6 +103,7 @@ jobs:
     permissions:
       contents: write
       packages: write
+      id-token: write # cosign keyless chart signing (OIDC)
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.0
@@ -64,19 +114,81 @@ jobs:
           chart_version="$((major + 1)).${minor}.${patch}"
           echo "APP_VERSION=${app_version}" >>"${GITHUB_ENV}"
           echo "CHART_VERSION=${chart_version}" >>"${GITHUB_ENV}"
-      - name: Package chart
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.10.0
+        with:
+          # renovate: depName=sigstore/cosign datasource=github-releases
+          cosign-release: v2.6.1
+      - name: Log in to GHCR
+        # before importing the key, so no third-party action runs while the
+        # private key material is present on disk
+        uses: docker/login-action@v4.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Import the signing key
+        # no xtrace: this step handles the private key and passphrase
+        shell: bash --noprofile --norc -euo pipefail {0}
         run: |
+          mkdir -p ~/.gnupg && chmod 700 ~/.gnupg
+          echo "allow-loopback-pinentry" >> ~/.gnupg/gpg-agent.conf
+          gpgconf --kill gpg-agent || true
+          echo "${GPG_PRIVATE_KEY}" | gpg --batch --import
+          fpr="$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/{print $10; exit}')"
+          # fail loudly if the secret is not the key the docs and chart advertise
+          expected="$(awk '/signKey:/{f=1} f&&/fingerprint:/{print $2; exit}' charts/nvidia-gpu-exporter/Chart.yaml)"
+          if [ "${fpr}" != "${expected}" ]; then
+            echo "imported key ${fpr} does not match the documented fingerprint ${expected}" >&2
+            exit 1
+          fi
+          # helm reads the pre-2.1 keyring format, so export the key into one
+          umask 077
+          gpg --batch --pinentry-mode loopback \
+            --passphrase "${GPG_PASSPHRASE}" \
+            --export-secret-keys "${fpr}" > /tmp/secring.gpg
+          gpg --armor --export "${fpr}" > /tmp/pubkey.asc
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      - name: Package and sign chart
+        # no xtrace: this step handles the passphrase
+        shell: bash --noprofile --norc -euo pipefail {0}
+        run: |
+          umask 077
+          trap 'rm -f /tmp/passphrase.txt' EXIT
+          echo "${GPG_PASSPHRASE}" > /tmp/passphrase.txt
           helm package charts/nvidia-gpu-exporter \
             --version "${CHART_VERSION}" \
             --app-version "${APP_VERSION}" \
-            --destination /tmp/chart-dist
+            --destination /tmp/chart-dist \
+            --sign \
+            --key "nvidia_gpu_exporter release signing" \
+            --keyring /tmp/secring.gpg \
+            --passphrase-file /tmp/passphrase.txt
           cp charts/artifacthub-repo.yml /tmp/chart-dist/
-      - name: Push chart to GHCR
+          cp /tmp/pubkey.asc /tmp/chart-dist/
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      - name: Push and sign the chart on GHCR
+        # no xtrace: the registry login reads the token on stdin
+        shell: bash --noprofile --norc -euo pipefail {0}
         run: |
-          helm registry login ghcr.io \
+          printf '%s' "${GH_TOKEN}" | helm registry login ghcr.io \
             --username "${{ github.repository_owner }}" \
-            --password "${{ secrets.GITHUB_TOKEN }}"
-          helm push /tmp/chart-dist/*.tgz "oci://ghcr.io/${{ github.repository_owner }}/charts"
+            --password-stdin
+          push_output="$(helm push /tmp/chart-dist/*.tgz "oci://ghcr.io/${{ github.repository_owner }}/charts" 2>&1)"
+          echo "${push_output}"
+          # sign the immutable digest, not the mutable tag
+          digest="$(echo "${push_output}" | awk '/[Dd]igest:/{print $2; exit}')"
+          if [ -z "${digest}" ]; then
+            echo "could not determine the pushed chart digest" >&2
+            exit 1
+          fi
+          cosign sign --yes \
+            "ghcr.io/${{ github.repository_owner }}/charts/nvidia-gpu-exporter@${digest}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish chart to the Helm repository on gh-pages
         run: |
           git config user.name "github-actions[bot]"
@@ -89,12 +201,14 @@ jobs:
             git rm -rfq .
           fi
           cp /tmp/chart-dist/*.tgz .
+          cp /tmp/chart-dist/*.tgz.prov .
           cp /tmp/chart-dist/artifacthub-repo.yml .
+          cp /tmp/chart-dist/pubkey.asc .
           if [ -f index.yaml ]; then
             helm repo index . --url "https://utkuozdemir.github.io/nvidia_gpu_exporter" --merge index.yaml
           else
             helm repo index . --url "https://utkuozdemir.github.io/nvidia_gpu_exporter"
           fi
-          git add ./*.tgz index.yaml artifacthub-repo.yml
+          git add ./*.tgz ./*.tgz.prov index.yaml artifacthub-repo.yml pubkey.asc
           git commit -m "publish chart ${CHART_VERSION} (app ${APP_VERSION})"
           git push origin gh-pages
