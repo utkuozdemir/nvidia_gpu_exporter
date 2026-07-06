@@ -1,11 +1,13 @@
 // fake-nvidia-smi replays a GPU capture, so the exporter can run end to end
 // on a machine without a GPU. The corpus from internal/captures is embedded,
 // making the binary self-contained; --capture takes an embedded capture name
-// or a path to a capture file. Repeat --set field=value to replace a field's
-// value in the replayed output, which lets you drive a state a capture does
-// not contain (a GPU in a bad state, an odd reading, a permission error)
-// without hand-editing a capture. Used by the integration tests, and handy for
-// local development:
+// or a path to a capture file. Repeat --set field=value to pin a field to a
+// value, and --set-range field=min:max to serve a fresh random value in that
+// range on each run, so metrics move. --config file.yaml carries the whole
+// setup (capture, state, per-field overrides, failure injection) instead of
+// flags; because the fake is invoked fresh each scrape, editing the file changes
+// the next scrape with no exporter restart. Used by the integration tests, and
+// handy for local development:
 //
 //	go run ./cmd/fake-nvidia-smi --help-query-gpu
 //	nvidia_gpu_exporter \
