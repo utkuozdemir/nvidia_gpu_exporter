@@ -334,6 +334,19 @@ func TestValueOverrideQuotedSpaces(t *testing.T) {
 	assert.Regexp(t, `nvidia_smi_gpu_info\{[^}]*name="Fake RTX 3090"`, scrape(t, baseURL))
 }
 
+// TestGPURecoveryActionBadState drives gpu_recovery_action to "Reset" with the
+// fake's --set flag, proving a non-zero recovery action flows through the enum
+// transform and out as a metric. No real bad-GPU capture exists, so this is the
+// end-to-end coverage for the unhealthy path the metric exists to catch.
+func TestGPURecoveryActionBadState(t *testing.T) {
+	t.Parallel()
+
+	baseURL := startExporter(t, "--nvidia-smi-command="+
+		fakeCommand(defaultCapture(t), "--set", "gpu_recovery_action=Reset"))
+
+	assert.Regexp(t, `nvidia_smi_gpu_recovery_action\{uuid="[^"]+"\} 1\b`, scrape(t, baseURL))
+}
+
 // TestCachedModeMatchesLive proves background collection serves the same
 // deterministic content as the synchronous mode, pinned by the same expected output file.
 func TestCachedModeMatchesLive(t *testing.T) {
