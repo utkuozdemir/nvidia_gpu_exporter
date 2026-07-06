@@ -311,6 +311,29 @@ func TestComputeAppsDisabled(t *testing.T) {
 	assert.NotContains(t, scrape(t, baseURL), "nvidia_smi_compute_app")
 }
 
+// TestValueOverride proves the fake's --set flag reaches a metric through the
+// exporter's command splitting and collection pipeline, so a test can drive a
+// field's value without a bespoke capture file.
+func TestValueOverride(t *testing.T) {
+	t.Parallel()
+
+	baseURL := startExporter(t, "--nvidia-smi-command="+
+		fakeCommand(defaultCapture(t), "--set", "temperature.gpu=95"))
+
+	assert.Regexp(t, `nvidia_smi_temperature_gpu\{uuid="[^"]+"\} 95\b`, scrape(t, baseURL))
+}
+
+// TestValueOverrideQuotedSpaces proves an override value with spaces survives
+// the exporter's command splitting when quoted, checked on the gpu_info label.
+func TestValueOverrideQuotedSpaces(t *testing.T) {
+	t.Parallel()
+
+	baseURL := startExporter(t, "--nvidia-smi-command="+
+		fakeCommand(defaultCapture(t), "--set", quote("name=Fake RTX 3090")))
+
+	assert.Regexp(t, `nvidia_smi_gpu_info\{[^}]*name="Fake RTX 3090"`, scrape(t, baseURL))
+}
+
 // TestCachedModeMatchesLive proves background collection serves the same
 // deterministic content as the synchronous mode, pinned by the same expected output file.
 func TestCachedModeMatchesLive(t *testing.T) {

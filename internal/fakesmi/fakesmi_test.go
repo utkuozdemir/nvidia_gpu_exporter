@@ -146,6 +146,109 @@ func TestComputeAppsProjection(t *testing.T) {
 	assert.True(t, strings.HasPrefix(cells[0], "GPU-"), "gpu_uuid cell: %q", cells[0])
 }
 
+// TestValueOverride proves --set replaces a field's value in the data rows
+// while leaving the header and un-overridden fields alone.
+func TestValueOverride(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(capturesDir, "linux-x86_64__nvidia-geforce-rtx-2080-super__595.71.05.txt")
+
+	code, stdout, stderr := runFake(t, "--capture", path,
+		"--set", "temperature.gpu=95", "--set", "gpu_recovery_action=Reset",
+		"--query-gpu=name,temperature.gpu,gpu_recovery_action", "--format=csv")
+	require.Equal(t, 0, code, "stderr: %s", stderr)
+
+	lines := strings.Split(strings.TrimSpace(stdout), "\n")
+	require.Len(t, lines, 2)
+
+	// the header names the fields, never the overridden values
+	assert.NotContains(t, lines[0], "95")
+	assert.NotContains(t, lines[0], "Reset")
+
+	cells := strings.Split(lines[1], ", ")
+	require.Len(t, cells, 3)
+	assert.Contains(t, cells[0], "RTX 2080 SUPER", "an un-overridden field must keep its value")
+	assert.Equal(t, "95", cells[1])
+	assert.Equal(t, "Reset", cells[2])
+}
+
+// TestValueOverrideLastWins proves a repeated field takes the last value.
+func TestValueOverrideLastWins(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(capturesDir, "linux-x86_64__nvidia-geforce-rtx-2080-super__595.71.05.txt")
+
+	code, stdout, stderr := runFake(t, "--capture", path,
+		"--set", "temperature.gpu=10", "--set", "temperature.gpu=20",
+		"--query-gpu=temperature.gpu", "--format=csv")
+	require.Equal(t, 0, code, "stderr: %s", stderr)
+
+	lines := strings.Split(strings.TrimSpace(stdout), "\n")
+	require.Len(t, lines, 2)
+	assert.Equal(t, "20", lines[1])
+}
+
+// TestValueOverrideInvalid proves malformed --set values are rejected, in
+// particular a comma or any line break (which would corrupt the CSV).
+func TestValueOverrideInvalid(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(capturesDir, "linux-x86_64__nvidia-geforce-rtx-2080-super__595.71.05.txt")
+
+	for _, bad := range []string{"noequalsign", "=emptyfield", "process_name=a,b", "x=a\nb", "x=a\rb"} {
+		code, _, stderr := runFake(t, "--capture", path, "--set", bad, "-L")
+		assert.Equalf(t, 2, code, "--set %q should be rejected", bad)
+		assert.NotEmpty(t, stderr)
+	}
+}
+
+// TestValueOverrideForms proves the --set=field=value form and an empty value
+// are accepted, and that overriding a field not in the query is a no-op.
+func TestValueOverrideForms(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(capturesDir, "linux-x86_64__nvidia-geforce-rtx-2080-super__595.71.05.txt")
+
+	// the --set=field=value form, plus an empty value, plus an override for a
+	// field that is not requested (which must not affect the output)
+	code, stdout, stderr := runFake(t, "--capture", path,
+		"--set=temperature.gpu=", "--set", "not_requested_field=zzz",
+		"--query-gpu=name,temperature.gpu", "--format=csv")
+	require.Equal(t, 0, code, "stderr: %s", stderr)
+
+	// TrimRight only the trailing newline, so the empty last cell's space survives
+	lines := strings.Split(strings.TrimRight(stdout, "\n"), "\n")
+	require.Len(t, lines, 2)
+
+	cells := strings.Split(lines[1], ", ")
+	require.Len(t, cells, 2)
+	assert.Contains(t, cells[0], "RTX 2080 SUPER", "the un-overridden name must survive")
+	assert.Empty(t, cells[1], "an empty override value must produce an empty cell")
+}
+
+// TestValueOverrideFreeTextAndRows proves an override replaces the free-text
+// process_name column (which splitRow reconstructs from its own commas first)
+// and applies to every data row, not just the first.
+func TestValueOverrideFreeTextAndRows(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(capturesDir, "linux-x86_64__nvidia-l40s__595.80.txt")
+
+	code, stdout, stderr := runFake(t, "--capture", path, "--state", "load",
+		"--set", "process_name=overridden",
+		"--query-compute-apps=pid,process_name,used_gpu_memory", "--format=csv")
+	require.Equal(t, 0, code, "stderr: %s", stderr)
+
+	lines := strings.Split(strings.TrimSpace(stdout), "\n")
+	require.Greater(t, len(lines), 1, "the load state should have at least one process")
+
+	for _, line := range lines[1:] {
+		cells := strings.Split(line, ", ")
+		require.Len(t, cells, 3)
+		assert.Equal(t, "overridden", cells[1])
+	}
+}
+
 func TestUnknownFieldRejected(t *testing.T) {
 	t.Parallel()
 

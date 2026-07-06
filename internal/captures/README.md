@@ -159,3 +159,7 @@ Beyond that:
 - Test field auto-detection against the `--help-query-gpu` sections of many
   drivers at once.
 - Diff the same command across two captures to spot field renames or format drift.
+- Drive a value a capture does not contain with `--set field=value` (repeatable),
+  for example `--set gpu_recovery_action=Reset` or `--set temperature.gpu=95`, to
+  exercise a bad GPU or an edge reading without editing a capture. Quote a value
+  with spaces, and note that a value cannot contain a comma or a line break.

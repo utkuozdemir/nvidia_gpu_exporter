@@ -18,8 +18,10 @@ var errEmptySection = errors.New("section body has no header row")
 // project answers a CSV query for the requested comma-separated fields from a
 // recorded section: the field list recorded in the section's own command line
 // maps field names to CSV columns, and the output carries the requested
-// columns, in the requested order, for the header and every row.
-func project(section *capture.Section, requestRaw string) (string, error) {
+// columns, in the requested order, for the header and every row. When overrides
+// are given, a data row's cell for a named field is replaced before projection,
+// so tests can drive values a real capture does not contain.
+func project(section *capture.Section, requestRaw string, overrides map[string]string) (string, error) {
 	recorded, err := recordedFields(section.Command)
 	if err != nil {
 		return "", err
@@ -43,26 +45,59 @@ func project(section *capture.Section, requestRaw string) (string, error) {
 	output := make([]string, 0, len(lines))
 
 	for lineNum, line := range lines {
-		// the header row never contains free-text cells, row lines may
-		freeTextColumn := -1
-		if column, hasFreeText := columnOf[freeTextField]; hasFreeText && lineNum > 0 {
-			freeTextColumn = column
-		}
-
-		cells, err := splitRow(line, len(recorded), freeTextColumn)
+		row, err := projectRow(line, lineNum, recorded, columnOf, columns, overrides)
 		if err != nil {
 			return "", fmt.Errorf("row %d: %w", lineNum+1, err)
 		}
 
-		projected := make([]string, 0, len(columns))
-		for _, column := range columns {
-			projected = append(projected, cells[column])
-		}
-
-		output = append(output, strings.Join(projected, ", "))
+		output = append(output, row)
 	}
 
 	return strings.Join(output, "\n"), nil
+}
+
+// projectRow splits one CSV line, applies data-row overrides, and returns the
+// requested columns joined back together. The header (lineNum 0) is never
+// overridden and has no free-text cells.
+func projectRow(
+	line string,
+	lineNum int,
+	recorded []string,
+	columnOf map[string]int,
+	columns []int,
+	overrides map[string]string,
+) (string, error) {
+	freeTextColumn := -1
+	if column, hasFreeText := columnOf[freeTextField]; hasFreeText && lineNum > 0 {
+		freeTextColumn = column
+	}
+
+	cells, err := splitRow(line, len(recorded), freeTextColumn)
+	if err != nil {
+		return "", err
+	}
+
+	if lineNum > 0 {
+		applyOverrides(cells, recorded, overrides)
+	}
+
+	projected := make([]string, 0, len(columns))
+	for _, column := range columns {
+		projected = append(projected, cells[column])
+	}
+
+	return strings.Join(projected, ", "), nil
+}
+
+// applyOverrides replaces the cell of every field named in overrides with the
+// given value, keyed by the recorded field order. Fields not named are left as
+// recorded, and an override for a field absent from this section is ignored.
+func applyOverrides(cells, recorded []string, overrides map[string]string) {
+	for column, name := range recorded {
+		if value, ok := overrides[name]; ok {
+			cells[column] = value
+		}
+	}
 }
 
 // requestedColumns resolves a requested comma-separated field list to column

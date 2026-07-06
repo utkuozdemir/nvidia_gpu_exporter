@@ -41,6 +41,10 @@ type config struct {
 	delay       time.Duration
 	exitCode    int
 	exitSet     bool
+	// overrides replaces a query field's value in every data row, keyed by the
+	// field name. It lets a test drive a state a real capture does not contain
+	// (a bad GPU, an edge value, a permission error) without a new capture file.
+	overrides map[string]string
 }
 
 // Run executes the fake: it parses the fake's own leading flags, loads the
@@ -77,7 +81,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return usageExitCode
 	}
 
-	return answer(capt, cfg.state, rest, stdout, stderr)
+	return answer(capt, cfg.state, cfg.overrides, rest, stdout, stderr)
 }
 
 // loadCapture resolves the --capture value: a path (anything with a path
@@ -125,7 +129,7 @@ func parseFlags(args []string) (config, []string, error) {
 		name, value, hasValue := strings.Cut(args[0], "=")
 
 		switch name {
-		case "--capture", "--state", "--stderr-msg", "--fail-arg", "--exit", "--delay":
+		case "--capture", "--state", "--stderr-msg", "--fail-arg", "--exit", "--delay", "--set":
 		default:
 			return cfg, args, nil
 		}
@@ -161,10 +165,37 @@ func parseFlags(args []string) (config, []string, error) {
 			if cfg.delay, err = time.ParseDuration(value); err != nil {
 				return cfg, nil, fmt.Errorf("invalid --delay value %q: %w", value, err)
 			}
+		case "--set":
+			if err = addOverride(&cfg, value); err != nil {
+				return cfg, nil, err
+			}
 		}
 	}
 
 	return cfg, nil, nil
+}
+
+// addOverride records one --set field=value pair. A comma or newline in the
+// value is rejected because it would corrupt the CSV row the exporter splits on
+// commas; the field name must be non-empty; the value may be empty; and a
+// repeated field takes the last value.
+func addOverride(cfg *config, raw string) error {
+	field, value, ok := strings.Cut(raw, "=")
+	if !ok || field == "" {
+		return fmt.Errorf("invalid --set %q, want field=value", raw)
+	}
+
+	if strings.ContainsAny(value, ",\r\n") {
+		return fmt.Errorf("invalid --set value for %q: must not contain a comma or newline", field)
+	}
+
+	if cfg.overrides == nil {
+		cfg.overrides = make(map[string]string)
+	}
+
+	cfg.overrides[field] = value
+
+	return nil
 }
 
 // failMatching implements the selective failure injection: when an argument
@@ -195,7 +226,13 @@ func failMatching(cfg config, args []string, stderr io.Writer) bool {
 // answer serves the nvidia-smi invocation in args from the capture: the two
 // CSV queries by column projection, anything else by verbatim replay of the
 // section recorded for the same command line.
-func answer(capt *capture.Capture, state string, args []string, stdout, stderr io.Writer) int {
+func answer(
+	capt *capture.Capture,
+	state string,
+	overrides map[string]string,
+	args []string,
+	stdout, stderr io.Writer,
+) int {
 	if request, sectionLabel, isQuery := queryRequest(args); isQuery {
 		section := capt.Find(state, sectionLabel)
 		if section == nil {
@@ -205,7 +242,7 @@ func answer(capt *capture.Capture, state string, args []string, stdout, stderr i
 			return usageExitCode
 		}
 
-		output, err := project(section, request)
+		output, err := project(section, request, overrides)
 		if err != nil {
 			// the real nvidia-smi reports a rejected query on stdout
 			fmt.Fprintln(stdout, err)
