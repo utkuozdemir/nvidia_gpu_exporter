@@ -43,10 +43,10 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3.10.1
+        uses: sigstore/cosign-installer@v4.1.2
         with:
           # renovate: depName=sigstore/cosign datasource=github-releases
-          cosign-release: v2.6.3
+          cosign-release: v3.1.1
       - name: Import the signing key
         # no xtrace: this step handles the private key
         shell: bash --noprofile --norc -euo pipefail {0}
@@ -115,10 +115,10 @@ jobs:
           echo "APP_VERSION=${app_version}" >>"${GITHUB_ENV}"
           echo "CHART_VERSION=${chart_version}" >>"${GITHUB_ENV}"
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3.10.1
+        uses: sigstore/cosign-installer@v4.1.2
         with:
           # renovate: depName=sigstore/cosign datasource=github-releases
-          cosign-release: v2.6.3
+          cosign-release: v3.1.1
       - name: Log in to GHCR
         # before importing the key, so no third-party action runs while the
         # private key material is present on disk
