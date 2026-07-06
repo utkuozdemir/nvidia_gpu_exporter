@@ -30,8 +30,14 @@ const (
 	computeCapQField         QField = "compute_cap"
 	pciSubDeviceIDQField     QField = "pci.sub_device_id"
 	indexQField              QField = "index"
-	qFieldsAuto                     = "AUTO"
-	DefaultQField                   = qFieldsAuto
+
+	// Enum-valued fields whose string values are mapped to their native NVML
+	// enum integers (see fieldValueMappers in transform.go).
+	gpuRecoveryActionQField QField = "gpu_recovery_action"
+	fabricStateQField       QField = "fabric.state"
+
+	qFieldsAuto   = "AUTO"
+	DefaultQField = qFieldsAuto
 )
 
 var (

@@ -5,6 +5,38 @@ This is an example output of the returned metrics.
 Note that when `AUTO` query fields mode is used (it is the default),
 the exporter will discover new fields and expose them on a best-effort basis.
 
+## Enum-valued metrics
+
+Many `nvidia-smi` fields report a state rather than a number. The exporter maps
+those to a number so they can be scraped. A field that is unavailable, reading a
+value like `N/A`, `[Not Supported]` or `[Insufficient Permissions]`, is not
+exported. A value that is present but not recognized (an unexpected or brand-new
+state) is also skipped rather than guessed, and is logged so the gap is visible.
+
+Two-state fields become `1`/`0`. This covers every field whose value is
+`Enabled`/`Disabled`, `Yes`/`No`, or `Active`/`Not Active`, for example
+`persistence_mode`, `accounting.mode`, `display_mode`, `display_active`,
+`ecc.mode.current`/`.pending`, `mig.mode.current`/`.pending`,
+`gsp.mode.current`/`.default`, `c2c.mode`, `remapped_rows.failure`/`.pending`,
+and every `clocks_event_reasons.*` throttle flag (`gpu_idle`, `hw_slowdown`,
+`sw_power_cap`, and so on). Which fields appear depends on the GPU and driver,
+because query fields are auto-discovered.
+
+Multi-state fields carry the state as their integer value:
+
+- `nvidia_smi_pstate`: the performance state, `0` (`P0`, maximum performance)
+  through `15` (`P15`, minimum). Lower means busier, so this is not a load gauge.
+- `nvidia_smi_gpu_recovery_action`: `0` None (healthy), `1` GPU Reset,
+  `2` Node Reboot, `3` Drain P2P, `4` Drain and Reset. A value `> 0` means the
+  driver recommends a recovery action, so it is a good "GPU is unhealthy" alert.
+- `nvidia_smi_fabric_state`: `0` Not Supported, `1` Not Started, `2` In Progress,
+  `3` Completed. Only present on GPUs that join an NVLink fabric.
+- `nvidia_smi_compute_mode`: `0` Default, `1` Exclusive Thread, `2` Prohibited,
+  `3` Exclusive Process.
+
+The last three map to their native NVML enum integer; `pstate` is the raw
+performance-state number.
+
 ```text
 # HELP go_gc_duration_seconds A summary of the pause duration of garbage collection cycles.
 # TYPE go_gc_duration_seconds summary

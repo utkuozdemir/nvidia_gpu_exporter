@@ -2,6 +2,7 @@ package exporter
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -339,10 +340,21 @@ func (e *GPUExporter) renderRow(metricCh chan<- prometheus.Metric, row nvidiasmi
 	for _, currentCell := range row.Cells {
 		metricInfo := e.qFieldToMetricInfoMap[currentCell.QField]
 
-		num, numErr := nvidiasmi.TransformRawValue(currentCell.RawValue, metricInfo.ValueMultiplier)
+		num, numErr := nvidiasmi.TransformFieldValue(
+			currentCell.QField, currentCell.RawValue, metricInfo.ValueMultiplier)
 		if numErr != nil {
-			e.logger.Debug("failed to transform raw value", "err", numErr, "query_field_name",
-				currentCell.QField, "raw_value", currentCell.RawValue)
+			switch {
+			case errors.Is(numErr, nvidiasmi.ErrAbsentValue):
+				// expected unavailable reading (e.g. an unsupported field), skip quietly
+			case nvidiasmi.IsEnumMappedField(currentCell.QField):
+				// an enum field returned a value we do not map: never guess a number,
+				// but surface it so a new/unexpected state is not silently invisible
+				e.logger.Warn("skipping metric: unrecognized enum value", "query_field_name",
+					currentCell.QField, "raw_value", currentCell.RawValue)
+			default:
+				e.logger.Debug("failed to transform raw value", "err", numErr, "query_field_name",
+					currentCell.QField, "raw_value", currentCell.RawValue)
+			}
 
 			continue
 		}
