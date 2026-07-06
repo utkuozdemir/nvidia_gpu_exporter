@@ -21,7 +21,7 @@ var errEmptySection = errors.New("section body has no header row")
 // columns, in the requested order, for the header and every row. When overrides
 // are given, a data row's cell for a named field is replaced before projection,
 // so tests can drive values a real capture does not contain.
-func project(section *capture.Section, requestRaw string, overrides map[string]string) (string, error) {
+func project(section *capture.Section, requestRaw string, overrides map[string]valueGen) (string, error) {
 	recorded, err := recordedFields(section.Command)
 	if err != nil {
 		return "", err
@@ -65,7 +65,7 @@ func projectRow(
 	recorded []string,
 	columnOf map[string]int,
 	columns []int,
-	overrides map[string]string,
+	overrides map[string]valueGen,
 ) (string, error) {
 	freeTextColumn := -1
 	if column, hasFreeText := columnOf[freeTextField]; hasFreeText && lineNum > 0 {
@@ -92,10 +92,10 @@ func projectRow(
 // applyOverrides replaces the cell of every field named in overrides with the
 // given value, keyed by the recorded field order. Fields not named are left as
 // recorded, and an override for a field absent from this section is ignored.
-func applyOverrides(cells, recorded []string, overrides map[string]string) {
+func applyOverrides(cells, recorded []string, overrides map[string]valueGen) {
 	for column, name := range recorded {
-		if value, ok := overrides[name]; ok {
-			cells[column] = value
+		if gen, ok := overrides[name]; ok {
+			cells[column] = gen()
 		}
 	}
 }

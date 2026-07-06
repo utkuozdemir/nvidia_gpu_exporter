@@ -7,6 +7,7 @@
 package fakesmi
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -42,9 +43,10 @@ type config struct {
 	exitCode    int
 	exitSet     bool
 	// overrides replaces a query field's value in every data row, keyed by the
-	// field name. It lets a test drive a state a real capture does not contain
-	// (a bad GPU, an edge value, a permission error) without a new capture file.
-	overrides map[string]string
+	// field name, with a generator (a fixed value from --set, or a fresh random
+	// draw from --set-range). It lets a run drive a state a real capture does not
+	// contain, or make values move, without a new capture file.
+	overrides map[string]valueGen
 }
 
 // Run executes the fake: it parses the fake's own leading flags, loads the
@@ -118,84 +120,248 @@ func loadCapture(value string) (*capture.Capture, error) {
 	return parsed, nil
 }
 
-// parseFlags consumes the fake's own flags from the front of args, returning
-// the remaining arguments, which form the nvidia-smi invocation to replay.
-//
-//nolint:cyclop
+// rawFlags holds the leading flags as given, before a --config base is loaded
+// and merged. The *Set bools record which fields a flag set, so a flag wins over
+// the config regardless of where --config sits in the arguments.
+type rawFlags struct {
+	capturePath string
+	captureSet  bool
+	state       string
+	stateSet    bool
+	stderrMsg   string
+	stderrSet   bool
+	failArg     string
+	failSet     bool
+	exitCode    int
+	exitSet     bool
+	delay       time.Duration
+	delaySet    bool
+	configPath  string
+	seed        int64
+	seedSet     bool
+	ops         []rawOverride // --set and --set-range, in argument order
+}
+
+// parseFlags consumes the fake's own flags from the front of args, then resolves
+// them against an optional --config base, returning the remaining arguments,
+// which form the nvidia-smi invocation to replay.
 func parseFlags(args []string) (config, []string, error) {
-	cfg := config{capturePath: captures.Default, state: DefaultState}
+	var raw rawFlags
 
 	for len(args) > 0 {
 		name, value, hasValue := strings.Cut(args[0], "=")
 
 		switch name {
-		case "--capture", "--state", "--stderr-msg", "--fail-arg", "--exit", "--delay", "--set":
+		case "--capture", "--state", "--stderr-msg", "--fail-arg", "--exit", "--delay",
+			"--set", "--set-range", "--config", "--seed":
 		default:
-			return cfg, args, nil
+			return resolve(raw, args)
 		}
 
 		args = args[1:]
 
 		if !hasValue {
 			if len(args) == 0 {
-				return cfg, nil, fmt.Errorf("flag %s needs a value", name)
+				return config{}, nil, fmt.Errorf("flag %s needs a value", name)
 			}
 
 			value, args = args[0], args[1:]
 		}
 
-		var err error
-
-		switch name {
-		case "--capture":
-			cfg.capturePath = value
-		case "--state":
-			cfg.state = value
-		case "--stderr-msg":
-			cfg.stderrMsg = value
-		case "--fail-arg":
-			cfg.failArg = value
-		case "--exit":
-			cfg.exitSet = true
-
-			if cfg.exitCode, err = strconv.Atoi(value); err != nil {
-				return cfg, nil, fmt.Errorf("invalid --exit value %q: %w", value, err)
-			}
-		case "--delay":
-			if cfg.delay, err = time.ParseDuration(value); err != nil {
-				return cfg, nil, fmt.Errorf("invalid --delay value %q: %w", value, err)
-			}
-		case "--set":
-			if err = addOverride(&cfg, value); err != nil {
-				return cfg, nil, err
-			}
+		if err := applyFlag(&raw, name, value); err != nil {
+			return config{}, nil, err
 		}
 	}
 
-	return cfg, nil, nil
+	return resolve(raw, nil)
 }
 
-// addOverride records one --set field=value pair. A comma or newline in the
-// value is rejected because it would corrupt the CSV row the exporter splits on
-// commas; the field name must be non-empty; the value may be empty; and a
-// repeated field takes the last value.
-func addOverride(cfg *config, raw string) error {
-	field, value, ok := strings.Cut(raw, "=")
-	if !ok || field == "" {
-		return fmt.Errorf("invalid --set %q, want field=value", raw)
-	}
+// applyFlag records a single parsed flag into raw.
+//
+//nolint:cyclop
+func applyFlag(raw *rawFlags, name, value string) error {
+	switch name {
+	case "--capture":
+		raw.capturePath, raw.captureSet = value, true
+	case "--state":
+		raw.state, raw.stateSet = value, true
+	case "--stderr-msg":
+		raw.stderrMsg, raw.stderrSet = value, true
+	case "--fail-arg":
+		raw.failArg, raw.failSet = value, true
+	case "--exit":
+		code, err := strconv.Atoi(value)
+		if err != nil {
+			return fmt.Errorf("invalid --exit value %q: %w", value, err)
+		}
 
-	if strings.ContainsAny(value, ",\r\n") {
-		return fmt.Errorf("invalid --set value for %q: must not contain a comma or newline", field)
-	}
+		raw.exitCode, raw.exitSet = code, true
+	case "--delay":
+		d, err := time.ParseDuration(value)
+		if err != nil {
+			return fmt.Errorf("invalid --delay value %q: %w", value, err)
+		}
 
-	if cfg.overrides == nil {
-		cfg.overrides = make(map[string]string)
-	}
+		raw.delay, raw.delaySet = d, true
+	case "--config":
+		if value == "" {
+			return errors.New("--config needs a path")
+		}
 
-	cfg.overrides[field] = value
+		raw.configPath = value
+	case "--seed":
+		s, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid --seed value %q: %w", value, err)
+		}
+
+		raw.seed, raw.seedSet = s, true
+	case "--set":
+		op, err := parseSetFlag(value)
+		if err != nil {
+			return err
+		}
+
+		raw.ops = append(raw.ops, op)
+	case "--set-range":
+		op, err := parseSetRangeFlag(value)
+		if err != nil {
+			return err
+		}
+
+		raw.ops = append(raw.ops, op)
+	}
 
 	return nil
+}
+
+// resolve merges the parsed flags with an optional --config base into the final
+// config: the config supplies defaults, and any flag-set value wins per field.
+func resolve(raw rawFlags, rest []string) (config, []string, error) {
+	cfg := config{capturePath: captures.Default, state: DefaultState}
+
+	var fc *fileConfig
+
+	if raw.configPath != "" {
+		loaded, err := loadFileConfig(raw.configPath)
+		if err != nil {
+			return config{}, nil, err
+		}
+
+		fc = loaded
+	}
+
+	mergeBaseSettings(&cfg, raw, fc)
+
+	if err := mergeFailureSettings(&cfg, raw, fc); err != nil {
+		return config{}, nil, err
+	}
+
+	seed := time.Now().UnixNano()
+
+	switch {
+	case raw.seedSet:
+		seed = raw.seed
+	case fc != nil && fc.Seed != nil:
+		seed = *fc.Seed
+	}
+
+	overrides, err := buildOverrides(fc, raw.ops, seed)
+	if err != nil {
+		return config{}, nil, err
+	}
+
+	cfg.overrides = overrides
+
+	return cfg, rest, nil
+}
+
+// mergeBaseSettings applies capture and state, preferring a flag over the
+// config over the default.
+func mergeBaseSettings(cfg *config, raw rawFlags, fc *fileConfig) {
+	switch {
+	case raw.captureSet:
+		cfg.capturePath = raw.capturePath
+	case fc != nil && fc.Capture != "":
+		cfg.capturePath = fc.Capture
+	}
+
+	switch {
+	case raw.stateSet:
+		cfg.state = raw.state
+	case fc != nil && fc.State != "":
+		cfg.state = fc.State
+	}
+}
+
+// mergeFailureSettings applies the failure-injection settings, preferring a flag
+// over the config.
+//
+//nolint:cyclop // a flat flag-over-config merge, one branch per setting
+func mergeFailureSettings(cfg *config, raw rawFlags, fc *fileConfig) error {
+	switch {
+	case raw.stderrSet:
+		cfg.stderrMsg = raw.stderrMsg
+	case fc != nil && fc.StderrMsg != "":
+		cfg.stderrMsg = fc.StderrMsg
+	}
+
+	switch {
+	case raw.failSet:
+		cfg.failArg = raw.failArg
+	case fc != nil && fc.FailArg != "":
+		cfg.failArg = fc.FailArg
+	}
+
+	switch {
+	case raw.exitSet:
+		cfg.exitCode, cfg.exitSet = raw.exitCode, true
+	case fc != nil && fc.Exit != nil:
+		cfg.exitCode, cfg.exitSet = *fc.Exit, true
+	}
+
+	switch {
+	case raw.delaySet:
+		cfg.delay = raw.delay
+	case fc != nil && fc.Delay != "":
+		d, err := time.ParseDuration(fc.Delay)
+		if err != nil {
+			return fmt.Errorf("invalid config delay %q: %w", fc.Delay, err)
+		}
+
+		cfg.delay = d
+	}
+
+	return nil
+}
+
+// parseSetFlag parses one --set field=value into a fixed override.
+func parseSetFlag(raw string) (rawOverride, error) {
+	field, value, ok := strings.Cut(raw, "=")
+	if !ok || field == "" {
+		return rawOverride{}, fmt.Errorf("invalid --set %q, want field=value", raw)
+	}
+
+	if err := validateSetValue(field, value); err != nil {
+		return rawOverride{}, err
+	}
+
+	return rawOverride{field: field, fixed: &value}, nil
+}
+
+// parseSetRangeFlag parses one --set-range field=min:max into a range override.
+func parseSetRangeFlag(raw string) (rawOverride, error) {
+	field, rangeRaw, ok := strings.Cut(raw, "=")
+	if !ok || field == "" {
+		return rawOverride{}, fmt.Errorf("invalid --set-range %q, want field=min:max", raw)
+	}
+
+	spec, err := parseRange(field, rangeRaw)
+	if err != nil {
+		return rawOverride{}, err
+	}
+
+	return rawOverride{field: field, rng: &spec}, nil
 }
 
 // failMatching implements the selective failure injection: when an argument
@@ -229,7 +395,7 @@ func failMatching(cfg config, args []string, stderr io.Writer) bool {
 func answer(
 	capt *capture.Capture,
 	state string,
-	overrides map[string]string,
+	overrides map[string]valueGen,
 	args []string,
 	stdout, stderr io.Writer,
 ) int {

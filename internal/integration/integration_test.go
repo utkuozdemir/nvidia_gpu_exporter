@@ -11,7 +11,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -332,6 +334,37 @@ func TestValueOverrideQuotedSpaces(t *testing.T) {
 		fakeCommand(defaultCapture(t), "--set", quote("name=Fake RTX 3090")))
 
 	assert.Regexp(t, `nvidia_smi_gpu_info\{[^}]*name="Fake RTX 3090"`, scrape(t, baseURL))
+}
+
+// TestValueRange proves --set-range flows through to a metric within its bounds.
+func TestValueRange(t *testing.T) {
+	t.Parallel()
+
+	baseURL := startExporter(t, "--nvidia-smi-command="+
+		fakeCommand(defaultCapture(t), "--seed", "1", "--set-range", "temperature.gpu=90:95"))
+
+	match := regexp.MustCompile(`nvidia_smi_temperature_gpu\{uuid="[^"]+"\} (\d+(?:\.\d+)?)`).
+		FindStringSubmatch(scrape(t, baseURL))
+	require.NotNil(t, match)
+
+	v, err := strconv.ParseFloat(match[1], 64)
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, v, 90.0)
+	assert.LessOrEqual(t, v, 95.0)
+}
+
+// TestConfigFile proves a --config yaml drives the capture and a fixed override
+// with no --capture flag, so the whole setup can live in the file.
+func TestConfigFile(t *testing.T) {
+	t.Parallel()
+
+	cfgPath := filepath.Join(t.TempDir(), "fake.yaml")
+	body := "capture: " + captures.Default + "\noverrides:\n  temperature.gpu: {value: \"88\"}\n"
+	require.NoError(t, os.WriteFile(cfgPath, []byte(body), 0o600))
+
+	baseURL := startExporter(t, "--nvidia-smi-command="+quote(fakeBin)+" --config "+quote(cfgPath))
+
+	assert.Regexp(t, `nvidia_smi_temperature_gpu\{uuid="[^"]+"\} 88\b`, scrape(t, baseURL))
 }
 
 // TestGPURecoveryActionBadState drives gpu_recovery_action to "Reset" with the

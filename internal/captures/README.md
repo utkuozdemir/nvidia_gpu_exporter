@@ -163,3 +163,20 @@ Beyond that:
   for example `--set gpu_recovery_action=Reset` or `--set temperature.gpu=95`, to
   exercise a bad GPU or an edge reading without editing a capture. Quote a value
   with spaces, and note that a value cannot contain a comma or a line break.
+- Make values move with `--set-range field=min:max` (repeatable), which serves a
+  fresh random value in the range on each run, so timeseries and gauges are not
+  flat. Add `--seed N` for reproducible values.
+- Put the whole setup in a file with `--config file.yaml` instead of flags:
+
+  ```yaml
+  capture: linux-x86_64__nvidia-h200__590.48.01
+  state: load
+  overrides:
+    gpu_recovery_action: Reset            # a fixed value
+    temperature.gpu: {min: 60, max: 85}   # a random range
+  ```
+
+  Each field is either a fixed value (a scalar, or `value: ...`) or a range
+  (`min` and `max`). A flag overrides the config for the same field. Because the
+  fake is invoked fresh each scrape, editing the file changes the next scrape
+  with no exporter restart (in cached mode, the next collection).
