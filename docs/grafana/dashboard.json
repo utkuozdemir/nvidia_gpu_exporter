@@ -1,22 +1,6 @@
 {
-  "__inputs": [
-    {
-      "name": "DS_PROMETHEUS",
-      "label": "Prometheus",
-      "description": "",
-      "type": "datasource",
-      "pluginId": "prometheus",
-      "pluginName": "Prometheus"
-    }
-  ],
   "__elements": {},
   "__requires": [
-    {
-      "type": "panel",
-      "id": "bargauge",
-      "name": "Bar gauge",
-      "version": ""
-    },
     {
       "type": "panel",
       "id": "gauge",
@@ -43,6 +27,18 @@
     },
     {
       "type": "panel",
+      "id": "state-timeline",
+      "name": "State timeline",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "table",
+      "name": "Table",
+      "version": ""
+    },
+    {
+      "type": "panel",
       "id": "timeseries",
       "name": "Time series",
       "version": ""
@@ -65,7 +61,7 @@
     ]
   },
   "description": "Nvidia GPU Metrics based on the prometheus metrics from github.com/utkuozdemir/nvidia_gpu_exporter",
-  "editable": true,
+  "editable": false,
   "fiscalYearStartMonth": 0,
   "gnetId": 14574,
   "graphTooltip": 0,
@@ -75,92 +71,46 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${datasource}"
       },
-      "description": "The official product name of the GPU. This is an alphanumeric string. For all products.",
+      "description": "Recovery action the driver recommends for this GPU. Healthy means none. Color reflects how disruptive the action is: Drain P2P degrades peer-to-peer but keeps computing, GPU Reset interrupts workloads, Node Reboot and Drain & Reset are the heaviest. Requires a recent driver, older drivers do not report this.",
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
-          },
-          "decimals": 2,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 3,
-        "w": 4,
-        "x": 0,
-        "y": 0
-      },
-      "id": 23,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "last"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "text": {},
-        "textMode": "name",
-        "wideLayout": true
-      },
-      "pluginVersion": "11.2.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "exemplar": true,
-          "expr": "nvidia_smi_gpu_info{uuid=\"$gpu\"}",
-          "instant": true,
-          "interval": "",
-          "legendFormat": "{{name}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Name",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "The current performance state for the GPU. States range from P0 (maximum performance) to P12 (minimum performance).",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
+            "mode": "fixed",
+            "fixedColor": "text"
           },
           "decimals": 0,
           "mappings": [
             {
+              "type": "value",
               "options": {
-                "": {
-                  "text": ""
+                "0": {
+                  "text": "Healthy",
+                  "color": "#56A64B",
+                  "index": 0
+                },
+                "1": {
+                  "text": "GPU Reset",
+                  "color": "#FF9830",
+                  "index": 1
+                },
+                "2": {
+                  "text": "Node Reboot",
+                  "color": "#E02F44",
+                  "index": 2
+                },
+                "3": {
+                  "text": "Drain P2P",
+                  "color": "#F2CC0C",
+                  "index": 3
+                },
+                "4": {
+                  "text": "Drain & Reset",
+                  "color": "#E02F44",
+                  "index": 4
                 }
-              },
-              "type": "value"
+              }
             }
           ],
           "thresholds": {
@@ -172,19 +122,20 @@
               }
             ]
           },
-          "unit": "prefix:P"
+          "unit": "",
+          "noValue": "Not reported by driver"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 3,
-        "w": 2,
-        "x": 4,
+        "w": 8,
+        "x": 0,
         "y": 0
       },
-      "id": 22,
+      "id": 35,
       "options": {
-        "colorMode": "value",
+        "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "auto",
         "orientation": "auto",
@@ -206,10 +157,363 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "nvidia_smi_gpu_recovery_action{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Recovery Action",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Number of performance-limiting throttle reasons currently active: power cap, SW/HW thermal slowdown, HW power brake. Idle and configuration states (application clocks, sync boost) are not counted, and a flag the driver does not report counts as inactive. See the Throttle Reasons history panel for which reason and when.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          },
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "None",
+                  "color": "#56A64B",
+                  "index": 0
+                },
+                "1": {
+                  "text": "1 reason active",
+                  "color": "#FF9830",
+                  "index": 1
+                },
+                "2": {
+                  "text": "2 reasons active",
+                  "color": "#FF9830",
+                  "index": 2
+                },
+                "3": {
+                  "text": "3 reasons active",
+                  "color": "#E02F44",
+                  "index": 3
+                },
+                "4": {
+                  "text": "4 reasons active",
+                  "color": "#E02F44",
+                  "index": 4
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "",
+          "noValue": "Not reported"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 8,
+        "x": 8,
+        "y": 0
+      },
+      "id": 40,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "text": {},
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.2.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "(sum by(uuid) (nvidia_smi_clocks_event_reasons_sw_power_cap{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} or nvidia_smi_clocks_throttle_reasons_sw_power_cap{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}) or (sum by(uuid) (nvidia_smi_gpu_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}) * 0)) + (sum by(uuid) (nvidia_smi_clocks_event_reasons_sw_thermal_slowdown{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} or nvidia_smi_clocks_throttle_reasons_sw_thermal_slowdown{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}) or (sum by(uuid) (nvidia_smi_gpu_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}) * 0)) + (sum by(uuid) (nvidia_smi_clocks_event_reasons_hw_thermal_slowdown{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} or nvidia_smi_clocks_throttle_reasons_hw_thermal_slowdown{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}) or (sum by(uuid) (nvidia_smi_gpu_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}) * 0)) + (sum by(uuid) (nvidia_smi_clocks_event_reasons_hw_power_brake_slowdown{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} or nvidia_smi_clocks_throttle_reasons_hw_power_brake_slowdown{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}) or (sum by(uuid) (nvidia_smi_gpu_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}) * 0))",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "title": "Throttling",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Lifetime uncorrected ECC error count. Uses the aggregate total when the driver reports one, otherwise the sum of all reported aggregate uncorrected counters (some GPUs report subcounters without a total). Any value above zero means the GPU memory has produced uncorrectable errors and the card needs attention. Shows 'No ECC reported' when the driver reports no uncorrected-error counters at all (most GeForce cards).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          },
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "None",
+                  "color": "#56A64B",
+                  "index": 0
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#6E7B8B",
+                "value": null
+              },
+              {
+                "color": "#E02F44",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "",
+          "noValue": "No ECC reported"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "id": 41,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "text": {},
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.2.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by(uuid) (nvidia_smi_ecc_errors_uncorrected_aggregate_total{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}) or sum by(uuid) ({__name__=~\"nvidia_smi_ecc_errors_uncorrected_aggregate_.+\", uuid=\"$gpu\", instance=\"$node\", job=\"$job\"})",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "title": "ECC Errors (uncorrected)",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 3
+      },
+      "id": 49,
+      "panels": [],
+      "title": "Overview",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Current performance state, P0 (maximum performance) to P15 (minimum). Lower P means busier. Vivid blue = working hard, pale blue = idle. This is operational state, not a health signal.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          },
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "P0 \u00b7 Max perf",
+                  "color": "#2B62D9",
+                  "index": 0
+                },
+                "1": {
+                  "text": "P1",
+                  "color": "#2B62D9",
+                  "index": 1
+                },
+                "2": {
+                  "text": "P2",
+                  "color": "#4880E0",
+                  "index": 2
+                },
+                "3": {
+                  "text": "P3",
+                  "color": "#4880E0",
+                  "index": 3
+                },
+                "4": {
+                  "text": "P4",
+                  "color": "#6E9BE8",
+                  "index": 4
+                },
+                "5": {
+                  "text": "P5",
+                  "color": "#6E9BE8",
+                  "index": 5
+                },
+                "6": {
+                  "text": "P6",
+                  "color": "#6E9BE8",
+                  "index": 6
+                },
+                "7": {
+                  "text": "P7",
+                  "color": "#6E9BE8",
+                  "index": 7
+                },
+                "8": {
+                  "text": "P8 \u00b7 Idle",
+                  "color": "#93B5EE",
+                  "index": 8
+                },
+                "9": {
+                  "text": "P9",
+                  "color": "#93B5EE",
+                  "index": 9
+                },
+                "10": {
+                  "text": "P10",
+                  "color": "#93B5EE",
+                  "index": 10
+                },
+                "11": {
+                  "text": "P11",
+                  "color": "#93B5EE",
+                  "index": 11
+                },
+                "12": {
+                  "text": "P12 \u00b7 Deep idle",
+                  "color": "#B6CDF4",
+                  "index": 12
+                },
+                "13": {
+                  "text": "P13",
+                  "color": "#B6CDF4",
+                  "index": 13
+                },
+                "14": {
+                  "text": "P14",
+                  "color": "#B6CDF4",
+                  "index": 14
+                },
+                "15": {
+                  "text": "P15 \u00b7 Min",
+                  "color": "#B6CDF4",
+                  "index": 15
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": ""
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 2,
+        "w": 6,
+        "x": 0,
+        "y": 4
+      },
+      "id": 22,
+      "options": {
+        "colorMode": "background_solid",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "text": {
+          "valueSize": 20
+        },
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.2.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
           },
           "exemplar": true,
-          "expr": "nvidia_smi_pstate{uuid=\"$gpu\"}",
+          "expr": "nvidia_smi_pstate{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
@@ -221,7 +525,238 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${datasource}"
+      },
+      "description": "Static identity of the selected GPU as reported by the driver.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          },
+          "custom": {
+            "align": "left",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "filterable": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Field"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8A94A6"
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 6
+      },
+      "id": 42,
+      "options": {
+        "showHeader": false,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
+      },
+      "pluginVersion": "11.2.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "nvidia_smi_gpu_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "Value": true,
+              "instance": true,
+              "job": true,
+              "uuid": true,
+              "index": true,
+              "driver_model_current": true,
+              "driver_model_pending": true,
+              "pci_sub_device_id": true,
+              "serial": true
+            },
+            "indexByName": {
+              "name": 0,
+              "driver_version": 1,
+              "vbios_version": 2,
+              "compute_cap": 3,
+              "pci_bus_id": 4
+            },
+            "renameByName": {
+              "name": "GPU",
+              "driver_version": "Driver",
+              "vbios_version": "VBIOS",
+              "compute_cap": "Compute Cap",
+              "pci_bus_id": "PCI Bus"
+            }
+          }
+        },
+        {
+          "id": "transpose",
+          "options": {}
+        }
+      ],
+      "title": "GPU Info",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Compute mode is a configuration, not a health state.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          },
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Default",
+                  "color": "#5B7A9D",
+                  "index": 0
+                },
+                "1": {
+                  "text": "Exclusive Thread",
+                  "color": "#8A5CD1",
+                  "index": 1
+                },
+                "2": {
+                  "text": "Prohibited",
+                  "color": "#B455A0",
+                  "index": 2
+                },
+                "3": {
+                  "text": "Exclusive Process",
+                  "color": "#3E9E9E",
+                  "index": 3
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": ""
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 2,
+        "w": 6,
+        "x": 0,
+        "y": 12
+      },
+      "id": 36,
+      "options": {
+        "colorMode": "background_solid",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "text": {
+          "valueSize": 20
+        },
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.2.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "nvidia_smi_compute_mode{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Compute Mode",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
       },
       "description": "Percent of time over the past sample period during which one or more kernels was executing on the GPU.\nThe sample period may be between 1 second and 1/6 second depending on the product.",
       "fieldConfig": {
@@ -233,19 +768,11 @@
           "max": 1,
           "min": 0,
           "thresholds": {
-            "mode": "percentage",
+            "mode": "absolute",
             "steps": [
               {
                 "color": "green",
                 "value": null
-              },
-              {
-                "color": "#EAB839",
-                "value": 70
-              },
-              {
-                "color": "red",
-                "value": 90
               }
             ]
           },
@@ -257,7 +784,7 @@
         "h": 5,
         "w": 3,
         "x": 6,
-        "y": 0
+        "y": 4
       },
       "id": 6,
       "options": {
@@ -281,24 +808,24 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${datasource}"
           },
           "exemplar": true,
-          "expr": "nvidia_smi_utilization_gpu_ratio{uuid=\"$gpu\"}",
+          "expr": "nvidia_smi_utilization_gpu_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
           "interval": "",
           "legendFormat": "{{uuid}}",
           "refId": "A"
         }
       ],
-      "title": "GPU Utilization %",
+      "title": "GPU Util",
       "type": "gauge"
     },
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${datasource}"
       },
-      "description": "The last measured power draw for the entire board, in watts. Only available if power management is supported. This reading is accurate to within +/- 5 watts / The software power limit in watts.",
+      "description": "Board power draw as a share of the power limit in force: the enforced limit when the driver reports one, otherwise the software or default limit.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -308,19 +835,11 @@
           "max": 1,
           "min": 0,
           "thresholds": {
-            "mode": "percentage",
+            "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "yellow",
                 "value": null
-              },
-              {
-                "color": "#EAB839",
-                "value": 70
-              },
-              {
-                "color": "red",
-                "value": 90
               }
             ]
           },
@@ -332,7 +851,7 @@
         "h": 5,
         "w": 3,
         "x": 9,
-        "y": 0
+        "y": 4
       },
       "id": 21,
       "options": {
@@ -356,22 +875,22 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${datasource}"
           },
           "exemplar": true,
-          "expr": "nvidia_smi_power_draw_watts{uuid=\"$gpu\"} / nvidia_smi_power_default_limit_watts{uuid=\"$gpu\"}",
+          "expr": "nvidia_smi_power_draw_watts{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} / (nvidia_smi_enforced_power_limit_watts{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} or nvidia_smi_power_limit_watts{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} or nvidia_smi_power_default_limit_watts{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"})",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
         }
       ],
-      "title": "Power Draw %",
+      "title": "Power",
       "type": "gauge"
     },
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${datasource}"
       },
       "description": "The fan speed value is the percent of the product's maximum noise tolerance fan speed that the device's fan is currently intended to run at. This value may exceed 100% in certain cases. Note: The reported speed is the intended fan speed. If the fan is physically blocked and unable to spin, this output will not match the actual fan speed. Many parts do not report fan speeds because they rely on cooling via fans in the surrounding enclosure.\n",
       "fieldConfig": {
@@ -383,19 +902,11 @@
           "max": 1,
           "min": 0,
           "thresholds": {
-            "mode": "percentage",
+            "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "orange",
                 "value": null
-              },
-              {
-                "color": "#EAB839",
-                "value": 70
-              },
-              {
-                "color": "red",
-                "value": 90
               }
             ]
           },
@@ -407,7 +918,7 @@
         "h": 5,
         "w": 3,
         "x": 12,
-        "y": 0
+        "y": 4
       },
       "id": 4,
       "options": {
@@ -431,22 +942,22 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${datasource}"
           },
           "exemplar": true,
-          "expr": "nvidia_smi_fan_speed_ratio{uuid=\"$gpu\"}",
+          "expr": "nvidia_smi_fan_speed_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
         }
       ],
-      "title": "Fan Speed %",
+      "title": "Fan",
       "type": "gauge"
     },
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${datasource}"
       },
       "description": "Core GPU temperature. in degrees C.",
       "fieldConfig": {
@@ -461,15 +972,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#56A64B",
                 "value": null
               },
               {
-                "color": "#EAB839",
+                "color": "#F2CC0C",
                 "value": 70
               },
               {
-                "color": "red",
+                "color": "#E02F44",
                 "value": 80
               }
             ]
@@ -482,7 +993,7 @@
         "h": 5,
         "w": 3,
         "x": 15,
-        "y": 0
+        "y": 4
       },
       "id": 16,
       "options": {
@@ -506,10 +1017,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${datasource}"
           },
           "exemplar": true,
-          "expr": "nvidia_smi_temperature_gpu{uuid=\"$gpu\"}",
+          "expr": "nvidia_smi_temperature_gpu{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
           "interval": "",
           "legendFormat": "{{uuid}}",
           "refId": "A"
@@ -521,403 +1032,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "Percent of time over the past sample period during which global (device) memory was being read or written.\nThe sample period may be between 1 second and 1/6 second depending on the product.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "line+area"
-            }
-          },
-          "mappings": [],
-          "max": 1,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "transparent",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 0.7
-              },
-              {
-                "color": "red",
-                "value": 0.9
-              }
-            ]
-          },
-          "unit": "percentunit"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 5,
-        "w": 6,
-        "x": 18,
-        "y": 0
-      },
-      "id": 11,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "11.1.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "exemplar": true,
-          "expr": "nvidia_smi_utilization_memory_ratio{uuid=\"$gpu\"}",
-          "interval": "",
-          "legendFormat": "{{uuid}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Memory Utilization %",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "The version of the installed NVIDIA display driver. This is an alphanumeric string.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "decimals": 2,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 2,
-        "w": 3,
-        "x": 0,
-        "y": 3
-      },
-      "id": 14,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "last"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "text": {},
-        "textMode": "name",
-        "wideLayout": true
-      },
-      "pluginVersion": "11.2.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "exemplar": true,
-          "expr": "nvidia_smi_gpu_info{uuid=\"$gpu\"}",
-          "instant": true,
-          "interval": "",
-          "legendFormat": "{{driver_version}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Driver Version",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "The BIOS of the GPU board.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "decimals": 2,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 2,
-        "w": 3,
-        "x": 3,
-        "y": 3
-      },
-      "id": 34,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "last"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "text": {},
-        "textMode": "name",
-        "wideLayout": true
-      },
-      "pluginVersion": "11.2.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "exemplar": true,
-          "expr": "nvidia_smi_gpu_info{uuid=\"$gpu\"}",
-          "instant": true,
-          "interval": "",
-          "legendFormat": "{{vbios_version}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Vbios Version",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "Information about factors that are reducing the frequency of clocks. If all throttle reasons are returned as \"Not Active\" it means that clocks are running as high as possible.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "decimals": 0,
-          "mappings": [
-            {
-              "options": {
-                "0": {
-                  "text": "Not Active"
-                },
-                "1": {
-                  "text": "Active"
-                }
-              },
-              "type": "value"
-            }
-          ],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 5,
-        "w": 6,
-        "x": 0,
-        "y": 5
-      },
-      "id": 32,
-      "options": {
-        "displayMode": "gradient",
-        "maxVizHeight": 300,
-        "minVizHeight": 16,
-        "minVizWidth": 8,
-        "namePlacement": "auto",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "last"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showUnfilled": true,
-        "sizing": "auto",
-        "text": {},
-        "valueMode": "color"
-      },
-      "pluginVersion": "11.2.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "exemplar": true,
-          "expr": "nvidia_smi_clocks_event_reasons_gpu_idle{uuid=\"$gpu\"} or nvidia_smi_clocks_throttle_reasons_gpu_idle{uuid=\"$gpu\"}",
-          "instant": false,
-          "interval": "",
-          "legendFormat": "Idle",
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "exemplar": true,
-          "expr": "nvidia_smi_clocks_event_reasons_hw_thermal_slowdown{uuid=\"$gpu\"} or nvidia_smi_clocks_throttle_reasons_hw_thermal_slowdown{uuid=\"$gpu\"}",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "HW Thermal Slowdown",
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "exemplar": true,
-          "expr": "nvidia_smi_clocks_event_reasons_sw_power_cap{uuid=\"$gpu\"} or nvidia_smi_clocks_throttle_reasons_sw_power_cap{uuid=\"$gpu\"}",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "SW Power Cap",
-          "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "exemplar": true,
-          "expr": "nvidia_smi_clocks_event_reasons_applications_clocks_setting{uuid=\"$gpu\"} or nvidia_smi_clocks_throttle_reasons_applications_clocks_setting{uuid=\"$gpu\"}",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "App Clocks Setting",
-          "refId": "D"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "exemplar": true,
-          "expr": "nvidia_smi_clocks_event_reasons_hw_power_brake_slowdown{uuid=\"$gpu\"} or nvidia_smi_clocks_throttle_reasons_hw_power_brake_slowdown{uuid=\"$gpu\"}",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "HW Power Brake",
-          "refId": "E"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "exemplar": true,
-          "expr": "nvidia_smi_clocks_event_reasons_sw_thermal_slowdown{uuid=\"$gpu\"} or nvidia_smi_clocks_throttle_reasons_sw_thermal_slowdown{uuid=\"$gpu\"}",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "SW Thermal Slowdown",
-          "refId": "F"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "exemplar": true,
-          "expr": "nvidia_smi_clocks_event_reasons_sync_boost{uuid=\"$gpu\"} or nvidia_smi_clocks_throttle_reasons_sync_boost{uuid=\"$gpu\"}",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "Sync Boost",
-          "refId": "G"
-        }
-      ],
-      "title": "Throttle Reasons",
-      "type": "bargauge"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${datasource}"
       },
       "description": "Current frequency of graphics (shader) clock\n/\nMaximum frequency of graphics (shader) clock.\n",
       "fieldConfig": {
@@ -929,19 +1044,11 @@
           "max": 1,
           "min": 0,
           "thresholds": {
-            "mode": "percentage",
+            "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "blue",
                 "value": null
-              },
-              {
-                "color": "#EAB839",
-                "value": 70
-              },
-              {
-                "color": "red",
-                "value": 90
               }
             ]
           },
@@ -953,7 +1060,7 @@
         "h": 5,
         "w": 3,
         "x": 6,
-        "y": 5
+        "y": 9
       },
       "id": 20,
       "options": {
@@ -977,22 +1084,22 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${datasource}"
           },
           "exemplar": true,
-          "expr": "nvidia_smi_clocks_current_graphics_clock_hz{uuid=\"$gpu\"} / nvidia_smi_clocks_max_graphics_clock_hz{uuid=\"$gpu\"}",
+          "expr": "nvidia_smi_clocks_current_graphics_clock_hz{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} / nvidia_smi_clocks_max_graphics_clock_hz{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
         }
       ],
-      "title": "GPU Clock Speed %",
+      "title": "GPU Clock",
       "type": "gauge"
     },
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${datasource}"
       },
       "description": "Current frequency of memory clock / Maximum frequency of memory clock",
       "fieldConfig": {
@@ -1004,19 +1111,11 @@
           "max": 1,
           "min": 0,
           "thresholds": {
-            "mode": "percentage",
+            "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "blue",
                 "value": null
-              },
-              {
-                "color": "#EAB839",
-                "value": 70
-              },
-              {
-                "color": "red",
-                "value": 90
               }
             ]
           },
@@ -1028,7 +1127,7 @@
         "h": 5,
         "w": 3,
         "x": 9,
-        "y": 5
+        "y": 9
       },
       "id": 33,
       "options": {
@@ -1052,22 +1151,22 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${datasource}"
           },
           "exemplar": true,
-          "expr": "nvidia_smi_clocks_current_memory_clock_hz{uuid=\"$gpu\"} / nvidia_smi_clocks_max_memory_clock_hz{uuid=\"$gpu\"}",
+          "expr": "nvidia_smi_clocks_current_memory_clock_hz{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} / nvidia_smi_clocks_max_memory_clock_hz{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
         }
       ],
-      "title": "Memory Clock Speed %",
+      "title": "Memory Clock",
       "type": "gauge"
     },
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${datasource}"
       },
       "description": "Total memory allocated by active contexts / Total installed GPU memory.",
       "fieldConfig": {
@@ -1079,19 +1178,19 @@
           "max": 1,
           "min": 0,
           "thresholds": {
-            "mode": "percentage",
+            "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "purple",
                 "value": null
               },
               {
-                "color": "#EAB839",
-                "value": 70
+                "color": "#F2CC0C",
+                "value": 0.85
               },
               {
-                "color": "red",
-                "value": 90
+                "color": "#E02F44",
+                "value": 0.95
               }
             ]
           },
@@ -1103,7 +1202,7 @@
         "h": 5,
         "w": 3,
         "x": 12,
-        "y": 5
+        "y": 9
       },
       "id": 25,
       "options": {
@@ -1127,22 +1226,22 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${datasource}"
           },
           "exemplar": true,
-          "expr": "nvidia_smi_memory_used_bytes{uuid=\"$gpu\"} / nvidia_smi_memory_total_bytes{uuid=\"$gpu\"}",
+          "expr": "nvidia_smi_memory_used_bytes{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} / nvidia_smi_memory_total_bytes{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
         }
       ],
-      "title": "Memory Allocation %",
+      "title": "Memory Alloc",
       "type": "gauge"
     },
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${datasource}"
       },
       "description": "Percent of time over the past sample period during which global (device) memory was being read or written.\nThe sample period may be between 1 second and 1/6 second depending on the product.",
       "fieldConfig": {
@@ -1154,19 +1253,11 @@
           "max": 1,
           "min": 0,
           "thresholds": {
-            "mode": "percentage",
+            "mode": "absolute",
             "steps": [
               {
                 "color": "green",
                 "value": null
-              },
-              {
-                "color": "#EAB839",
-                "value": 70
-              },
-              {
-                "color": "red",
-                "value": 90
               }
             ]
           },
@@ -1178,7 +1269,7 @@
         "h": 5,
         "w": 3,
         "x": 15,
-        "y": 5
+        "y": 9
       },
       "id": 7,
       "options": {
@@ -1202,28 +1293,29 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${datasource}"
           },
           "exemplar": true,
-          "expr": "nvidia_smi_utilization_memory_ratio{uuid=\"$gpu\"}",
+          "expr": "nvidia_smi_utilization_memory_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
         }
       ],
-      "title": "Memory Utilization %",
+      "title": "Memory Util",
       "type": "gauge"
     },
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${datasource}"
       },
-      "description": "Percent of time over the past sample period during which one or more kernels was executing on the GPU.\nThe sample period may be between 1 second and 1/6 second depending on the product.",
+      "description": "Percent of time over the past sample period during which global (device) memory was being read or written.\nThe sample period may be between 1 second and 1/6 second depending on the product.",
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "mode": "fixed",
+            "fixedColor": "green"
           },
           "custom": {
             "axisBorderShow": false,
@@ -1255,7 +1347,7 @@
               "mode": "none"
             },
             "thresholdsStyle": {
-              "mode": "line+area"
+              "mode": "off"
             }
           },
           "mappings": [],
@@ -1265,16 +1357,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "transparent",
+                "color": "green",
                 "value": null
-              },
-              {
-                "color": "orange",
-                "value": 0.7
-              },
-              {
-                "color": "red",
-                "value": 0.9
               }
             ]
           },
@@ -1286,7 +1370,104 @@
         "h": 5,
         "w": 6,
         "x": 18,
-        "y": 5
+        "y": 4
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "exemplar": true,
+          "expr": "nvidia_smi_utilization_memory_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+          "interval": "",
+          "legendFormat": "{{uuid}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Memory Utilization %",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Percent of time over the past sample period during which one or more kernels was executing on the GPU.\nThe sample period may be between 1 second and 1/6 second depending on the product.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 9
       },
       "id": 10,
       "options": {
@@ -1306,10 +1487,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${datasource}"
           },
           "exemplar": true,
-          "expr": "nvidia_smi_utilization_gpu_ratio{uuid=\"$gpu\"}",
+          "expr": "nvidia_smi_utilization_gpu_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
@@ -1319,15 +1500,440 @@
       "type": "timeseries"
     },
     {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      },
+      "id": 50,
+      "panels": [],
+      "title": "State History",
+      "type": "row"
+    },
+    {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${datasource}"
+      },
+      "description": "Throttle reasons over time. A colored band means the reason was active. Hardware slowdowns (thermal, power brake) are serious, software power cap is routine under sustained load, and Idle just means the GPU had nothing to do.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          },
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0,
+            "spanNulls": false,
+            "insertNulls": false,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Not Active",
+                  "color": "transparent",
+                  "index": 0
+                },
+                "1": {
+                  "text": "Active",
+                  "color": "#6E7B8B",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "noValue": "-"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "SW Power Cap"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "Not Active",
+                        "color": "transparent",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "Active",
+                        "color": "#F2CC0C",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "SW Thermal Slowdown"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "Not Active",
+                        "color": "transparent",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "Active",
+                        "color": "#FF9830",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "HW Thermal Slowdown"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "Not Active",
+                        "color": "transparent",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "Active",
+                        "color": "#E02F44",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "HW Power Brake"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "Not Active",
+                        "color": "transparent",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "Active",
+                        "color": "#E02F44",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 15
+      },
+      "id": 38,
+      "options": {
+        "alignValue": "left",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "mergeValues": true,
+        "rowHeight": 0.85,
+        "showValue": "never",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.2.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "nvidia_smi_clocks_event_reasons_gpu_idle{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} or nvidia_smi_clocks_throttle_reasons_gpu_idle{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+          "legendFormat": "Idle",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "nvidia_smi_clocks_event_reasons_sw_power_cap{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} or nvidia_smi_clocks_throttle_reasons_sw_power_cap{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+          "legendFormat": "SW Power Cap",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "nvidia_smi_clocks_event_reasons_sw_thermal_slowdown{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} or nvidia_smi_clocks_throttle_reasons_sw_thermal_slowdown{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+          "legendFormat": "SW Thermal Slowdown",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "nvidia_smi_clocks_event_reasons_hw_thermal_slowdown{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} or nvidia_smi_clocks_throttle_reasons_hw_thermal_slowdown{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+          "legendFormat": "HW Thermal Slowdown",
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "nvidia_smi_clocks_event_reasons_hw_power_brake_slowdown{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} or nvidia_smi_clocks_throttle_reasons_hw_power_brake_slowdown{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+          "legendFormat": "HW Power Brake",
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "nvidia_smi_clocks_event_reasons_applications_clocks_setting{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} or nvidia_smi_clocks_throttle_reasons_applications_clocks_setting{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+          "legendFormat": "App Clocks Setting",
+          "refId": "F"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "nvidia_smi_clocks_event_reasons_sync_boost{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} or nvidia_smi_clocks_throttle_reasons_sync_boost{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+          "legendFormat": "Sync Boost",
+          "refId": "G"
+        }
+      ],
+      "title": "Throttle Reasons (history)",
+      "type": "state-timeline"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Performance state over time. P0 is maximum performance, P15 minimum. Lower P means busier. This is operational state, not a health signal.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          },
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0,
+            "spanNulls": false,
+            "insertNulls": false,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "P0 \u00b7 Max perf",
+                  "color": "#2B62D9",
+                  "index": 0
+                },
+                "1": {
+                  "text": "P1",
+                  "color": "#2B62D9",
+                  "index": 1
+                },
+                "2": {
+                  "text": "P2",
+                  "color": "#4880E0",
+                  "index": 2
+                },
+                "3": {
+                  "text": "P3",
+                  "color": "#4880E0",
+                  "index": 3
+                },
+                "4": {
+                  "text": "P4",
+                  "color": "#6E9BE8",
+                  "index": 4
+                },
+                "5": {
+                  "text": "P5",
+                  "color": "#6E9BE8",
+                  "index": 5
+                },
+                "6": {
+                  "text": "P6",
+                  "color": "#6E9BE8",
+                  "index": 6
+                },
+                "7": {
+                  "text": "P7",
+                  "color": "#6E9BE8",
+                  "index": 7
+                },
+                "8": {
+                  "text": "P8 \u00b7 Idle",
+                  "color": "#93B5EE",
+                  "index": 8
+                },
+                "9": {
+                  "text": "P9",
+                  "color": "#93B5EE",
+                  "index": 9
+                },
+                "10": {
+                  "text": "P10",
+                  "color": "#93B5EE",
+                  "index": 10
+                },
+                "11": {
+                  "text": "P11",
+                  "color": "#93B5EE",
+                  "index": 11
+                },
+                "12": {
+                  "text": "P12 \u00b7 Deep idle",
+                  "color": "#B6CDF4",
+                  "index": 12
+                },
+                "13": {
+                  "text": "P13",
+                  "color": "#B6CDF4",
+                  "index": 13
+                },
+                "14": {
+                  "text": "P14",
+                  "color": "#B6CDF4",
+                  "index": 14
+                },
+                "15": {
+                  "text": "P15 \u00b7 Min",
+                  "color": "#B6CDF4",
+                  "index": 15
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 15
+      },
+      "id": 39,
+      "options": {
+        "alignValue": "left",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "mergeValues": true,
+        "rowHeight": 0.85,
+        "showValue": "auto",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.2.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "nvidia_smi_pstate{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+          "legendFormat": "P-State",
+          "refId": "A"
+        }
+      ],
+      "title": "P-State (history)",
+      "type": "state-timeline"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      },
+      "id": 45,
+      "panels": [],
+      "title": "Power & Thermals",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
       },
       "description": "Total memory allocated by active contexts.",
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "mode": "fixed",
+            "fixedColor": "purple"
           },
           "custom": {
             "axisBorderShow": false,
@@ -1368,16 +1974,12 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "purple",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
               }
             ]
           },
-          "unit": "decbytes"
+          "unit": "bytes"
         },
         "overrides": []
       },
@@ -1385,7 +1987,7 @@
         "h": 5,
         "w": 6,
         "x": 0,
-        "y": 10
+        "y": 22
       },
       "id": 17,
       "options": {
@@ -1405,10 +2007,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${datasource}"
           },
           "exemplar": true,
-          "expr": "nvidia_smi_memory_used_bytes{uuid=\"$gpu\"}",
+          "expr": "nvidia_smi_memory_used_bytes{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
           "interval": "",
           "legendFormat": "{{uuid}}",
           "refId": "A"
@@ -1420,13 +2022,14 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${datasource}"
       },
       "description": "Core GPU temperature. in degrees C.",
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "mode": "fixed",
+            "fixedColor": "orange"
           },
           "custom": {
             "axisBorderShow": false,
@@ -1458,7 +2061,7 @@
               "mode": "none"
             },
             "thresholdsStyle": {
-              "mode": "line+area"
+              "mode": "line"
             }
           },
           "mappings": [],
@@ -1472,11 +2075,7 @@
                 "value": null
               },
               {
-                "color": "orange",
-                "value": 70
-              },
-              {
-                "color": "red",
+                "color": "#E02F44",
                 "value": 80
               }
             ]
@@ -1489,7 +2088,7 @@
         "h": 5,
         "w": 6,
         "x": 6,
-        "y": 10
+        "y": 22
       },
       "id": 15,
       "options": {
@@ -1509,10 +2108,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${datasource}"
           },
           "exemplar": true,
-          "expr": "nvidia_smi_temperature_gpu{uuid=\"$gpu\"}",
+          "expr": "nvidia_smi_temperature_gpu{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
           "interval": "",
           "legendFormat": "{{uuid}}",
           "refId": "A"
@@ -1524,13 +2123,14 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${datasource}"
       },
-      "description": "The last measured power draw for the entire board, in watts. Only available if power management is supported. This reading is accurate to within +/- 5 watts",
+      "description": "The last measured power draw for the entire board, in watts. Only available if power management is supported; the reading is accurate to within +/- 5 watts.",
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "mode": "fixed",
+            "fixedColor": "yellow"
           },
           "custom": {
             "axisBorderShow": false,
@@ -1571,12 +2171,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "yellow",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
               }
             ]
           },
@@ -1588,7 +2184,7 @@
         "h": 5,
         "w": 6,
         "x": 12,
-        "y": 10
+        "y": 22
       },
       "id": 8,
       "options": {
@@ -1608,10 +2204,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${datasource}"
           },
           "exemplar": true,
-          "expr": "nvidia_smi_power_draw_watts{uuid=\"$gpu\"}",
+          "expr": "nvidia_smi_power_draw_watts{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
           "interval": "",
           "legendFormat": "{{uuid}}",
           "refId": "A"
@@ -1623,13 +2219,14 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${datasource}"
       },
       "description": "The fan speed value is the percent of the product's maximum noise tolerance fan speed that the device's fan is currently intended to run at. This value may exceed 100% in certain cases. Note: The reported speed is the intended fan speed. If the fan is physically blocked and unable to spin, this output will not match the actual fan speed. Many parts do not report fan speeds because they rely on cooling via fans in the surrounding enclosure.\n",
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "mode": "fixed",
+            "fixedColor": "orange"
           },
           "custom": {
             "axisBorderShow": false,
@@ -1661,7 +2258,7 @@
               "mode": "none"
             },
             "thresholdsStyle": {
-              "mode": "line+area"
+              "mode": "off"
             }
           },
           "mappings": [],
@@ -1671,16 +2268,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "transparent",
-                "value": null
-              },
-              {
                 "color": "orange",
-                "value": 0.7
-              },
-              {
-                "color": "red",
-                "value": 0.9
+                "value": null
               }
             ]
           },
@@ -1692,7 +2281,7 @@
         "h": 5,
         "w": 6,
         "x": 18,
-        "y": 10
+        "y": 22
       },
       "id": 9,
       "options": {
@@ -1712,10 +2301,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${datasource}"
           },
           "exemplar": true,
-          "expr": "nvidia_smi_fan_speed_ratio{uuid=\"$gpu\"}",
+          "expr": "nvidia_smi_fan_speed_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
           "interval": "",
           "legendFormat": "{{uuid}}",
           "refId": "A"
@@ -1725,404 +2314,939 @@
       "type": "timeseries"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "Current frequency of graphics (shader) clock.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "hertz"
-        },
-        "overrides": []
-      },
+      "collapsed": true,
       "gridPos": {
-        "h": 5,
-        "w": 6,
+        "h": 1,
+        "w": 24,
         "x": 0,
-        "y": 15
+        "y": 27
       },
-      "id": 12,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "11.1.0",
-      "targets": [
+      "id": 46,
+      "panels": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${datasource}"
           },
-          "exemplar": true,
-          "expr": "nvidia_smi_clocks_current_graphics_clock_hz{uuid=\"$gpu\"}",
-          "format": "time_series",
-          "interval": "",
-          "legendFormat": "{{uuid}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Graphics Clock Speed",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "Current frequency of video encoder/decoder clock.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
+          "description": "Current frequency of graphics (shader) clock.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "hertz"
+            },
+            "overrides": []
           },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
+          "gridPos": {
+            "h": 5,
+            "w": 6,
+            "x": 0,
+            "y": 28
+          },
+          "id": 12,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": false
             },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
             }
           },
-          "mappings": [],
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
+          "pluginVersion": "11.1.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "exemplar": true,
+              "expr": "nvidia_smi_clocks_current_graphics_clock_hz{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "{{uuid}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Graphics Clock Speed",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Current frequency of video encoder/decoder clock.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "hertz"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 6,
+            "x": 6,
+            "y": 28
+          },
+          "id": 19,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": false
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "11.1.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "exemplar": true,
+              "expr": "nvidia_smi_clocks_current_video_clock_hz{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "{{uuid}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Video Clock Speed",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Current frequency of SM (Streaming Multiprocessor) clock.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "hertz"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 6,
+            "x": 12,
+            "y": 28
+          },
+          "id": 24,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": false
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "11.1.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "exemplar": true,
+              "expr": "nvidia_smi_clocks_current_sm_clock_hz{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "{{uuid}}",
+              "refId": "A"
+            }
+          ],
+          "title": "SM Clock Speed",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Current frequency of memory clock.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "hertz"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 6,
+            "x": 18,
+            "y": 28
+          },
+          "id": 18,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": false
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "11.1.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "exemplar": true,
+              "expr": "nvidia_smi_clocks_current_memory_clock_hz{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "{{uuid}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Memory Clock Speed",
+          "type": "timeseries"
+        }
+      ],
+      "title": "Clocks",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 28
+      },
+      "id": 47,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Processes with a compute context on the selected GPU, with used memory and its share of total VRAM. Requires the exporter to run with --collect.compute-apps. A memory value of 0 B means the platform does not report per-process memory (e.g. Windows in WDDM mode).",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "text"
+              },
+              "custom": {
+                "align": "left",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false,
+                "filterable": false
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": [
               {
-                "color": "green",
-                "value": null
+                "matcher": {
+                  "id": "byName",
+                  "options": "PID"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 70
+                  }
+                ]
               },
               {
-                "color": "red",
-                "value": 80
+                "matcher": {
+                  "id": "byName",
+                  "options": "Memory"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "bytes"
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 100
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Share"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "percentunit"
+                  },
+                  {
+                    "id": "min",
+                    "value": 0
+                  },
+                  {
+                    "id": "max",
+                    "value": 1
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 140
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "gauge",
+                      "mode": "gradient"
+                    }
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "purple"
+                    }
+                  }
+                ]
               }
             ]
           },
-          "unit": "hertz"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 5,
-        "w": 6,
-        "x": 6,
-        "y": 15
-      },
-      "id": 19,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "11.1.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+          "gridPos": {
+            "x": 0,
+            "y": 29,
+            "w": 9,
+            "h": 8
           },
-          "exemplar": true,
-          "expr": "nvidia_smi_clocks_current_video_clock_hz{uuid=\"$gpu\"}",
-          "format": "time_series",
-          "interval": "",
-          "legendFormat": "{{uuid}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Video Clock Speed",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "Current frequency of SM (Streaming Multiprocessor) clock.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
+          "id": 43,
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false,
+              "reducer": [
+                "sum"
+              ],
+              "countRows": false,
+              "fields": ""
             },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
+            "sortBy": [
               {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
+                "displayName": "Memory",
+                "desc": true
               }
             ]
           },
-          "unit": "hertz"
+          "pluginVersion": "11.2.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "nvidia_smi_compute_app_used_memory_bytes{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} or (nvidia_smi_compute_app_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} * 0)",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "(nvidia_smi_compute_app_used_memory_bytes{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} or (nvidia_smi_compute_app_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} * 0)) / on(uuid) group_left() nvidia_smi_memory_total_bytes{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "",
+              "refId": "B"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "merge",
+              "options": {}
+            },
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "uuid": true,
+                  "__name__": true,
+                  "instance": true,
+                  "job": true
+                },
+                "indexByName": {
+                  "process_name": 0,
+                  "pid": 1,
+                  "Value #A": 2,
+                  "Value #B": 3
+                },
+                "renameByName": {
+                  "process_name": "Process",
+                  "pid": "PID",
+                  "Value #A": "Memory",
+                  "Value #B": "Share"
+                }
+              }
+            }
+          ],
+          "title": "GPU Processes",
+          "type": "table"
         },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 5,
-        "w": 6,
-        "x": 12,
-        "y": 15
-      },
-      "id": 24,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "11.1.0",
-      "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${datasource}"
           },
-          "exemplar": true,
-          "expr": "nvidia_smi_clocks_current_sm_clock_hz{uuid=\"$gpu\"}",
-          "format": "time_series",
-          "interval": "",
-          "legendFormat": "{{uuid}}",
-          "refId": "A"
-        }
-      ],
-      "title": "SM Clock Speed",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "Current frequency of memory clock.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
+          "description": "GPU memory per process over time, stacked. Processes appear and disappear as they open and close compute contexts. Empty when --collect.compute-apps is off or the platform reports no per-process memory.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 1,
+                "fillOpacity": 35,
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "mode": "normal",
+                  "group": "A"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "transparent",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "bytes"
+            },
+            "overrides": []
           },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
+          "gridPos": {
+            "x": 9,
+            "y": 29,
+            "w": 15,
+            "h": 11
+          },
+          "id": 51,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
             },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
             }
           },
-          "mappings": [],
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
+          "pluginVersion": "11.2.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
               },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "hertz"
+              "expr": "nvidia_smi_compute_app_used_memory_bytes{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+              "legendFormat": "{{process_name}} ({{pid}})",
+              "refId": "A"
+            }
+          ],
+          "title": "Process Memory Over Time",
+          "type": "timeseries"
         },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 5,
-        "w": 6,
-        "x": 18,
-        "y": 15
-      },
-      "id": 18,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "11.1.0",
-      "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${datasource}"
           },
-          "exemplar": true,
-          "expr": "nvidia_smi_clocks_current_memory_clock_hz{uuid=\"$gpu\"}",
-          "format": "time_series",
-          "interval": "",
-          "legendFormat": "{{uuid}}",
-          "refId": "A"
+          "description": "Health of the per-process collection on the selected node. OK means the last collection succeeded, so an empty table really means no compute processes. Failing means nvidia-smi could not deliver per-process data. Not enabled means the exporter runs without --collect.compute-apps.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 0,
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "Failing",
+                      "color": "#E02F44",
+                      "index": 0
+                    },
+                    "1": {
+                      "text": "OK",
+                      "color": "#56A64B",
+                      "index": 1
+                    }
+                  }
+                }
+              ],
+              "noValue": "Not enabled (--collect.compute-apps)",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6E7B8B",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 37,
+            "w": 9,
+            "h": 3
+          },
+          "id": 52,
+          "options": {
+            "colorMode": "background_solid",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value",
+            "wideLayout": false,
+            "text": {
+              "valueSize": 24
+            }
+          },
+          "pluginVersion": "11.2.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "nvidia_smi_compute_apps_last_collect_success{instance=\"$node\", job=\"$job\"}",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "Process Collection",
+          "type": "stat"
         }
       ],
-      "title": "Memory Clock Speed",
-      "type": "timeseries"
+      "title": "Processes",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 29
+      },
+      "id": 48,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "NVLink fabric registration state. Completed is the healthy steady state. In Progress is normal briefly at boot, but persistent In Progress or Not Started means the GPU is not registered with the fabric manager and NVLink workloads will fail.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "text"
+              },
+              "decimals": 0,
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "Not Supported",
+                      "color": "#6E7B8B",
+                      "index": 0
+                    },
+                    "1": {
+                      "text": "Not Started",
+                      "color": "#FF9830",
+                      "index": 1
+                    },
+                    "2": {
+                      "text": "In Progress",
+                      "color": "#F2CC0C",
+                      "index": 2
+                    },
+                    "3": {
+                      "text": "Completed",
+                      "color": "#56A64B",
+                      "index": 3
+                    }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "",
+              "noValue": "No NVLink fabric"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 30
+          },
+          "id": 37,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "percentChangeColorMode": "standard",
+            "reduceOptions": {
+              "calcs": [
+                "last"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "text": {},
+            "textMode": "value",
+            "wideLayout": true
+          },
+          "pluginVersion": "11.2.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "nvidia_smi_fabric_state{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+              "instant": false,
+              "legendFormat": "__auto",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Fabric State",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "All uncorrected ECC error counters (aggregate = lifetime, volatile = since boot, broken down by memory subsystem). Empty on GPUs without ECC memory.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 1,
+                "fillOpacity": 0,
+                "showPoints": "auto",
+                "spanNulls": false
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "transparent",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 18,
+            "x": 6,
+            "y": 30
+          },
+          "id": 44,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "11.2.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "label_replace({__name__=~\"nvidia_smi_ecc_errors_uncorrected_.+\", uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}, \"kind\", \"$1\", \"__name__\", \"nvidia_smi_ecc_errors_uncorrected_(.+)\")",
+              "legendFormat": "{{kind}}",
+              "refId": "A"
+            }
+          ],
+          "title": "ECC Uncorrected (detail)",
+          "type": "timeseries"
+        }
+      ],
+      "title": "Datacenter Health",
+      "type": "row"
     }
   ],
   "refresh": "10s",
@@ -2137,9 +3261,22 @@
     "list": [
       {
         "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "label": "Data source",
+        "multi": false,
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "type": "datasource"
+      },
+      {
+        "current": {},
         "datasource": {
           "type": "prometheus",
-          "uid": "${DS_PROMETHEUS}"
+          "uid": "${datasource}"
         },
         "definition": "label_values(nvidia_smi_index, job)",
         "hide": 0,
@@ -2164,7 +3301,7 @@
         "current": {},
         "datasource": {
           "type": "prometheus",
-          "uid": "${DS_PROMETHEUS}"
+          "uid": "${datasource}"
         },
         "definition": "label_values(nvidia_smi_index{job=\"$job\"},instance)",
         "hide": 0,
@@ -2189,9 +3326,9 @@
         "current": {},
         "datasource": {
           "type": "prometheus",
-          "uid": "${DS_PROMETHEUS}"
+          "uid": "${datasource}"
         },
-        "definition": "label_values(nvidia_smi_index{instance=\"$node\"},uuid)",
+        "definition": "query_result(label_join(label_replace(label_join(nvidia_smi_gpu_info{instance=\"$node\", job=\"$job\"}, \"ni\", \" #\", \"name\", \"index\"), \"us\", \"($1)\", \"uuid\", \"^(........).*\"), \"gpu_label\", \" \", \"ni\", \"us\"))",
         "hide": 0,
         "includeAll": false,
         "label": "GPU",
@@ -2199,11 +3336,11 @@
         "name": "gpu",
         "options": [],
         "query": {
-          "query": "label_values(nvidia_smi_index{instance=\"$node\"},uuid)",
+          "query": "query_result(label_join(label_replace(label_join(nvidia_smi_gpu_info{instance=\"$node\", job=\"$job\"}, \"ni\", \" #\", \"name\", \"index\"), \"us\", \"($1)\", \"uuid\", \"^(........).*\"), \"gpu_label\", \" \", \"ni\", \"us\"))",
           "refId": "StandardVariableQuery"
         },
         "refresh": 1,
-        "regex": "",
+        "regex": "/gpu_label=\"(?<text>[^\"]+)|uuid=\"(?<value>[^\"]+)/g",
         "skipUrlSync": false,
         "sort": 1,
         "tagValuesQuery": "",
@@ -2221,6 +3358,5 @@
   "timezone": "",
   "title": "Nvidia GPU Metrics",
   "uid": "vlvPlrgnk",
-  "version": 8,
   "weekStart": ""
 }
