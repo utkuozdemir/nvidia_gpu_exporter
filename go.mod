@@ -1,7 +1,7 @@
 module github.com/utkuozdemir/nvidia_gpu_exporter
 
 // renovate: go
-go 1.26.4
+go 1.26.5
 
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
