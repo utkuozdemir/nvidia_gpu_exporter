@@ -11,10 +11,11 @@ tasks:
       - git ls-files '*.sh' | xargs shfmt -w -i 2 -ci -sr
 
   lint:
-    desc: lint everything (code, docs, scripts, release config)
+    desc: lint everything (code, docs, scripts, dashboard, release config)
     cmds:
       - task: lint:go
       - task: lint:assets
+      - task: lint:dashboard
       - goreleaser check
 
   lint:go:
@@ -32,6 +33,14 @@ tasks:
       - git ls-files '*.md' | xargs markdownlint
       - git ls-files '*.sh' | xargs shellcheck
       - git ls-files '*.sh' | xargs shfmt -d -i 2 -ci -sr
+
+  # needs the dashboard-linter binary from the grafana/dashboard-linter
+  # releases page ("go install" does not work on it, the module carries
+  # replace directives). Rule exclusions live in docs/grafana/.lint.
+  lint:dashboard:
+    desc: lint the Grafana dashboard against grafana.com best practices
+    cmds:
+      - dashboard-linter lint --strict docs/grafana/dashboard.json
 
   release:
     desc: release
