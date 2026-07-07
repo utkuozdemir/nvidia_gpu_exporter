@@ -35,7 +35,9 @@ Multi-state fields carry the state as their integer value:
   `3` Exclusive Process.
 
 The last three map to their native NVML enum integer; `pstate` is the raw
-performance-state number.
+performance-state number. `gpu_recovery_action` and `fabric_state` only appear
+when the hardware and driver report them (recovery action needs a recent
+driver), so their absence from an exporter's output is expected, not a bug.
 
 ```text
 # HELP go_gc_duration_seconds A summary of the pause duration of garbage collection cycles.

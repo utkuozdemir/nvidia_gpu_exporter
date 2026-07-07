@@ -18,7 +18,9 @@ Follow the steps below:
 6. Login to Grafana using the initial credentials: `admin` - `admin`. Set a new password if you like.
 7. On Grafana, choose the option "Create - Import" from the top-left (big plus sign).
 8. Enter `14574` to the ID field and click "Load".
-9. Finally, choose "Prometheus" as data source from the dropdown. Hit "import".
+9. Hit "Import". The dashboard picks your Prometheus data source automatically.
+   If you have more than one, use the "Data source" dropdown at the top of the
+   dashboard.
 10. Enjoy the dashboard!
 
 ## Using .deb or .rpm packages

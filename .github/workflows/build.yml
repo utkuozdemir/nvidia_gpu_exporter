@@ -87,6 +87,8 @@ jobs:
           fetch-depth: 0
       - name: Set up chart-testing
         uses: helm/chart-testing-action@v2.8.0
+      - name: Check that the chart dashboard matches docs/grafana/dashboard.json
+        run: cmp docs/grafana/dashboard.json charts/nvidia-gpu-exporter/dashboards/nvidia-gpu-metrics.json
       - name: Lint chart
         run: ct lint --config .ct.yaml --all
       - name: Check that the chart README is current
