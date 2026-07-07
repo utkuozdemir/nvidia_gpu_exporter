@@ -1,0 +1,32 @@
+# Exclusions for grafana/dashboard-linter (run via `task lint:dashboard`).
+# Only rules that conflict with this dashboard's long-published design are
+# excluded, each with the reason. Everything else must pass.
+exclusions:
+  template-instance-rule:
+    reason: >-
+      The instance selector variable is named `node` since the dashboard's
+      first release. Renaming it to `instance` would break every bookmarked
+      URL carrying var-node= and retrain 36k+ existing users for no
+      functional gain. Queries do filter by instance via $node.
+  target-instance-rule:
+    reason: >-
+      Queries filter the instance label with the `node` variable
+      (instance="$node"), the rule only accepts a variable literally named
+      $instance.
+  template-job-rule:
+    reason: >-
+      The job variable is single-select without an all-option by design. The
+      GPU selector composes its options from one node of one job, a
+      multi-select job would turn it into a mixed bag of unrelated GPUs.
+  target-job-rule:
+    reason: >-
+      Queries use exact matchers (job="$job") because the job and node
+      variables are single-select, regex matchers would suggest multi-value
+      support that the dashboard deliberately does not have.
+  template-on-time-change-reload-rule:
+    reason: >-
+      The job, node and gpu variables are hardware inventory, not
+      time-dependent series. Reloading them on time range change makes the
+      dropdowns re-query and visibly flicker on every refresh tick (relative
+      ranges move "now", which counts as a range change). They reload on
+      dashboard load, like they always did.

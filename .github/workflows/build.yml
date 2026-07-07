@@ -52,8 +52,16 @@ jobs:
           npm install --global markdownlint-cli@0.49.0
           # renovate: depName=mvdan.cc/sh/v3 datasource=go
           go install mvdan.cc/sh/v3/cmd/shfmt@v3.13.1
+          # "go install" does not work on the dashboard-linter module (it has
+          # replace directives), so install the release binary. The version is
+          # a variable so renovate updates every occurrence in the URL at once.
+          # renovate: depName=grafana/dashboard-linter datasource=github-releases
+          DASHBOARD_LINTER_VERSION=0.2.0
+          curl -sSfL "https://github.com/grafana/dashboard-linter/releases/download/v${DASHBOARD_LINTER_VERSION}/dashboard-linter_${DASHBOARD_LINTER_VERSION}_linux_amd64.tar.gz" | tar -xz -C "$(go env GOPATH)/bin" dashboard-linter
       - name: Lint markdown and shell scripts
         run: task lint:assets
+      - name: Lint the Grafana dashboard
+        run: task lint:dashboard
       - name: Run tests
         run: go test -v -race -coverpkg=./... -coverprofile ./coverage.out -covermode=atomic -timeout 20m ./...
       - name: Print coverage results
