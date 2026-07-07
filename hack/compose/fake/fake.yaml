@@ -1,0 +1,64 @@
+# Drives the fake nvidia-smi for the dev stack. The fake is invoked fresh on
+# every scrape, so editing this file changes the next scrape with no restart.
+# Field names are nvidia-smi query fields (see internal/captures/README.md).
+capture: linux-x86_64__nvidia-geforce-rtx-2080-super__595.71.05
+state: load
+
+# Realistic jitter around the captured values for everything that naturally
+# moves: utilization, temperature, power draw, current clocks, fan speed and
+# memory (including per-process). An explicit override below beats the jitter.
+fluctuate: true
+
+# Four cards from the single-GPU capture, each with a stable generated uuid,
+# so the GPU selector, per-GPU filtering and per-process rows can be exercised
+# without hardware. The last card is deliberately sick to preview the health
+# banner, the throttle timeline and the temperature alert colors: select it in
+# the GPU dropdown to see the red states.
+gpus:
+  - {}
+  - {}
+  - {}
+  - overrides:
+      gpu_recovery_action: "Node Reboot"
+      temperature.gpu: 93
+      clocks_event_reasons.hw_thermal_slowdown: 1
+
+overrides:
+  # screenshot mode: a busy inference box. These beat the capture-anchored
+  # jitter so gauges sit in the colorful upper ranges (memory flirts with the
+  # warning band, temperature reaches yellow on healthy cards). Delete this
+  # block to fall back to values jittering around the capture.
+  utilization.gpu:    {min: 72,   max: 99}
+  utilization.memory: {min: 40,   max: 88}
+  memory.used:        {min: 5800, max: 7900}
+  power.draw:         {min: 180,  max: 249}
+  fan.speed:          {min: 55,   max: 92}
+  temperature.gpu:    {min: 62,   max: 79}
+  used_gpu_memory:    {min: 400,  max: 3600}
+  # the capture's load clocks sit near the reported maxima, so the jitter can
+  # overshoot 100% on the clock gauges (harmless, real overclocked cards do
+  # that too, but it looks odd in screenshots) - keep them just under max
+  # (memory max 7751 MHz, graphics max 2145 MHz on this capture)
+  clocks.current.memory:   {min: 6600, max: 7740}
+  clocks.current.graphics: {min: 1700, max: 2130}
+  # states the jitter does not cover. Integer 0:1 flips a flag ~50/50 per
+  # scrape and per GPU; bare integers parse fine for pstate and compute mode.
+  clocks_event_reasons.sw_power_cap:                {min: 0, max: 1}
+  clocks_event_reasons.sync_boost:                  {min: 0, max: 1}
+  clocks_event_reasons.hw_thermal_slowdown:         {min: 0, max: 1}
+  clocks_event_reasons.gpu_idle:                    {min: 0, max: 1}
+  clocks_event_reasons.sw_thermal_slowdown:         {min: 0, max: 1}
+  clocks_event_reasons.hw_power_brake_slowdown:     {min: 0, max: 1}
+  clocks_event_reasons.applications_clocks_setting: {min: 0, max: 1}
+  compute_mode:                                     {min: 0, max: 3}
+  pstate:                                           {min: 0, max: 5}  # busy states, coherent with the load
+  # recovery action / fabric state are enum-string fields: ranges cannot
+  # drive them (bare integers are rejected), only fixed strings like the
+  # per-GPU gpu_recovery_action above.
+  # ECC preview: the 2080 capture reports no ECC, these force the banner tile
+  # red + populate the datacenter ECC detail panel. Delete to restore "No ECC"
+  # (series go stale on the next scrape).
+  ecc.errors.uncorrected.aggregate.total:   5
+  ecc.errors.uncorrected.aggregate.dram:    3
+  ecc.errors.uncorrected.aggregate.sram:    2
+  ecc.errors.uncorrected.volatile.total:    1

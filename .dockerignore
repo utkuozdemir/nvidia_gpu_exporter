@@ -1,0 +1,15 @@
+# Keep the build context small and free of local state. The release image is
+# built by goreleaser from prebuilt binaries; this mainly serves the dev build
+# in hack/compose (context is the repo root).
+.git
+_work
+dist
+hack/compose/grafana/data
+hack/compose/grafana/dashboards
+hack/compose/prometheus/data
+*.md
+.idea
+.vscode
+.DS_Store
+*.patch
+*.diff
