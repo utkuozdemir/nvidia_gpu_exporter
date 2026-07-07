@@ -1,1 +1,3 @@
-data/
+/data/
+# rendered from docs/grafana/dashboard.json by render-dashboard.sh
+/dashboards/

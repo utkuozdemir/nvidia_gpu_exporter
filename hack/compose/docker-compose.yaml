@@ -1,14 +1,53 @@
+name: nvidia-gpu-exporter-dev
+
+# Local dev stack: the exporter scraping a fake nvidia-smi (no GPU needed),
+# Prometheus scraping the exporter, and Grafana with the dashboard provisioned
+# and pointed at Prometheus. See README.md.
+
 services:
+  exporter:
+    build:
+      context: ../..
+      dockerfile: hack/compose/Dockerfile
+    command:
+      - "--nvidia-smi-command=/usr/local/bin/fake-nvidia-smi --config /etc/fake/fake.yaml"
+      - "--collect.compute-apps"
+    volumes:
+      # mount the directory, not the file: editors replace the file via
+      # atomic rename, which breaks a single-file bind mount (stale inode).
+      # git operations that rewrite this directory (rebase, checkout) break
+      # even the directory mount the same way - restart this service then.
+      - ./fake:/etc/fake:ro
+    ports:
+      - "9835:9835"
+
   prometheus:
-    image: prom/prometheus:v2.55.1
+    image: prom/prometheus:v3.13.0
     ports:
       - "9090:9090"
     volumes:
-      - ./prometheus/data:/prometheus
       - ./prometheus/config:/etc/prometheus
+      - prometheus-data:/prometheus
+    depends_on:
+      - exporter
+
   grafana:
-    image: grafana/grafana:11.6.16
+    image: grafana/grafana:13.1.0
     ports:
       - "3000:3000"
+    environment:
+      # anonymous admin, no login prompt: it is a throwaway local stack
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_USERS_DEFAULT_THEME: dark
     volumes:
-      - ./grafana/data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+volumes:
+  prometheus-data:
+  grafana-data:
