@@ -3,6 +3,7 @@ package fakesmi
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/capture"
@@ -18,10 +19,11 @@ var errEmptySection = errors.New("section body has no header row")
 // project answers a CSV query for the requested comma-separated fields from a
 // recorded section: the field list recorded in the section's own command line
 // maps field names to CSV columns, and the output carries the requested
-// columns, in the requested order, for the header and every row. When overrides
-// are given, a data row's cell for a named field is replaced before projection,
-// so tests can drive values a real capture does not contain.
-func project(section *capture.Section, requestRaw string, overrides map[string]valueGen) (string, error) {
+// columns, in the requested order, for the header and every row. Data rows
+// pass through the transform pipeline first: replication into the simulated
+// GPUs (with per-GPU identity), then overrides, then fluctuation. The header
+// row is never transformed.
+func project(section *capture.Section, requestRaw string, cfg *config) (string, error) {
 	recorded, err := recordedFields(section.Command)
 	if err != nil {
 		return "", err
@@ -42,51 +44,93 @@ func project(section *capture.Section, requestRaw string, overrides map[string]v
 		return "", errEmptySection
 	}
 
-	output := make([]string, 0, len(lines))
+	header, err := splitRow(lines[0], len(recorded), -1)
+	if err != nil {
+		return "", fmt.Errorf("row 1: %w", err)
+	}
 
-	for lineNum, line := range lines {
-		row, err := projectRow(line, lineNum, recorded, columnOf, columns, overrides)
-		if err != nil {
-			return "", fmt.Errorf("row %d: %w", lineNum+1, err)
-		}
+	rows, err := splitDataRows(lines[1:], recorded, columnOf)
+	if err != nil {
+		return "", err
+	}
 
-		output = append(output, row)
+	replicas := max(len(cfg.gpus), 1)
+	output := make([]string, 0, 1+replicas*len(rows))
+	output = append(output, joinColumns(header, columns))
+
+	// one block of rows per simulated GPU, so a data row's GPU is its block
+	for gpu := range replicas {
+		output = transformRows(output, rows, gpu, recorded, columnOf, columns, cfg)
 	}
 
 	return strings.Join(output, "\n"), nil
 }
 
-// projectRow splits one CSV line, applies data-row overrides, and returns the
-// requested columns joined back together. The header (lineNum 0) is never
-// overridden and has no free-text cells.
-func projectRow(
-	line string,
-	lineNum int,
+// transformRows runs one simulated GPU's data rows through the pipeline —
+// identity, overrides, fluctuation — and appends their projections to output.
+func transformRows(
+	output []string,
+	rows [][]string,
+	gpu int,
 	recorded []string,
 	columnOf map[string]int,
 	columns []int,
-	overrides map[string]valueGen,
-) (string, error) {
+	cfg *config,
+) []string {
+	// buildOverrides returns exactly one map per replica, so a desync would
+	// fail here loudly rather than silently sharing another GPU's generators
+	overrides := cfg.overrides[gpu]
+
+	for _, row := range rows {
+		cells := row
+
+		if len(cfg.gpus) > 0 {
+			cells = slices.Clone(row)
+			rewriteIdentity(cells, columnOf, cfg.gpus[gpu], gpu, len(cfg.gpus))
+		}
+
+		applyOverrides(cells, recorded, overrides)
+
+		if cfg.fluct != nil {
+			cfg.fluct.apply(cells, recorded, columnOf, overrides)
+		}
+
+		output = append(output, joinColumns(cells, columns))
+	}
+
+	return output
+}
+
+// splitDataRows splits the data lines into cells, reconstructing the one
+// free-text column's own commas when the section has it.
+func splitDataRows(lines, recorded []string, columnOf map[string]int) ([][]string, error) {
 	freeTextColumn := -1
-	if column, hasFreeText := columnOf[freeTextField]; hasFreeText && lineNum > 0 {
+	if column, hasFreeText := columnOf[freeTextField]; hasFreeText {
 		freeTextColumn = column
 	}
 
-	cells, err := splitRow(line, len(recorded), freeTextColumn)
-	if err != nil {
-		return "", err
+	rows := make([][]string, 0, len(lines))
+
+	for lineNum, line := range lines {
+		cells, err := splitRow(line, len(recorded), freeTextColumn)
+		if err != nil {
+			return nil, fmt.Errorf("row %d: %w", lineNum+2, err)
+		}
+
+		rows = append(rows, cells)
 	}
 
-	if lineNum > 0 {
-		applyOverrides(cells, recorded, overrides)
-	}
+	return rows, nil
+}
 
+// joinColumns renders the requested columns of one row.
+func joinColumns(cells []string, columns []int) string {
 	projected := make([]string, 0, len(columns))
 	for _, column := range columns {
 		projected = append(projected, cells[column])
 	}
 
-	return strings.Join(projected, ", "), nil
+	return strings.Join(projected, ", ")
 }
 
 // applyOverrides replaces the cell of every field named in overrides with the

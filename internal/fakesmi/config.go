@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"maps"
 	"math"
 	"math/rand"
 	"os"
@@ -30,6 +31,8 @@ type fileConfig struct {
 	State     string                   `yaml:"state"`
 	Seed      *int64                   `yaml:"seed"`
 	Overrides map[string]overrideEntry `yaml:"overrides"`
+	GPUs      *gpusFileConfig          `yaml:"gpus"`
+	Fluctuate bool                     `yaml:"fluctuate"`
 	Exit      *int                     `yaml:"exit"`
 	Delay     string                   `yaml:"delay"`
 	StderrMsg string                   `yaml:"stderr-msg"` //nolint:tagliatelle // matches the --stderr-msg flag
@@ -198,41 +201,100 @@ func fieldSeed(seed int64, field string) int64 {
 	return seed ^ int64(h.Sum64())
 }
 
-// buildOverrides resolves the config base and the flag overlay into the final
-// per-field generator map. Config entries come first, flag overrides last, so a
-// flag wins per field.
-func buildOverrides(fc *fileConfig, flagOps []rawOverride, seed int64) (map[string]valueGen, error) {
-	var ordered []rawOverride
+// opsFromEntries validates and converts config override entries into ordered
+// rawOverrides. Iteration order is irrelevant to reproducibility, because
+// every ranged generator is seeded per field.
+func opsFromEntries(entries map[string]overrideEntry) ([]rawOverride, error) {
+	ops := make([]rawOverride, 0, len(entries))
 
-	if fc != nil {
-		for field, entry := range fc.Overrides {
-			if entry.fixed != nil {
-				if err := validateSetValue(field, *entry.fixed); err != nil {
-					return nil, err
-				}
-
-				ordered = append(ordered, rawOverride{field: field, fixed: entry.fixed})
-
-				continue
-			}
-
-			if _, err := validateRange(field, *entry.rng); err != nil {
+	for field, entry := range entries {
+		if entry.fixed != nil {
+			if err := validateSetValue(field, *entry.fixed); err != nil {
 				return nil, err
 			}
 
-			ordered = append(ordered, rawOverride{field: field, rng: entry.rng})
+			ops = append(ops, rawOverride{field: field, fixed: entry.fixed})
+
+			continue
 		}
+
+		if _, err := validateRange(field, *entry.rng); err != nil {
+			return nil, err
+		}
+
+		ops = append(ops, rawOverride{field: field, rng: entry.rng})
 	}
 
-	ordered = append(ordered, flagOps...)
+	return ops, nil
+}
 
-	out := make(map[string]valueGen, len(ordered))
-	for _, op := range ordered {
+// genMap turns rawOverrides into per-field generators. seedScope prefixes the
+// per-field seed derivation, so a per-GPU entry gets draws independent from a
+// top-level entry on the same field.
+func genMap(ops []rawOverride, seed int64, seedScope string) map[string]valueGen {
+	out := make(map[string]valueGen, len(ops))
+
+	for _, op := range ops {
 		if op.fixed != nil {
 			out[op.field] = constGen(*op.fixed)
 		} else {
-			out[op.field] = rangeGen(op.field, *op.rng, seed)
+			out[op.field] = rangeGen(seedScope+op.field, *op.rng, seed)
 		}
+	}
+
+	return out
+}
+
+// buildOverrides resolves the override layers into one generator map per
+// simulated GPU (a single map when gpus is off). Per field, a flag beats a
+// per-GPU config entry, which beats a top-level config entry. Top-level and
+// flag generators are shared across the GPU maps, so their per-row draws keep
+// every row independent exactly as in the single-GPU case.
+func buildOverrides(
+	fc *fileConfig,
+	flagOps []rawOverride,
+	gpuEntries []gpuFileEntry,
+	gpuCount int,
+	seed int64,
+) ([]map[string]valueGen, error) {
+	var topOps []rawOverride
+
+	if fc != nil {
+		ops, err := opsFromEntries(fc.Overrides)
+		if err != nil {
+			return nil, err
+		}
+
+		topOps = ops
+	}
+
+	if gpuCount == 0 {
+		return []map[string]valueGen{genMap(append(topOps, flagOps...), seed, "")}, nil
+	}
+
+	if err := rejectIdentityOverrides(append(topOps, flagOps...), gpuEntries); err != nil {
+		return nil, err
+	}
+
+	base := genMap(topOps, seed, "")
+	flags := genMap(flagOps, seed, "")
+
+	out := make([]map[string]valueGen, gpuCount)
+
+	for gpu := range out {
+		merged := maps.Clone(base)
+
+		if gpu < len(gpuEntries) {
+			ops, err := opsFromEntries(gpuEntries[gpu].overrides)
+			if err != nil {
+				return nil, err
+			}
+
+			maps.Copy(merged, genMap(ops, seed, fmt.Sprintf("gpu%d:", gpu)))
+		}
+
+		maps.Copy(merged, flags)
+		out[gpu] = merged
 	}
 
 	return out, nil
