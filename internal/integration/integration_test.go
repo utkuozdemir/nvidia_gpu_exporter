@@ -367,6 +367,67 @@ func TestConfigFile(t *testing.T) {
 	assert.Regexp(t, `nvidia_smi_temperature_gpu\{uuid="[^"]+"\} 88\b`, scrape(t, baseURL))
 }
 
+// TestMultiGPU proves the fake's --gpus replication comes out of the exporter
+// as distinct per-GPU series: the uuid is the exporter's identity label, so
+// two simulated GPUs must yield two temperature series with different uuids,
+// stable across scrapes.
+func TestMultiGPU(t *testing.T) {
+	t.Parallel()
+
+	baseURL := startExporter(t, "--nvidia-smi-command="+fakeCommand(defaultCapture(t), "--gpus", "2"))
+
+	series := regexp.MustCompile(`nvidia_smi_temperature_gpu\{uuid="([^"]+)"\}`)
+
+	first := series.FindAllStringSubmatch(scrape(t, baseURL), -1)
+	require.Len(t, first, 2)
+	assert.NotEqual(t, first[0][1], first[1][1], "the two GPUs must have distinct uuids")
+
+	second := series.FindAllStringSubmatch(scrape(t, baseURL), -1)
+	assert.Equal(t, first, second, "identities must be stable across scrapes")
+}
+
+// TestFluctuate proves the fake's --fluctuate mode moves metrics between
+// scrapes while the identity stays put. The fake seeds from the wall clock on
+// every invocation, so two scrapes draw independent jitter. A single metric
+// could land on the same value twice (power draw has only ~800 formatted
+// outcomes in its band), so the whole set of naturally-varying metrics is
+// compared: all of them repeating at once is practically impossible.
+func TestFluctuate(t *testing.T) {
+	t.Parallel()
+
+	baseURL := startExporter(t, "--nvidia-smi-command="+fakeCommand(defaultCapture(t), "--fluctuate"))
+
+	moving := regexp.MustCompile(`^nvidia_smi_(power_draw(_instant)?_watts|temperature_gpu|fan_speed_ratio|` +
+		`clocks_current_\w+|memory_used_bytes)\{`)
+	uuid := regexp.MustCompile(`nvidia_smi_power_draw_watts\{uuid="([^"]+)"\}`)
+
+	movingLines := func(metrics string) []string {
+		var lines []string
+
+		for line := range strings.Lines(metrics) {
+			if moving.MatchString(line) {
+				lines = append(lines, strings.TrimSpace(line))
+			}
+		}
+
+		return lines
+	}
+
+	first := scrape(t, baseURL)
+	second := scrape(t, baseURL)
+
+	firstUUID := uuid.FindStringSubmatch(first)
+	secondUUID := uuid.FindStringSubmatch(second)
+
+	require.NotNil(t, firstUUID)
+	require.NotNil(t, secondUUID)
+	assert.Equal(t, firstUUID[1], secondUUID[1], "the uuid must not move")
+
+	firstMoving := movingLines(first)
+	require.NotEmpty(t, firstMoving)
+	assert.NotEqual(t, firstMoving, movingLines(second), "the varying metrics should move between scrapes")
+}
+
 // TestGPURecoveryActionBadState drives gpu_recovery_action to "Reset" with the
 // fake's --set flag, proving a non-zero recovery action flows through the enum
 // transform and out as a metric. No real bad-GPU capture exists, so this is the
