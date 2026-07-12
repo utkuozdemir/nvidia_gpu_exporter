@@ -22,7 +22,7 @@ services:
       - "9835:9835"
 
   prometheus:
-    image: prom/prometheus:v3.13.0
+    image: prom/prometheus:v3.13.1
     ports:
       - "9090:9090"
     volumes:
