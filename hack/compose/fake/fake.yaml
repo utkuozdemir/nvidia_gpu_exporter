@@ -9,7 +9,7 @@ state: load
 # memory (including per-process). An explicit override below beats the jitter.
 fluctuate: true
 
-# Four cards from the single-GPU capture, each with a stable generated uuid,
+# Eight cards from the single-GPU capture, each with a stable generated uuid,
 # so the GPU selector, per-GPU filtering and per-process rows can be exercised
 # without hardware. The last card is deliberately sick to preview the health
 # banner, the throttle timeline and the temperature alert colors: select it in
@@ -18,10 +18,23 @@ gpus:
   - {}
   - {}
   - {}
+  - {}
+  - {}
+  - {}
+  - {}
   - overrides:
       gpu_recovery_action: "Node Reboot"
       temperature.gpu: 93
       clocks_event_reasons.hw_thermal_slowdown: 1
+      # ECC preview on the sick card only: the 2080 capture reports no ECC,
+      # these force the banner tile red + populate the datacenter ECC detail
+      # panel. Healthy cards keep "No ECC" so the overview dashboard can show
+      # the sick/healthy contrast. Delete to restore "No ECC" everywhere
+      # (series go stale on the next scrape).
+      ecc.errors.uncorrected.aggregate.total:   5
+      ecc.errors.uncorrected.aggregate.dram:    3
+      ecc.errors.uncorrected.aggregate.sram:    2
+      ecc.errors.uncorrected.volatile.total:    1
 
 overrides:
   # screenshot mode: a busy inference box. These beat the capture-anchored
@@ -54,11 +67,5 @@ overrides:
   pstate:                                           {min: 0, max: 5}  # busy states, coherent with the load
   # recovery action / fabric state are enum-string fields: ranges cannot
   # drive them (bare integers are rejected), only fixed strings like the
-  # per-GPU gpu_recovery_action above.
-  # ECC preview: the 2080 capture reports no ECC, these force the banner tile
-  # red + populate the datacenter ECC detail panel. Delete to restore "No ECC"
-  # (series go stale on the next scrape).
-  ecc.errors.uncorrected.aggregate.total:   5
-  ecc.errors.uncorrected.aggregate.dram:    3
-  ecc.errors.uncorrected.aggregate.sram:    2
-  ecc.errors.uncorrected.volatile.total:    1
+  # per-GPU gpu_recovery_action above. ECC errors are also per-GPU overrides
+  # on the sick card, so healthy cards keep reporting "No ECC".

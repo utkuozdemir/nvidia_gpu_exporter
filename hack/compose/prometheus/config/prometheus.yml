@@ -6,4 +6,4 @@ global:
 scrape_configs:
   - job_name: "nvidia_gpu_exporter"
     static_configs:
-      - targets: ["exporter:9835"]
+      - targets: ["node1:9835", "node2:9835"]

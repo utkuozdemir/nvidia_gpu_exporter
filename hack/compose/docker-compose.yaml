@@ -5,7 +5,8 @@ name: nvidia-gpu-exporter-dev
 # and pointed at Prometheus. See README.md.
 
 services:
-  exporter:
+  # first "node": eight consumer cards incl. one deliberately sick, fake.yaml
+  node1:
     build:
       context: ../..
       dockerfile: hack/compose/Dockerfile
@@ -21,6 +22,21 @@ services:
     ports:
       - "9835:9835"
 
+  # second "node": same exporter image, different fake (passive L40S cards,
+  # fake2.yaml), so the dashboards can prove per-node filtering, joins and
+  # links do not bleed across instances. See fake/fake2.yaml.
+  node2:
+    build:
+      context: ../..
+      dockerfile: hack/compose/Dockerfile
+    command:
+      - "--nvidia-smi-command=/usr/local/bin/fake-nvidia-smi --config /etc/fake/fake2.yaml"
+      - "--collect.compute-apps"
+    volumes:
+      - ./fake:/etc/fake:ro
+    ports:
+      - "9836:9835"
+
   prometheus:
     image: prom/prometheus:v3.13.1
     ports:
@@ -29,7 +45,8 @@ services:
       - ./prometheus/config:/etc/prometheus
       - prometheus-data:/prometheus
     depends_on:
-      - exporter
+      - node1
+      - node2
 
   grafana:
     image: grafana/grafana:13.1.0
