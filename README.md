@@ -48,6 +48,12 @@ to see your GPU metrics in a nicely visualized way.
 Here's how it looks like:
 ![Grafana dashboard](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/docs/grafana/dashboard.png)
 
+For machines with more than one GPU there is a companion
+[overview dashboard](https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/docs/grafana/dashboard-overview.json)
+that compares all GPUs of a node side by side and drills down into the
+single-GPU dashboard above. Import it from the JSON file, or enable
+`grafanaDashboard` in the Helm chart to get both dashboards provisioned.
+
 ## Installation
 
 See [INSTALL.md](docs/INSTALL.md) for details.

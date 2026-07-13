@@ -13,4 +13,6 @@ metadata:
 data:
   nvidia-gpu-metrics.json: |-
     {{- .Files.Get "dashboards/nvidia-gpu-metrics.json" | nindent 4 }}
+  nvidia-gpu-overview.json: |-
+    {{- .Files.Get "dashboards/nvidia-gpu-overview.json" | nindent 4 }}
 {{- end }}

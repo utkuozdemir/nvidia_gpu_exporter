@@ -104,6 +104,7 @@ the exporter also runs on nodes without GPUs, restrict the DaemonSet to GPU
 nodes via `nodeSelector` or `affinity` before enabling it, otherwise the
 alerts fire for nodes that cannot collect GPU metrics by design.
 `grafanaDashboard` ships the [Grafana dashboard](https://grafana.com/grafana/dashboards/14574)
+and its [multi-GPU overview companion](https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/docs/grafana/dashboard-overview.json)
 as a ConfigMap labeled for the Grafana sidecar.
 
 {{ template "chart.valuesSection" . }}

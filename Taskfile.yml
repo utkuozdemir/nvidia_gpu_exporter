@@ -38,9 +38,10 @@ tasks:
   # releases page ("go install" does not work on it, the module carries
   # replace directives). Rule exclusions live in docs/grafana/.lint.
   lint:dashboard:
-    desc: lint the Grafana dashboard against grafana.com best practices
+    desc: lint the Grafana dashboards against grafana.com best practices
     cmds:
       - dashboard-linter lint --strict docs/grafana/dashboard.json
+      - dashboard-linter lint --strict docs/grafana/dashboard-overview.json
 
   release:
     desc: release
