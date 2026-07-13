@@ -28,3 +28,5 @@ annotations:
   artifacthub.io/links: |
     - name: Grafana dashboard
       url: https://grafana.com/grafana/dashboards/14574
+    - name: Grafana dashboard (multi-GPU overview)
+      url: https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/docs/grafana/dashboard-overview.json

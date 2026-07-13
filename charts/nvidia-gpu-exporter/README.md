@@ -104,6 +104,7 @@ the exporter also runs on nodes without GPUs, restrict the DaemonSet to GPU
 nodes via `nodeSelector` or `affinity` before enabling it, otherwise the
 alerts fire for nodes that cannot collect GPU metrics by design.
 `grafanaDashboard` ships the [Grafana dashboard](https://grafana.com/grafana/dashboards/14574)
+and its [multi-GPU overview companion](https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/docs/grafana/dashboard-overview.json)
 as a ConfigMap labeled for the Grafana sidecar.
 
 ## Values
@@ -116,7 +117,7 @@ as a ConfigMap labeled for the Grafana sidecar.
 | extraEnv | list | `[]` | Extra environment variables for the exporter container |
 | fullnameOverride | string | `""` | Override the fully qualified app name |
 | grafanaDashboard.annotations | object | `{}` | Annotations for the dashboard ConfigMap, e.g. the folder annotation of the sidecar |
-| grafanaDashboard.enabled | bool | `false` | Create a ConfigMap with the Grafana dashboard, labeled for the Grafana sidecar to pick up |
+| grafanaDashboard.enabled | bool | `false` | Create a ConfigMap with the Grafana dashboards (single-GPU detail and multi-GPU overview), labeled for the Grafana sidecar to pick up |
 | grafanaDashboard.label | string | `"grafana_dashboard"` | Label that the Grafana sidecar watches for |
 | grafanaDashboard.labelValue | string | `"1"` | Value of the sidecar label |
 | hostNetwork | bool | `false` | Use the host network for the pods |

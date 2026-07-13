@@ -150,8 +150,8 @@ prometheusRule:
     severity: warning
 
 grafanaDashboard:
-  # -- Create a ConfigMap with the Grafana dashboard, labeled for the Grafana
-  # sidecar to pick up
+  # -- Create a ConfigMap with the Grafana dashboards (single-GPU detail and
+  # multi-GPU overview), labeled for the Grafana sidecar to pick up
   enabled: false
   # -- Label that the Grafana sidecar watches for
   label: grafana_dashboard

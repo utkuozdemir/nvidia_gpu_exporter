@@ -21,7 +21,10 @@ Follow the steps below:
 9. Hit "Import". The dashboard picks your Prometheus data source automatically.
    If you have more than one, use the "Data source" dropdown at the top of the
    dashboard.
-10. Enjoy the dashboard!
+10. Enjoy the dashboard! If the machine has more than one GPU, also import
+    [the overview dashboard](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/docs/grafana/dashboard-overview.json)
+    (copy the JSON into the "Import via dashboard JSON model" field) to
+    compare all GPUs side by side.
 
 ## Using .deb or .rpm packages
 
