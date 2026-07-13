@@ -54,6 +54,8 @@ that compares all GPUs of a node side by side and drills down into the
 single-GPU dashboard above. Import it from the JSON file, or enable
 `grafanaDashboard` in the Helm chart to get both dashboards provisioned.
 
+![Grafana overview dashboard](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/docs/grafana/dashboard-overview.png)
+
 ## Installation
 
 See [INSTALL.md](docs/INSTALL.md) for details.
