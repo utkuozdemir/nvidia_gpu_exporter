@@ -49,7 +49,7 @@ jobs:
       - name: Install asset linters
         run: |
           # renovate: depName=markdownlint-cli datasource=npm
-          npm install --global markdownlint-cli@0.49.0
+          npm install --global markdownlint-cli@0.49.1
           # renovate: depName=mvdan.cc/sh/v3 datasource=go
           go install mvdan.cc/sh/v3/cmd/shfmt@v3.13.1
           # "go install" does not work on the dashboard-linter module (it has
