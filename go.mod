@@ -4,6 +4,7 @@ module github.com/utkuozdemir/nvidia_gpu_exporter
 go 1.26.5
 
 require (
+	github.com/NVIDIA/go-nvml v0.13.3-1
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/coreos/go-systemd/v22 v22.7.0
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51

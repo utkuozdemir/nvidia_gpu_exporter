@@ -208,7 +208,7 @@ func newTestExporter(
 
 	source := collect.NewLive(query, 0, nil, logger)
 
-	return exporter.New(ctx, prefix, resolved, source, false, logger)
+	return exporter.New(ctx, prefix, resolved, source, false, exporter.ExecExitCodeMetric, logger)
 }
 
 // staticSource serves a fixed snapshot, for driving the render paths directly.
@@ -231,7 +231,15 @@ func newAppsExporter(t *testing.T, snapshot collect.Snapshot) *exporter.GPUExpor
 		t.Context(), "bbb", "fan.speed", "", 0, nvidiasmi.DefaultRunFunc, logger)
 	require.NoError(t, err)
 
-	return exporter.New(t.Context(), "aaa", resolved, &staticSource{snapshot: snapshot}, true, logger)
+	return exporter.New(
+		t.Context(),
+		"aaa",
+		resolved,
+		&staticSource{snapshot: snapshot},
+		true,
+		exporter.ExecExitCodeMetric,
+		logger,
+	)
 }
 
 // gpuTable builds a minimal one-GPU table carrying just the uuid cell.
@@ -443,7 +451,7 @@ func TestCollectDeliversMetricsOnFatalError(t *testing.T) {
 	}
 
 	source := collect.NewLive(query, 0, func(fatalErr error) { cancel(fatalErr) }, logger)
-	exp := exporter.New(ctx, "aaa", resolved, source, false, logger)
+	exp := exporter.New(ctx, "aaa", resolved, source, false, exporter.ExecExitCodeMetric, logger)
 
 	families := gatherFamilies(t, exp)
 
@@ -544,7 +552,7 @@ func TestCollectComputeAppsDisabled(t *testing.T) {
 	// the feature is off
 	apps := []nvidiasmi.ComputeApp{{GPUUUID: "abc", PID: "42", ProcessName: "x", UsedMemory: "1 MiB"}}
 	source := &staticSource{snapshot: appsSnapshot(gpuTable("GPU-ABC"), apps, true)}
-	exp := exporter.New(t.Context(), "aaa", resolved, source, false, logger)
+	exp := exporter.New(t.Context(), "aaa", resolved, source, false, exporter.ExecExitCodeMetric, logger)
 
 	families := gatherFamilies(t, exp)
 

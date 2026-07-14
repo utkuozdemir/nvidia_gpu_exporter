@@ -241,3 +241,56 @@ Things to keep in mind:
   disappear with the process. On machines with high process turnover this
   can bloat the time series database, which is one of the reasons the
   feature is opt-in.
+
+## Experimental: native NVML backend
+
+`--collect.backend=nvml` reads GPU metrics directly from the driver library
+(`libnvidia-ml.so.1`) instead of running `nvidia-smi`. The exported metrics
+are the same: metric names, labels and values match the default backend on
+the same machine, verified field-by-field against live hardware.
+
+```bash
+nvidia_gpu_exporter --collect.backend nvml
+```
+
+What it buys:
+
+- It needs no `nvidia-smi` binary. In containers, the NVIDIA container runtime
+  injecting the driver library is enough. The `-nvml` release artifacts and image tags (for example
+  `utkuozdemir/nvidia_gpu_exporter:1.5.0-nvml`) carry this backend and
+  default to it, so they need no flag at all; `--collect.backend=exec`
+  switches them back. Note for semver-based image automation (e.g. a Flux
+  `ImagePolicy`): the `-nvml` suffix parses as a semver pre-release, so
+  filter the flavored tags explicitly, for example with
+  `filterTags: {pattern: '^(?P<version>\d+\.\d+\.\d+)-nvml$', extract: '$version'}`.
+- It spawns no process per collection, and a single collection is cheaper
+  than an `nvidia-smi` run.
+- Collection failures are reported as an NVML status
+  (`nvidia_smi_nvml_return_code`) instead of a process exit code. `0` means
+  success; `-1` means the collection produced no NVML status at all: it was
+  abandoned on timeout, rejected because a previous one is still stuck, or
+  found zero visible GPUs (deliberately a failed collection, so a broken
+  container device mount cannot look like a healthy idle scrape).
+
+Current limits, while the backend is experimental:
+
+- Linux x86_64 only, glibc-based systems (the binary is built with cgo), and
+  only in the dedicated `-nvml` release artifacts and image tags. The regular
+  binaries stay fully static and answer this flag with an error.
+- The queryable fields are a built-in catalog. A field a future driver adds
+  shows up in the default backend first; explicit `--query-field-names`
+  lists work the same in both backends and fail loudly on unknown fields.
+- On drivers older than the 590 branch the clock-reasons metric family may be
+  spelled `clocks_throttle_reasons_*` by one backend and
+  `clocks_event_reasons_*` by the other: the exact driver release that renamed
+  the family is not pinned down yet.
+- `--nvidia-smi-command` cannot be combined with this backend, since there
+  is no command to customize. Remote scraping via an ssh wrapper needs the
+  default backend.
+- A wedged driver call cannot be killed the way a stuck `nvidia-smi` process
+  can. `--collect.timeout` still bounds how long a scrape waits, but the
+  stuck call can linger in the background. The default backend remains the
+  strongest isolation against misbehaving drivers.
+
+The `nvidia_smi_*` metric prefix stays as is in both backends: it names the
+data schema, not the collection mechanism.

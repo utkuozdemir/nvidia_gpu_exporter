@@ -29,6 +29,7 @@ import (
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/collect"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvidiasmi"
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvmlnative"
 )
 
 const appName = "nvidia_gpu_exporter"
@@ -124,6 +125,12 @@ func Run(ctx context.Context, args []string, opts Options) error {
 				"(for example `remapped_rows.histogram.*`). Useful to drop fields that are slow "+
 				"or unsupported on a given setup.").
 			Default("").String()
+		collectBackend = app.Flag("collect.backend",
+			"How to collect GPU metrics. `exec` runs nvidia-smi (the default); `nvml` is "+
+				"experimental and reads the driver library (libnvidia-ml) directly, without "+
+				"nvidia-smi. The nvml backend requires Linux and a build with the backend "+
+				"compiled in, and exposes the same metrics as the exec backend.").
+			Default(DefaultBackend).Enum("exec", "nvml")
 		collectInterval = app.Flag("collect.interval",
 			"Interval at which nvidia-smi runs in the background, with scrapes serving the most "+
 				"recent result. When 0, nvidia-smi runs synchronously on each scrape instead.").
@@ -139,7 +146,8 @@ func Run(ctx context.Context, args []string, opts Options) error {
 				"namespace (hostPID in Kubernetes, --pid=host in Docker).").
 			Default("false").Bool()
 		shutdownOnErr = app.Flag("shutdown-on-error",
-			"Shut down the exporter if there is an error querying nvidia-smi. "+
+			"Shut down the exporter if there is a fatal collection error "+
+				"(a failing nvidia-smi run, or a lost GPU/driver in nvml mode). "+
 				"When false, exporter will simply log this error and export it as a metric, but will not crash.").
 			Default("false").Bool()
 		enablePprof = app.Flag("web.enable-pprof",
@@ -168,6 +176,12 @@ func Run(ctx context.Context, args []string, opts Options) error {
 		return err
 	}
 
+	if *collectBackend == backendNVML && *nvidiaSmiCommand != nvidiasmi.DefaultCommand {
+		// a custom command signals intent (ssh wrappers, sudo) the nvml
+		// backend cannot honor, so it is an error rather than a silent ignore
+		return errors.New("--nvidia-smi-command cannot be combined with --collect.backend=nvml")
+	}
+
 	ctx, serverCancel := context.WithCancelCause(ctx)
 	defer serverCancel(nil)
 
@@ -179,6 +193,7 @@ func Run(ctx context.Context, args []string, opts Options) error {
 	eg, ctx := errgroup.WithContext(ctx)
 
 	collectCfg := collectConfig{
+		backend:          *collectBackend,
 		nvidiaSmiCommand: *nvidiaSmiCommand,
 		qFieldsRaw:       *qFields,
 		qFieldsExclude:   *qFieldsExclude,
@@ -272,9 +287,22 @@ func validateCollectFlags(interval, timeout time.Duration) error {
 	return nil
 }
 
+// Collection backend names, the values of --collect.backend.
+const (
+	backendExec = "exec"
+	backendNVML = "nvml"
+)
+
+// DefaultBackend is the default value of --collect.backend. The regular
+// builds default to exec; the nvml release flavor overrides this to nvml at
+// build time, so the artifact whose whole point is the nvml backend uses it
+// out of the box (the flag still switches either build both ways).
+var DefaultBackend = backendExec
+
 // collectConfig carries the collection-related settings from the flags to the
 // exporter setup.
 type collectConfig struct {
+	backend          string
 	nvidiaSmiCommand string
 	qFieldsRaw       string
 	qFieldsExclude   string
@@ -295,20 +323,10 @@ func setupExporter(
 	registry *prometheus.Registry,
 	logger *slog.Logger,
 ) error {
-	resolved, err := nvidiasmi.ResolveFields(
-		ctx,
-		cfg.nvidiaSmiCommand,
-		cfg.qFieldsRaw,
-		cfg.qFieldsExclude,
-		cfg.timeout,
-		nvidiasmi.DefaultRunFunc,
-		logger,
-	)
+	resolved, query, exitCodeMetric, err := setupBackend(ctx, eg, cfg, logger)
 	if err != nil {
-		return fmt.Errorf("failed to resolve query fields: %w", err)
+		return err
 	}
-
-	query := buildQueryFunc(cfg, resolved, logger)
 
 	var src collect.Source
 
@@ -323,7 +341,7 @@ func setupExporter(
 		src = collect.NewLive(query, cfg.timeout, cfg.onFatal, logger)
 	}
 
-	exp := exporter.New(ctx, exporter.DefaultPrefix, resolved, src, cfg.computeApps, logger)
+	exp := exporter.New(ctx, exporter.DefaultPrefix, resolved, src, cfg.computeApps, exitCodeMetric, logger)
 
 	// the go and process collectors keep the exposed families identical to
 	// what the default registry used to serve
@@ -339,6 +357,64 @@ func setupExporter(
 	}
 
 	return nil
+}
+
+// setupBackend resolves the query fields and builds the collection function
+// for the configured backend. The exec backend resolves fields by asking
+// nvidia-smi; the nvml backend resolves against its compiled catalog and
+// reports collection status as an NVML return code under its own metric
+// name.
+func setupBackend(
+	ctx context.Context,
+	eg *errgroup.Group,
+	cfg collectConfig,
+	logger *slog.Logger,
+) (nvidiasmi.ResolvedFields, collect.QueryFunc, exporter.ExitCodeMetric, error) {
+	if cfg.backend == backendNVML {
+		backend, err := nvmlnative.New(logger)
+		if err != nil {
+			return nvidiasmi.ResolvedFields{}, nil, exporter.ExitCodeMetric{},
+				fmt.Errorf("failed to set up the nvml backend: %w", err)
+		}
+
+		resolved, err := nvmlnative.Resolve(
+			cfg.qFieldsRaw, cfg.qFieldsExclude, backend.DriverVersion(), logger)
+		if err != nil {
+			backend.Close()
+
+			return nvidiasmi.ResolvedFields{}, nil, exporter.ExitCodeMetric{},
+				fmt.Errorf("failed to resolve query fields: %w", err)
+		}
+
+		// tie NVML shutdown to the application lifetime, best-effort: a
+		// collection stuck inside the driver makes Close skip the shutdown
+		// call rather than delay process exit
+		eg.Go(func() error {
+			<-ctx.Done()
+
+			backend.Close()
+
+			return nil
+		})
+
+		return resolved, backend.QueryFunc(resolved, cfg.computeApps), exporter.NVMLReturnCodeMetric, nil
+	}
+
+	resolved, err := nvidiasmi.ResolveFields(
+		ctx,
+		cfg.nvidiaSmiCommand,
+		cfg.qFieldsRaw,
+		cfg.qFieldsExclude,
+		cfg.timeout,
+		nvidiasmi.DefaultRunFunc,
+		logger,
+	)
+	if err != nil {
+		return nvidiasmi.ResolvedFields{}, nil, exporter.ExitCodeMetric{},
+			fmt.Errorf("failed to resolve query fields: %w", err)
+	}
+
+	return resolved, buildQueryFunc(cfg, resolved, logger), exporter.ExecExitCodeMetric, nil
 }
 
 // buildQueryFunc builds the collection cycle: the GPU query, plus the

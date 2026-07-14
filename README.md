@@ -13,7 +13,7 @@ Nvidia GPU exporter for prometheus, using `nvidia-smi` binary to gather metrics.
 ---
 
 > [!WARNING]
-> **Maintenance Status:** I get that it can be frustrating not to hear back about the stuff you've brought up or the changes you've suggested. But honestly, for over a year now, I've hardly had any time to keep up with my personal open-source projects, including this one. I am still committed to keep this tool working and slowly move it forward, but please bear with me if I can't tackle your fixes or check out your code for a while. Thanks for your understanding.
+> Heads up: this is a side project I maintain in my spare time. I might take a long time to look at issues or PRs, or not get to them at all. Sorry in advance, and thanks for understanding.
 
 ---
 
@@ -25,6 +25,11 @@ targeting enterprise setups (DCGM) and so on.
 
 This is a simple exporter that uses `nvidia-smi(.exe)` binary to collect, parse and export metrics.
 This makes it possible to run it on Windows and get GPU metrics while gaming - no Docker or Linux required.
+
+It can also skip `nvidia-smi` and read the metrics straight from the NVIDIA
+Management Library (NVML), the C library `nvidia-smi` itself is built on. This
+mode is experimental and exports the exact same metrics; see
+[CONFIGURE.md](docs/CONFIGURE.md).
 
 This project is based on [a0s/nvidia-smi-exporter](https://github.com/a0s/nvidia-smi-exporter).
 However, this one is written in Go to produce a single, static binary.
@@ -38,6 +43,7 @@ However, this one is written in Go to produce a single, static binary.
 - No need for a Docker or Kubernetes environment
 - Auto-discovery of the metric fields `nvidia-smi` can expose (future-compatible)
 - Optional per-process GPU metrics: see which process uses how much GPU memory
+- Experimental NVML mode: reads the driver library directly instead of running `nvidia-smi` (Linux)
 - Comes with its own [Grafana dashboard](https://grafana.com/grafana/dashboards/14574)
 
 ## Visualization

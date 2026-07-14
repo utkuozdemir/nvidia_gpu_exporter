@@ -81,20 +81,23 @@ jobs:
           for repo in \
             docker.io/utkuozdemir/nvidia_gpu_exporter \
             ghcr.io/utkuozdemir/nvidia_gpu_exporter; do
-            # the tag was just pushed; retry the registry read to avoid a race
-            digest=""
-            for _ in 1 2 3 4 5; do
-              if digest="$(docker buildx imagetools inspect "${repo}:${version}" \
-                --format '{{ .Manifest.Digest }}')"; then
-                break
+            # sign every published tag variant of this release
+            for tag in "${version}" "${version}-nvml"; do
+              # the tag was just pushed; retry the registry read to avoid a race
+              digest=""
+              for _ in 1 2 3 4 5; do
+                if digest="$(docker buildx imagetools inspect "${repo}:${tag}" \
+                  --format '{{ .Manifest.Digest }}')"; then
+                  break
+                fi
+                sleep 5
+              done
+              if [ -z "${digest}" ]; then
+                echo "could not resolve a digest for ${repo}:${tag}" >&2
+                exit 1
               fi
-              sleep 5
+              cosign sign --yes "${repo}@${digest}"
             done
-            if [ -z "${digest}" ]; then
-              echo "could not resolve a digest for ${repo}:${version}" >&2
-              exit 1
-            fi
-            cosign sign --yes "${repo}@${digest}"
           done
 
   helm-chart:

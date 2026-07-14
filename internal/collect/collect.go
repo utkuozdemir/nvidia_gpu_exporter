@@ -70,6 +70,19 @@ type Reading struct {
 // error and exit code describe the GPU query only, per the Reading contract.
 type QueryFunc func(ctx context.Context) (Reading, int, error)
 
+// FatalError marks a collection failure that should trigger
+// shutdown-on-error. The exec backend signals fatality through
+// *exec.ExitError (a genuine non-zero exit of the command); backends without
+// a subprocess wrap their fatal-class failures (driver/GPU lifecycle errors,
+// never per-field unavailability) in this type instead.
+type FatalError struct {
+	Err error
+}
+
+func (e *FatalError) Error() string { return e.Err.Error() }
+
+func (e *FatalError) Unwrap() error { return e.Err }
+
 // collectOnce runs one collection bounded by timeout and folds the outcome
 // into a Snapshot, updating the cumulative failure count and last-success
 // time owned by the caller. A failed attempt is logged here, exactly once,
@@ -110,7 +123,11 @@ func collectOnce(
 		snapshot.Failures = *failures
 
 		var exitErr *exec.ExitError
-		if callCtx.Err() == nil && errors.As(err, &exitErr) && onFatal != nil {
+
+		var fatalErr *FatalError
+
+		if callCtx.Err() == nil && onFatal != nil &&
+			(errors.As(err, &exitErr) || errors.As(err, &fatalErr)) {
 			onFatal(err)
 		}
 

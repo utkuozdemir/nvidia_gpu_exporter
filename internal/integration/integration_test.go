@@ -24,6 +24,7 @@ import (
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/app"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/capture"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/captures"
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvmlnative"
 )
 
 // update regenerates the expected output files instead of comparing against them.
@@ -582,4 +583,46 @@ func TestComputeAppsSoftFailure(t *testing.T) {
 	assert.NotContains(t, metrics, "nvidia_smi_compute_app_info")
 	assert.Contains(t, metrics, "nvidia_smi_gpu_info")
 	assert.Contains(t, metrics, "nvidia_smi_last_collect_success 1")
+}
+
+// TestNVMLBackendRejectsCustomCommand pins the flag-validation contract: a
+// custom nvidia-smi command signals intent (ssh wrappers, sudo) the nvml
+// backend cannot honor, so combining them must fail at startup.
+func TestNVMLBackendRejectsCustomCommand(t *testing.T) {
+	t.Parallel()
+
+	err := app.Run(t.Context(), []string{
+		"--web.listen-address=127.0.0.1:0",
+		"--log.level=error",
+		"--collect.backend=nvml",
+		"--nvidia-smi-command=" + fakeCommand(defaultCapture(t)),
+	}, app.Options{})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--nvidia-smi-command cannot be combined")
+}
+
+// TestNVMLBackendStartupFailureWithoutDriver pins the startup behavior on
+// machines without a usable NVML setup: builds without the backend fail with
+// the unavailability message, cgo builds fail initializing the absent
+// library. Either way startup fails cleanly instead of serving empty data.
+// On a machine with a working GPU driver this scenario does not apply, so
+// the test skips (it still runs everywhere CI runs).
+func TestNVMLBackendStartupFailureWithoutDriver(t *testing.T) {
+	t.Parallel()
+
+	err := app.Run(t.Context(), []string{
+		"--web.listen-address=127.0.0.1:0",
+		"--log.level=error",
+		"--collect.backend=nvml",
+	}, app.Options{})
+	if err == nil {
+		t.Skip("a working NVML driver is present; the no-driver startup path does not apply here")
+	}
+
+	require.ErrorContains(t, err, "failed to set up the nvml backend")
+
+	if !nvmlnative.Available {
+		assert.Contains(t, err.Error(), "not available in this build")
+	}
 }
