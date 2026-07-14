@@ -524,13 +524,13 @@ func (b *Backend) collectDevice(
 		c.set("pcie.link.width.max", ret, func() string { return strconv.Itoa(maxWidth) })
 	}
 
-	// display_mode is on nvidia-smi's internal deprecation list (H100/590
-	// verified: the token is printed and the getter is not even called),
-	// while display_attached renders the same NVML reading as Yes/No. The
-	// deprecation list is pinned to the verified driver generation; an older
-	// driver where exec still prints real values diverges here, documented
-	// in the design outcomes.
-	c.values["display_mode"] = tokenDeprecated
+	// the deprecation-listed fields (see deprecatedFields) get the token
+	// regardless of what NVML would answer, matching nvidia-smi, which does
+	// not even call the getters for them. Pinned to the verified driver
+	// generation; the corpus drift test guards the list.
+	for _, field := range deprecatedFields {
+		c.values[field] = tokenDeprecated
+	}
 
 	if p.want("display_attached") {
 		dispMode, ret := dev.GetDisplayMode()
@@ -775,9 +775,6 @@ func (b *Backend) collectDevice(
 		return nil, fmt.Errorf("device collection interrupted: %w", err)
 	}
 
-	// deprecation-listed like display_mode (H100/590 verified)
-	c.values["power.management"] = tokenDeprecated
-
 	if p.want("power.draw") {
 		powerUsage, ret := dev.GetPowerUsage()
 		c.set("power.draw", ret, func() string { return milliwatts(powerUsage) })
@@ -817,13 +814,6 @@ func (b *Backend) collectDevice(
 		clock, cret := dev.GetClockInfo(clockType)
 		c.set(field, cret, func() string { return mhz(clock) })
 	}
-
-	// all four applications-clock fields are deprecation-listed (H100/590
-	// verified: NVML still answers, nvidia-smi prints the token regardless)
-	c.values["clocks.applications.graphics"] = tokenDeprecated
-	c.values["clocks.applications.memory"] = tokenDeprecated
-	c.values["clocks.default_applications.graphics"] = tokenDeprecated
-	c.values["clocks.default_applications.memory"] = tokenDeprecated
 
 	for field, clockType := range map[nvidiasmi.QField]nvml.ClockType{
 		"clocks.max.graphics": nvml.CLOCK_GRAPHICS,
