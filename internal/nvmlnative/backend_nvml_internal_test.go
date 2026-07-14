@@ -4,6 +4,7 @@ package nvmlnative
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/neilotoole/slogt/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/thejerf/slogassert"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/collect"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvidiasmi"
@@ -341,16 +343,21 @@ func TestFunctionNotFoundIsLoggedOnce(t *testing.T) {
 	dev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 0, nvml.ERROR_FUNCTION_NOT_FOUND }
 
 	f := &fakeAPI{devices: []nvml.Device{dev}}
-	b := newTestBackend(t, f)
+	handler := slogassert.New(t, slog.LevelWarn, nil)
+	b, err := newWithAPI(f.api(), slog.New(handler))
+	require.NoError(t, err)
+
 	query := b.QueryFunc(resolveFields(t, "power.draw"), false)
 
 	reading, _, err := query(t.Context())
 	require.NoError(t, err, "a missing optional function must not fail the collection")
 	assert.Equal(t, "[Function Not Found]", cellValue(t, reading.Table, "power.draw"))
-	assert.True(t, b.fnfLogged, "the missing function must be logged for drift visibility")
 
-	// the second cycle must not log again (the flag stays set)
+	// the second cycle must not log again
 	_, _, err = query(t.Context())
 	require.NoError(t, err)
-	assert.True(t, b.fnfLogged)
+
+	handler.AssertMessage("required NVML functions are unavailable in this driver; " +
+		"the affected fields will be absent - please report this on the project's issue tracker")
+	handler.AssertEmpty()
 }

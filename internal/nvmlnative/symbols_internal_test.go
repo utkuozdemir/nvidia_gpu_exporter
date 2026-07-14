@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
 	"strings"
 	"testing"
 
@@ -108,16 +109,38 @@ func captureSymbolInventory(t *testing.T, name string) map[string]bool {
 	return symbols
 }
 
-// TestSymbolManifestCoversCollectorCallSites parses the collector source and
-// fails when an NVML call site has no entry in the requirement manifest, so
-// the manifest cannot silently rot as collectors are added.
+// TestSymbolManifestCoversCollectorCallSites parses the whole package source
+// (not just one file, so extracted helpers stay covered) and fails when an
+// NVML call site or a seam entry has no manifest entry, so the manifest
+// cannot silently rot as collectors are added.
+//
+// Known blind spot: a getter reached through a renamed helper that neither
+// matches the Get* shape nor goes through the seam would escape the scan;
+// the seam design makes that unlikely, and the inventory test still catches
+// the symbol itself once such a field misbehaves on a captured driver.
 func TestSymbolManifestCoversCollectorCallSites(t *testing.T) {
 	t.Parallel()
 
 	fset := token.NewFileSet()
 
-	file, err := parser.ParseFile(fset, "backend_nvml.go", nil, 0)
+	entries, err := os.ReadDir(".")
 	require.NoError(t, err)
+
+	// parse every non-test source file directly: build tags are deliberately
+	// ignored so the cgo collector is scanned on any development platform
+	var files []*ast.File
+
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+
+		file, parseErr := parser.ParseFile(fset, name, nil, 0)
+		require.NoError(t, parseErr)
+
+		files = append(files, file)
+	}
 
 	manifest := map[string]bool{}
 	for _, requirement := range nvmlSymbolRequirements {
@@ -125,11 +148,43 @@ func TestSymbolManifestCoversCollectorCallSites(t *testing.T) {
 	}
 
 	// call sites appear in two shapes: method calls on a device value
-	// (dev.GetName, mig handlers) and the nvmlAPI seam construction in
-	// realNVML, whose field names are the manifest's core goCall keys.
+	// (dev.GetName, mig handlers), and the nvmlAPI seam whose FIELDS are the
+	// manifest's core goCall keys (the seam assigns function references, so
+	// a call scan alone would miss init/shutdown/enumeration entirely).
 	seen := map[string]bool{}
 
+	for _, file := range files {
+		collectCallSites(file, seen)
+	}
+
+	require.NotEmpty(t, seen)
+	require.Contains(t, seen, "init", "the nvmlAPI seam fields were not discovered; did the seam move?")
+
+	for method := range seen {
+		assert.True(t, manifest[method],
+			"collector calls %s but nvmlSymbolRequirements has no entry for it\n"+
+				"  fix: add a symbolRequirement in internal/nvmlnative/symbols.go", method)
+	}
+}
+
+// collectCallSites records device getter calls and nvmlAPI seam field names.
+//
+//nolint:cyclop // one linear AST walk over the two call-site shapes
+func collectCallSites(file *ast.File, seen map[string]bool) {
 	ast.Inspect(file, func(node ast.Node) bool {
+		// the seam struct type: every field is a core requirement
+		if typeSpec, ok := node.(*ast.TypeSpec); ok && typeSpec.Name.Name == "nvmlAPI" {
+			if structType, isStruct := typeSpec.Type.(*ast.StructType); isStruct {
+				for _, field := range structType.Fields.List {
+					for _, fieldName := range field.Names {
+						seen[fieldName.Name] = true
+					}
+				}
+			}
+
+			return true
+		}
+
 		call, ok := node.(*ast.CallExpr)
 		if !ok {
 			return true
@@ -157,12 +212,4 @@ func TestSymbolManifestCoversCollectorCallSites(t *testing.T) {
 
 		return true
 	})
-
-	require.NotEmpty(t, seen)
-
-	for method := range seen {
-		assert.True(t, manifest[method],
-			"collector calls %s but nvmlSymbolRequirements has no entry for it\n"+
-				"  fix: add a symbolRequirement in internal/nvmlnative/symbols.go", method)
-	}
 }
