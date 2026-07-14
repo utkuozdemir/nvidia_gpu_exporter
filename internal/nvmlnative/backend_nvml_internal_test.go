@@ -86,22 +86,22 @@ func resolveFields(t *testing.T, list string) nvidiasmi.ResolvedFields {
 	return resolved
 }
 
-func newTestBackend(t *testing.T, f *fakeAPI) *Backend {
+func newTestBackend(t *testing.T, fake *fakeAPI) *Backend {
 	t.Helper()
 
-	backend, err := newWithAPI(f.api(), slogt.New(t))
+	backend, err := newWithAPI(fake.api(), slogt.New(t))
 	require.NoError(t, err)
 
 	return backend
 }
 
-func cellValue(t *testing.T, table *nvidiasmi.Table, q nvidiasmi.QField) string {
+func cellValue(t *testing.T, table *nvidiasmi.Table, qField nvidiasmi.QField) string {
 	t.Helper()
 
 	require.NotEmpty(t, table.Rows)
 
-	cell, ok := table.Rows[0].QFieldToCells[q]
-	require.True(t, ok, "no cell for %q", q)
+	cell, ok := table.Rows[0].QFieldToCells[qField]
+	require.True(t, ok, "no cell for %q", qField)
 
 	return cell.RawValue
 }
@@ -112,10 +112,10 @@ func TestCollectHappyPath(t *testing.T) {
 	dev := identityDevice()
 	dev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 12340, nvml.SUCCESS }
 
-	f := &fakeAPI{devices: []nvml.Device{dev}}
-	b := newTestBackend(t, f)
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
 
-	reading, code, err := b.QueryFunc(resolveFields(t, "power.draw"), false)(t.Context())
+	reading, code, err := backend.QueryFunc(resolveFields(t, "power.draw"), false)(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, 0, code)
 	assert.Equal(t, "12.34 W", cellValue(t, reading.Table, "power.draw"))
@@ -130,10 +130,10 @@ func TestNotSupportedBecomesAbsentToken(t *testing.T) {
 	dev := identityDevice()
 	dev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 0, nvml.ERROR_NOT_SUPPORTED }
 
-	f := &fakeAPI{devices: []nvml.Device{dev}}
-	b := newTestBackend(t, f)
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
 
-	reading, _, err := b.QueryFunc(resolveFields(t, "power.draw"), false)(t.Context())
+	reading, _, err := backend.QueryFunc(resolveFields(t, "power.draw"), false)(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, "[N/A]", cellValue(t, reading.Table, "power.draw"))
 }
@@ -151,9 +151,9 @@ func TestLifecycleErrorFailsCollectionAndReinitializes(t *testing.T) {
 		return 100000, nvml.SUCCESS
 	}
 
-	f := &fakeAPI{devices: []nvml.Device{dev}}
-	b := newTestBackend(t, f)
-	query := b.QueryFunc(resolveFields(t, "power.draw"), false)
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
+	query := backend.QueryFunc(resolveFields(t, "power.draw"), false)
 
 	_, code, err := query(t.Context())
 	require.Error(t, err)
@@ -162,7 +162,7 @@ func TestLifecycleErrorFailsCollectionAndReinitializes(t *testing.T) {
 	var fatal *collect.FatalError
 
 	require.ErrorAs(t, err, &fatal, "lifecycle errors must drive shutdown-on-error")
-	assert.Equal(t, 1, f.shutdowns, "backend must tear NVML down after a lifecycle error")
+	assert.Equal(t, 1, fake.shutdowns, "backend must tear NVML down after a lifecycle error")
 
 	// recovery: the next cycle re-initializes and succeeds
 	lost = false
@@ -170,16 +170,16 @@ func TestLifecycleErrorFailsCollectionAndReinitializes(t *testing.T) {
 	_, code, err = query(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, 0, code)
-	assert.Equal(t, 2, f.inits, "the recovery cycle must re-initialize NVML")
+	assert.Equal(t, 2, fake.inits, "the recovery cycle must re-initialize NVML")
 }
 
 func TestZeroDevicesIsAFailedCollection(t *testing.T) {
 	t.Parallel()
 
-	f := &fakeAPI{}
-	b := newTestBackend(t, f)
+	fake := &fakeAPI{}
+	backend := newTestBackend(t, fake)
 
-	_, _, err := b.QueryFunc(resolveFields(t, "power.draw"), false)(t.Context())
+	_, _, err := backend.QueryFunc(resolveFields(t, "power.draw"), false)(t.Context())
 	require.ErrorContains(t, err, "no NVML devices")
 
 	var fatal *collect.FatalError
@@ -200,10 +200,10 @@ func TestUnknownFieldValueTypeDoesNotPanic(t *testing.T) {
 		return nvml.SUCCESS
 	}
 
-	f := &fakeAPI{devices: []nvml.Device{dev}}
-	b := newTestBackend(t, f)
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
 
-	reading, _, err := b.QueryFunc(resolveFields(t, "power.draw.average"), false)(t.Context())
+	reading, _, err := backend.QueryFunc(resolveFields(t, "power.draw.average"), false)(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, "[N/A]", cellValue(t, reading.Table, "power.draw.average"))
 }
@@ -217,16 +217,16 @@ func TestComputeAppsFailSoftlyButMarkLifecycle(t *testing.T) {
 		return nil, nvml.ERROR_GPU_IS_LOST
 	}
 
-	f := &fakeAPI{devices: []nvml.Device{dev}}
-	b := newTestBackend(t, f)
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
 
-	reading, code, err := b.QueryFunc(resolveFields(t, "power.draw"), true)(t.Context())
+	reading, code, err := backend.QueryFunc(resolveFields(t, "power.draw"), true)(t.Context())
 	require.NoError(t, err, "per-process failures must not fail the collection")
 	assert.Equal(t, 0, code)
 	assert.True(t, reading.AppsAttempted)
 	assert.False(t, reading.AppsSuccess)
 	require.Error(t, reading.AppsErr)
-	assert.Equal(t, 1, f.shutdowns, "a lost GPU during per-process collection must still mark for re-init")
+	assert.Equal(t, 1, fake.shutdowns, "a lost GPU during per-process collection must still mark for re-init")
 }
 
 func TestComputeAppsHappyPath(t *testing.T) {
@@ -238,10 +238,10 @@ func TestComputeAppsHappyPath(t *testing.T) {
 		return []nvml.ProcessInfo{{Pid: 4242, UsedGpuMemory: 2 * 1024 * 1024 * 1024}}, nvml.SUCCESS
 	}
 
-	f := &fakeAPI{devices: []nvml.Device{dev}}
-	b := newTestBackend(t, f)
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
 
-	reading, _, err := b.QueryFunc(resolveFields(t, "power.draw"), true)(t.Context())
+	reading, _, err := backend.QueryFunc(resolveFields(t, "power.draw"), true)(t.Context())
 	require.NoError(t, err)
 	require.Len(t, reading.Apps, 1)
 	assert.Equal(t, "4242", reading.Apps[0].PID)
@@ -261,9 +261,9 @@ func TestAbandonedCollectionFailsFastAndRecovers(t *testing.T) {
 		return 100000, nvml.SUCCESS
 	}
 
-	f := &fakeAPI{devices: []nvml.Device{dev}}
-	b := newTestBackend(t, f)
-	query := b.QueryFunc(resolveFields(t, "power.draw"), false)
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
+	query := backend.QueryFunc(resolveFields(t, "power.draw"), false)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
@@ -289,13 +289,13 @@ func TestAbandonedCollectionFailsFastAndRecovers(t *testing.T) {
 func TestCloseShutsDownOnce(t *testing.T) {
 	t.Parallel()
 
-	f := &fakeAPI{devices: []nvml.Device{identityDevice()}}
-	b := newTestBackend(t, f)
+	fake := &fakeAPI{devices: []nvml.Device{identityDevice()}}
+	backend := newTestBackend(t, fake)
 
-	b.Close()
-	b.Close() // idempotent
+	backend.Close()
+	backend.Close() // idempotent
 
-	assert.Equal(t, 1, f.shutdowns)
+	assert.Equal(t, 1, fake.shutdowns)
 }
 
 func TestCloseSkipsWhenCollectionHoldsTheDriver(t *testing.T) {
@@ -309,9 +309,9 @@ func TestCloseSkipsWhenCollectionHoldsTheDriver(t *testing.T) {
 		return 100000, nvml.SUCCESS
 	}
 
-	f := &fakeAPI{devices: []nvml.Device{dev}}
-	b := newTestBackend(t, f)
-	query := b.QueryFunc(resolveFields(t, "power.draw"), false)
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
+	query := backend.QueryFunc(resolveFields(t, "power.draw"), false)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
@@ -322,7 +322,7 @@ func TestCloseSkipsWhenCollectionHoldsTheDriver(t *testing.T) {
 	done := make(chan struct{})
 
 	go func() {
-		b.Close() // must return immediately, not hang behind the wedged call
+		backend.Close() // must return immediately, not hang behind the wedged call
 		close(done)
 	}()
 
@@ -332,7 +332,7 @@ func TestCloseSkipsWhenCollectionHoldsTheDriver(t *testing.T) {
 		t.Fatal("Close hung behind a wedged driver call")
 	}
 
-	assert.Equal(t, 0, f.shutdowns, "Close must skip shutdown while the driver is held")
+	assert.Equal(t, 0, fake.shutdowns, "Close must skip shutdown while the driver is held")
 	close(release)
 }
 
@@ -342,12 +342,12 @@ func TestFunctionNotFoundIsLoggedOnce(t *testing.T) {
 	dev := identityDevice()
 	dev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 0, nvml.ERROR_FUNCTION_NOT_FOUND }
 
-	f := &fakeAPI{devices: []nvml.Device{dev}}
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
 	handler := slogassert.New(t, slog.LevelWarn, nil)
-	b, err := newWithAPI(f.api(), slog.New(handler))
+	backend, err := newWithAPI(fake.api(), slog.New(handler))
 	require.NoError(t, err)
 
-	query := b.QueryFunc(resolveFields(t, "power.draw"), false)
+	query := backend.QueryFunc(resolveFields(t, "power.draw"), false)
 
 	reading, _, err := query(t.Context())
 	require.NoError(t, err, "a missing optional function must not fail the collection")
