@@ -36,9 +36,16 @@ func TestLoadCorpus(t *testing.T) {
 				assert.Contains(t, []string{"capabilities", "idle", "load"}, section.State)
 				assert.NotEmpty(t, section.Label)
 
-				if section.Command == "" {
+				switch {
+				case section.Command == "":
 					commandless++
-				} else {
+				case section.Label == "nvml-symbols":
+					// the driver library's symbol inventory is the one
+					// section produced by an ELF reader, not nvidia-smi
+					assert.True(t, strings.HasPrefix(section.Command, "readelf") ||
+						strings.HasPrefix(section.Command, "nm"),
+						"nvml-symbols command %q is not an ELF reader", section.Command)
+				default:
 					assert.True(t, strings.HasPrefix(section.Command, "nvidia-smi"),
 						"command %q does not invoke nvidia-smi", section.Command)
 				}
