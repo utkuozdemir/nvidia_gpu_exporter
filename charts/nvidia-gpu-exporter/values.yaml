@@ -54,6 +54,22 @@ log:
   # -- Log format: logfmt, json
   format: logfmt
 
+# -- Liveness probe for the exporter container. The default checks that the
+# process serves HTTP at all; it deliberately does not depend on collection
+# success, so a failing nvidia-smi keeps the pod scrapeable and the failure
+# visible in the metrics. Set to `null` to disable the probe.
+livenessProbe:
+  httpGet:
+    path: /-/healthy
+    port: http
+
+# -- Readiness probe for the exporter container, process-level like the
+# liveness probe. Set to `null` to disable the probe.
+readinessProbe:
+  httpGet:
+    path: /-/ready
+    port: http
+
 # -- Extra command line arguments for the exporter, e.g. `--collect.interval=30s`
 extraArgs: []
 

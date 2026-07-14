@@ -95,20 +95,19 @@ func (e *FatalError) Unwrap() error {
 	return e.Err
 }
 
-// collectOnce runs one collection bounded by timeout and folds the outcome
-// into a Snapshot, updating the cumulative failure count and last-success
-// time owned by the caller. A failed attempt is logged here, exactly once,
-// so failures are neither logged per scrape nor lost. The onFatal callback
-// implements shutdown-on-error: it fires only on a genuine non-zero exit of
-// the command, not on a timeout the collector caused itself.
+// collectOnce runs one collection bounded by timeout and returns the outcome
+// as a Snapshot with the cumulative fields (Failures, LastSuccess) not yet
+// folded in: that is the caller's job, via foldCumulative, under whatever
+// synchronization owns those counters. A failed attempt is logged here,
+// exactly once, so failures are neither logged per scrape nor lost. The
+// onFatal callback implements shutdown-on-error: it fires only on a genuine
+// non-zero exit of the command, not on a timeout the collector caused itself.
 func collectOnce(
 	ctx context.Context,
 	query QueryFunc,
 	timeout time.Duration,
 	onFatal func(error),
 	logger *slog.Logger,
-	failures *uint64,
-	lastOK *time.Time,
 ) Snapshot {
 	callCtx, cancel := withOptionalTimeout(ctx, timeout)
 	defer cancel()
@@ -125,14 +124,7 @@ func collectOnce(
 	}
 
 	if err != nil {
-		*failures++
-
 		logger.Error("failed to collect metrics", "err", err)
-
-		snapshot.Success = false
-		snapshot.Table = nil
-		snapshot.LastSuccess = *lastOK
-		snapshot.Failures = *failures
 
 		var exitErr *exec.ExitError
 
@@ -153,17 +145,28 @@ func collectOnce(
 		logger.Warn("failed to collect per-process data", "err", reading.AppsErr)
 	}
 
-	*lastOK = now
-
 	snapshot.Success = true
 	snapshot.Table = reading.Table
 	snapshot.Apps = reading.Apps
 	snapshot.AppsAttempted = reading.AppsAttempted
 	snapshot.AppsSuccess = reading.AppsSuccess
 	snapshot.LastSuccess = now
-	snapshot.Failures = *failures
 
 	return snapshot
+}
+
+// foldCumulative merges one collection outcome into the cumulative failure
+// count and last-success time, and stamps the updated values onto the
+// snapshot. The caller owns the synchronization of the two counters.
+func foldCumulative(snapshot *Snapshot, failures *uint64, lastOK *time.Time) {
+	if snapshot.Success {
+		*lastOK = snapshot.LastSuccess
+	} else {
+		*failures++
+	}
+
+	snapshot.Failures = *failures
+	snapshot.LastSuccess = *lastOK
 }
 
 // withOptionalTimeout bounds ctx by d, where a zero d means no bound. A plain

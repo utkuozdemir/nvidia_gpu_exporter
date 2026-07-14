@@ -20,7 +20,6 @@ type Cached struct {
 	logger   *slog.Logger
 
 	cur     atomic.Pointer[Snapshot]
-	ready   chan struct{}
 	started atomic.Bool // Run is single-use; protects the one-collection-in-flight invariant
 
 	// owned solely by the Run goroutine
@@ -45,7 +44,6 @@ func NewCached(
 		timeout:  timeout,
 		onFatal:  onFatal,
 		logger:   logger,
-		ready:    make(chan struct{}),
 	}
 }
 
@@ -58,7 +56,6 @@ func (s *Cached) Run(ctx context.Context) error {
 	}
 
 	s.tick(ctx)
-	close(s.ready) // single-use Run means exactly one close
 
 	ticker := time.NewTicker(s.interval)
 	defer ticker.Stop()
@@ -73,17 +70,13 @@ func (s *Cached) Run(ctx context.Context) error {
 	}
 }
 
-// Latest returns the most recent outcome. A call racing the very first
-// collection blocks until that collection completes, bounded by the
-// collection timeout that bounds the first run (and by ctx). If no outcome
-// is available yet, the returned snapshot reports not-ready: not attempted,
-// not successful, no data.
-func (s *Cached) Latest(ctx context.Context) Snapshot {
-	select {
-	case <-s.ready:
-	case <-ctx.Done():
-	}
-
+// Latest returns the most recent outcome, never blocking on collection: a
+// wedged nvidia-smi must not take the metrics endpoint down with it, since
+// the health metrics served here are exactly what explains the situation.
+// Until the first collection completes, the returned snapshot reports
+// not-ready: not attempted, not successful, no data. The data appears once
+// the first successful collection completes.
+func (s *Cached) Latest(_ context.Context) Snapshot {
 	if snapshot := s.cur.Load(); snapshot != nil {
 		return *snapshot
 	}
@@ -95,6 +88,7 @@ func (s *Cached) Latest(ctx context.Context) Snapshot {
 // is immutable: it is never modified after Store, which is what makes the
 // lock-free reads in Latest safe.
 func (s *Cached) tick(ctx context.Context) {
-	snapshot := collectOnce(ctx, s.query, s.timeout, s.onFatal, s.logger, &s.failures, &s.lastOK)
+	snapshot := collectOnce(ctx, s.query, s.timeout, s.onFatal, s.logger)
+	foldCumulative(&snapshot, &s.failures, &s.lastOK)
 	s.cur.Store(&snapshot)
 }
