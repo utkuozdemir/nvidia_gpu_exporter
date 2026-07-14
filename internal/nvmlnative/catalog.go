@@ -25,6 +25,8 @@ import (
 
 // fieldOrder is the catalog's canonical field order (the order nvidia-smi
 // --help-query-gpu lists them in).
+//
+//nolint:goconst // field names repeat across the catalog tables by design
 var fieldOrder = []nvidiasmi.QField{
 	"timestamp",
 	"driver_version",
