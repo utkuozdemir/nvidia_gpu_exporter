@@ -300,8 +300,8 @@ section "capabilities :: nvlink -s" nvlink -s
 # useful without it).
 nvml_symbols_section() {
   local lib=""
-  if command -v ldconfig >/dev/null 2>&1; then
-    lib="$(ldconfig -p 2>/dev/null | awk '/libnvidia-ml\.so\.1/{print $NF; exit}')"
+  if command -v ldconfig > /dev/null 2>&1; then
+    lib="$(ldconfig -p 2> /dev/null | awk '/libnvidia-ml\.so\.1/{print $NF; exit}')"
   fi
   [ -z "$lib" ] && for candidate in /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1 \
     /usr/lib64/libnvidia-ml.so.1 /lib/x86_64-linux-gnu/libnvidia-ml.so.1; do
@@ -310,25 +310,25 @@ nvml_symbols_section() {
   [ -z "$lib" ] && return 0
 
   local symbols="" tool=""
-  if command -v readelf >/dev/null 2>&1; then
+  if command -v readelf > /dev/null 2>&1; then
     tool="readelf"
-    symbols="$(readelf --dyn-syms --wide "$lib" 2>/dev/null \
-      | awk '$4=="FUNC" && $7!="UND" {print $8}' | grep '^nvml' | sed 's/@@.*//' | sort -u)"
-  elif command -v nm >/dev/null 2>&1; then
+    symbols="$(readelf --dyn-syms --wide "$lib" 2> /dev/null |
+      awk '$4=="FUNC" && $7!="UND" {print $8}' | grep '^nvml' | sed 's/@@.*//' | sort -u)"
+  elif command -v nm > /dev/null 2>&1; then
     tool="nm"
-    symbols="$(nm -D --defined-only "$lib" 2>/dev/null \
-      | awk '$2=="T" {print $3}' | grep '^nvml' | sed 's/@@.*//' | sort -u)"
+    symbols="$(nm -D --defined-only "$lib" 2> /dev/null |
+      awk '$2=="T" {print $3}' | grep '^nvml' | sed 's/@@.*//' | sort -u)"
   fi
   [ -z "$symbols" ] && return 0
 
   local sha=""
-  command -v sha256sum >/dev/null 2>&1 && sha="$(sha256sum "$lib" | awk '{print $1}')"
+  command -v sha256sum > /dev/null 2>&1 && sha="$(sha256sum "$lib" | awk '{print $1}')"
 
   {
     printf '\n\n'
     printf '################################################################################\n'
     printf '# capabilities :: nvml-symbols\n'
-    printf '# $ readelf --dyn-syms --wide %s | awk ... | grep ^nvml | sort -u\n' "$lib"
+    printf '# $ %s %s | awk ... | grep ^nvml | sort -u\n' "$tool" "$lib"
     [ -n "$sha" ] && printf '# library sha256: %s\n' "$sha"
     printf '################################################################################\n'
     printf '%s\n' "$symbols"
