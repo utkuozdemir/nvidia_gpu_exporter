@@ -79,9 +79,21 @@ type FatalError struct {
 	Err error
 }
 
-func (e *FatalError) Error() string { return e.Err.Error() }
+func (e *FatalError) Error() string {
+	if e == nil || e.Err == nil {
+		return "fatal collection error"
+	}
 
-func (e *FatalError) Unwrap() error { return e.Err }
+	return e.Err.Error()
+}
+
+func (e *FatalError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+
+	return e.Err
+}
 
 // collectOnce runs one collection bounded by timeout and folds the outcome
 // into a Snapshot, updating the cumulative failure count and last-success
