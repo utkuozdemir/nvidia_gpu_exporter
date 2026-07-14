@@ -333,3 +333,24 @@ func TestCloseSkipsWhenCollectionHoldsTheDriver(t *testing.T) {
 	assert.Equal(t, 0, f.shutdowns, "Close must skip shutdown while the driver is held")
 	close(release)
 }
+
+func TestFunctionNotFoundIsLoggedOnce(t *testing.T) {
+	t.Parallel()
+
+	dev := identityDevice()
+	dev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 0, nvml.ERROR_FUNCTION_NOT_FOUND }
+
+	f := &fakeAPI{devices: []nvml.Device{dev}}
+	b := newTestBackend(t, f)
+	query := b.QueryFunc(resolveFields(t, "power.draw"), false)
+
+	reading, _, err := query(t.Context())
+	require.NoError(t, err, "a missing optional function must not fail the collection")
+	assert.Equal(t, "[Function Not Found]", cellValue(t, reading.Table, "power.draw"))
+	assert.True(t, b.fnfLogged, "the missing function must be logged for drift visibility")
+
+	// the second cycle must not log again (the flag stays set)
+	_, _, err = query(t.Context())
+	require.NoError(t, err)
+	assert.True(t, b.fnfLogged)
+}
