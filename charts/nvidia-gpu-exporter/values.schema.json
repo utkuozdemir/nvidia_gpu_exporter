@@ -44,7 +44,7 @@
     },
     "telemetryPath": {
       "type": "string",
-      "pattern": "^/"
+      "pattern": "^/.*[^/]$"
     },
     "nvidiaSmiCommand": {
       "type": "string",
@@ -93,6 +93,18 @@
         }
       },
       "additionalProperties": false
+    },
+    "livenessProbe": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "readinessProbe": {
+      "type": [
+        "object",
+        "null"
+      ]
     },
     "extraArgs": {
       "type": "array",

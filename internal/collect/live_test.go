@@ -253,6 +253,267 @@ func TestLiveAppsSuccessCarriesApps(t *testing.T) {
 	assert.Equal(t, apps, snapshot.Apps)
 }
 
+func TestLiveConcurrentCallsShareOneRun(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int32
+
+	table := &nvidiasmi.Table{}
+	firstIn := make(chan struct{}, 1)
+	release := make(chan struct{})
+	query := func(_ context.Context) (collect.Reading, int, error) {
+		calls.Add(1)
+
+		select {
+		case firstIn <- struct{}{}:
+		default:
+		}
+
+		<-release
+
+		return collect.Reading{Table: table}, 0, nil
+	}
+
+	live := collect.NewLive(query, 0, nil, slogt.New(t))
+
+	got := make(chan collect.Snapshot, 3)
+
+	for range 3 {
+		go func() {
+			got <- live.Latest(t.Context())
+		}()
+	}
+
+	// one run is now in flight and holding; give the other callers time to
+	// join it as waiters instead of queueing their own runs
+	<-firstIn
+	time.Sleep(100 * time.Millisecond)
+
+	close(release)
+
+	for range 3 {
+		snapshot := <-got
+
+		assert.True(t, snapshot.Success)
+		assert.Same(t, table, snapshot.Table)
+	}
+
+	assert.Equal(t, int32(1), calls.Load(), "concurrent scrapes must share a single run")
+}
+
+func TestLiveFailedSharedRunCountsOnce(t *testing.T) {
+	t.Parallel()
+
+	firstIn := make(chan struct{}, 1)
+	release := make(chan struct{})
+	query := func(_ context.Context) (collect.Reading, int, error) {
+		select {
+		case firstIn <- struct{}{}:
+		default:
+		}
+
+		<-release
+
+		return collect.Reading{}, -1, errQueryFailed
+	}
+
+	live := collect.NewLive(query, 0, nil, slogt.New(t))
+
+	got := make(chan collect.Snapshot, 3)
+
+	for range 3 {
+		go func() {
+			got <- live.Latest(t.Context())
+		}()
+	}
+
+	<-firstIn
+	time.Sleep(100 * time.Millisecond)
+
+	close(release)
+
+	for range 3 {
+		snapshot := <-got
+
+		assert.False(t, snapshot.Success)
+		assert.Equal(t, uint64(1), snapshot.Failures, "a failed shared run must count as one failure")
+	}
+}
+
+func TestLiveDepartingWaiterDoesNotCancelSharedRun(t *testing.T) {
+	t.Parallel()
+
+	table := &nvidiasmi.Table{}
+	firstIn := make(chan struct{}, 1)
+	release := make(chan struct{})
+
+	var runCtxAlive atomic.Bool
+
+	query := func(ctx context.Context) (collect.Reading, int, error) {
+		select {
+		case firstIn <- struct{}{}:
+		default:
+		}
+
+		<-release
+
+		runCtxAlive.Store(ctx.Err() == nil)
+
+		return collect.Reading{Table: table}, 0, nil
+	}
+
+	live := collect.NewLive(query, 0, nil, slogt.New(t))
+
+	staying := make(chan collect.Snapshot, 1)
+
+	go func() {
+		staying <- live.Latest(t.Context())
+	}()
+
+	<-firstIn
+
+	// a second waiter joins the same run and then gives up
+	leaveCtx, leaveCancel := context.WithCancel(t.Context())
+
+	leaving := make(chan collect.Snapshot, 1)
+
+	go func() {
+		leaving <- live.Latest(leaveCtx)
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+	leaveCancel()
+
+	// the departing waiter serves the no-result state right away
+	left := <-leaving
+	assert.False(t, left.Attempted)
+	assert.Nil(t, left.Table)
+	assert.Equal(t, uint64(0), left.Failures)
+
+	close(release)
+
+	// the remaining waiter still gets the run's result, from a run that was
+	// never cancelled
+	stayed := <-staying
+	assert.True(t, stayed.Success)
+	assert.Same(t, table, stayed.Table)
+	assert.True(t, runCtxAlive.Load(), "the run must not be cancelled while a waiter remains")
+}
+
+func TestLiveRunWithoutWaitersIsCancelled(t *testing.T) {
+	t.Parallel()
+
+	entered := make(chan struct{}, 1)
+	query := func(ctx context.Context) (collect.Reading, int, error) {
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
+
+		// completes only through cancellation
+		<-ctx.Done()
+
+		return collect.Reading{}, -1, ctx.Err()
+	}
+
+	live := collect.NewLive(query, 0, nil, slogt.New(t))
+
+	ctx, cancel := context.WithCancel(t.Context())
+
+	got := make(chan collect.Snapshot, 1)
+
+	go func() {
+		got <- live.Latest(ctx)
+	}()
+
+	<-entered
+	cancel()
+
+	// the sole waiter leaves with the no-result state
+	snapshot := <-got
+	assert.False(t, snapshot.Attempted)
+	assert.Nil(t, snapshot.Table)
+
+	// its departure cancels the run, which lands as exactly one failure. The
+	// probe context is already cancelled so the probes read the health state
+	// without starting runs of their own.
+	probeCtx, probeCancel := context.WithCancel(t.Context())
+	probeCancel()
+
+	assert.Eventually(t, func() bool {
+		return live.Latest(probeCtx).Failures == 1
+	}, 5*time.Second, time.Millisecond)
+}
+
+func TestLiveScrapeAfterAbandonedRunStartsFresh(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int32
+
+	firstEntered := make(chan struct{})
+	unwindRelease := make(chan struct{})
+
+	t.Cleanup(func() { close(unwindRelease) })
+
+	// the first run hangs until cancelled and then unwinds slowly, like a
+	// killed process that takes a while to reap; later runs succeed
+	query := func(ctx context.Context) (collect.Reading, int, error) {
+		if calls.Add(1) == 1 {
+			close(firstEntered)
+			<-ctx.Done()
+			<-unwindRelease
+
+			return collect.Reading{}, -1, ctx.Err()
+		}
+
+		return collect.Reading{Table: &nvidiasmi.Table{}}, 0, nil
+	}
+
+	live := collect.NewLive(query, 0, nil, slogt.New(t))
+
+	ctx, cancel := context.WithCancel(t.Context())
+
+	got := make(chan collect.Snapshot, 1)
+
+	go func() {
+		got <- live.Latest(ctx)
+	}()
+
+	<-firstEntered
+	cancel()
+	<-got
+
+	// the abandoned run is still unwinding; a new scrape must get a fresh
+	// run instead of inheriting the cancellation
+	snapshot := live.Latest(t.Context())
+
+	assert.True(t, snapshot.Success)
+	assert.Equal(t, int32(2), calls.Load())
+}
+
+func TestLiveAlreadyCancelledContextRunsNothing(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int32
+
+	query := func(_ context.Context) (collect.Reading, int, error) {
+		calls.Add(1)
+
+		return collect.Reading{Table: &nvidiasmi.Table{}}, 0, nil
+	}
+
+	live := collect.NewLive(query, 0, nil, slogt.New(t))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	snapshot := live.Latest(ctx)
+
+	assert.False(t, snapshot.Attempted)
+	assert.Nil(t, snapshot.Table)
+	assert.Equal(t, int32(0), calls.Load(), "a dead scrape must not start a run")
+}
+
 func TestLiveSerializesConcurrentCalls(t *testing.T) {
 	t.Parallel()
 

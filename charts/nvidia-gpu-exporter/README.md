@@ -132,6 +132,7 @@ as a ConfigMap labeled for the Grafana sidecar.
 | image.repository | string | `"docker.io/utkuozdemir/nvidia_gpu_exporter"` | Image repository |
 | image.tag | string | `""` | Image tag (if not specified, defaults to the chart's appVersion) |
 | imagePullSecrets | list | `[]` | Image pull secrets |
+| livenessProbe | object | `{"httpGet":{"path":"/-/healthy","port":"http"}}` | Liveness probe for the exporter container. The default checks that the process serves HTTP at all; it deliberately does not depend on collection success, so a failing nvidia-smi keeps the pod scrapeable and the failure visible in the metrics. Set to `null` to disable the probe. |
 | log.format | string | `"logfmt"` | Log format: logfmt, json |
 | log.level | string | `"info"` | Log level: debug, info, warn, error |
 | nameOverride | string | `""` | Override the chart name |
@@ -159,6 +160,7 @@ as a ConfigMap labeled for the Grafana sidecar.
 | prometheusRule.enabled | bool | `false` | Create a Prometheus Operator PrometheusRule with default alerts (requires the Prometheus Operator CRDs). In clusters where the exporter also runs on nodes without GPUs, restrict the DaemonSet to GPU nodes via nodeSelector or affinity before enabling this, otherwise the alerts fire for nodes that cannot collect GPU metrics by design. |
 | queryFieldNames | list | `["AUTO"]` | `nvidia-smi` fields to be queried by the exporter. `AUTO` auto-detects them. |
 | queryFieldNamesExclude | list | `[]` | `nvidia-smi` fields to exclude from being queried. Names match literally, with `*` as a wildcard for any sequence of characters. |
+| readinessProbe | object | `{"httpGet":{"path":"/-/ready","port":"http"}}` | Readiness probe for the exporter container, process-level like the liveness probe. Set to `null` to disable the probe. |
 | resources | object | `{}` | Resources for the exporter container |
 | runtimeClassName | string | `""` | Name of the RuntimeClass to run the pods with. GPU access is injected by the NVIDIA container runtime, so the pods must run with it: either set this to the name of your NVIDIA RuntimeClass (usually `nvidia`), or leave it empty if the NVIDIA runtime is the default runtime of your nodes. If neither is the case, the exporter will come up but serve no GPU metrics, reporting `nvidia_smi_last_collect_success 0`. |
 | securityContext | object | `{}` | Security context for the exporter container. The default is unprivileged: GPU access comes from the NVIDIA runtime, which requires no privileges. |

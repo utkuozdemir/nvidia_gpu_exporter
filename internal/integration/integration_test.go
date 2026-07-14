@@ -124,27 +124,42 @@ func startExporter(t *testing.T, args ...string) string {
 	return ""
 }
 
-// scrape fetches the metrics page.
-func scrape(t *testing.T, baseURL string) string {
+// httpGet fetches a URL and returns the status code and body, with optional
+// header key-value pairs.
+func httpGet(t *testing.T, url string, headers ...string) (int, string) {
 	t.Helper()
+
+	require.Zero(t, len(headers)%2, "headers must be key/value pairs")
 
 	ctx, cancel := context.WithTimeout(t.Context(), startupTimeout)
 	t.Cleanup(cancel)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/metrics", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	require.NoError(t, err)
+
+	for i := 0; i+1 < len(headers); i += 2 {
+		req.Header.Set(headers[i], headers[i+1])
+	}
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 
 	defer resp.Body.Close()
 
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 
-	return string(body)
+	return resp.StatusCode, string(body)
+}
+
+// scrape fetches the metrics page.
+func scrape(t *testing.T, baseURL string) string {
+	t.Helper()
+
+	status, body := httpGet(t, baseURL+"/metrics")
+	require.Equal(t, http.StatusOK, status)
+
+	return body
 }
 
 // familyName extracts the metric family a text-exposition line belongs to,
@@ -443,7 +458,9 @@ func TestGPURecoveryActionBadState(t *testing.T) {
 }
 
 // TestCachedModeMatchesLive proves background collection serves the same
-// deterministic content as the synchronous mode, pinned by the same expected output file.
+// deterministic content as the synchronous mode, pinned by the same expected
+// output file. Scrapes do not wait for the first background collection, so
+// the test polls until it has been served.
 func TestCachedModeMatchesLive(t *testing.T) {
 	if *update {
 		t.Skip("expected outputs are being regenerated in this run")
@@ -460,7 +477,312 @@ func TestCachedModeMatchesLive(t *testing.T) {
 		"linux-x86_64__nvidia-geforce-rtx-2080-super__595.71.05__idle.metrics"))
 	require.NoError(t, err)
 
-	assert.Equal(t, string(want), filterDeterministic(scrape(t, baseURL)))
+	var got string
+
+	require.Eventually(t, func() bool {
+		got = filterDeterministic(scrape(t, baseURL))
+
+		return strings.Contains(got, "nvidia_smi_gpu_info")
+	}, startupTimeout, 50*time.Millisecond)
+
+	assert.Equal(t, string(want), got)
+}
+
+// TestCachedModeFirstScrapeDoesNotBlock proves a scrape arriving while the
+// very first background collection is still running gets an immediate answer
+// reporting the not-yet-collected state, instead of hanging on the
+// collection. The fake's delay is what the scrape must not wait for.
+func TestCachedModeFirstScrapeDoesNotBlock(t *testing.T) {
+	t.Parallel()
+
+	delay := 5 * time.Second
+
+	baseURL := startExporter(t,
+		"--nvidia-smi-command="+fakeCommand(defaultCapture(t), "--delay", delay.String()),
+		"--collect.interval=50ms")
+
+	start := time.Now()
+	metrics := scrape(t, baseURL)
+	elapsed := time.Since(start)
+
+	assert.Less(t, elapsed, delay, "the scrape must not wait for the in-flight collection")
+	assert.Contains(t, metrics, "nvidia_smi_last_collect_success 0")
+	assert.Contains(t, metrics, "nvidia_smi_failed_scrapes_total 0")
+	assert.NotContains(t, metrics, "nvidia_smi_gpu_info")
+	// no made-up exit code or duration before the first collection completes
+	assert.NotContains(t, metrics, "nvidia_smi_command_exit_code")
+	assert.NotContains(t, metrics, "nvidia_smi_last_collect_duration_seconds ")
+}
+
+// TestRoutingAndHealth pins the HTTP surface: the landing page only on the
+// exact root path, 404 for unknown paths, and the process-level health
+// endpoints.
+func TestRoutingAndHealth(t *testing.T) {
+	t.Parallel()
+
+	baseURL := startExporter(t, "--nvidia-smi-command="+fakeCommand(defaultCapture(t)))
+
+	status, body := httpGet(t, baseURL+"/")
+	assert.Equal(t, http.StatusOK, status)
+	assert.Contains(t, body, "Nvidia GPU Exporter")
+	assert.Contains(t, body, `href="/metrics"`)
+
+	status, _ = httpGet(t, baseURL+"/-/healthy")
+	assert.Equal(t, http.StatusOK, status)
+
+	status, _ = httpGet(t, baseURL+"/-/ready")
+	assert.Equal(t, http.StatusOK, status)
+
+	// the handler's own error counter is registered and exposed
+	assert.Contains(t, scrape(t, baseURL), "promhttp_metric_handler_errors_total")
+
+	status, _ = httpGet(t, baseURL+"/no-such-path")
+	assert.Equal(t, http.StatusNotFound, status)
+
+	// pprof is not enabled, so its paths are unknown too
+	status, _ = httpGet(t, baseURL+"/debug/pprof/")
+	assert.Equal(t, http.StatusNotFound, status)
+}
+
+// TestTelemetryPathValidation pins the startup validation of the telemetry
+// path: values that would collide with the exporter's own routes or break
+// the route registration fail cleanly instead of panicking or shadowing.
+func TestTelemetryPathValidation(t *testing.T) {
+	t.Parallel()
+
+	for _, path := range []string{"/", "metrics", "/-/healthy", "/debug/pprof/heap", "/metrics/", "/met rics"} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+
+			err := app.Run(t.Context(), []string{
+				"--web.listen-address=127.0.0.1:0",
+				"--log.level=error",
+				"--nvidia-smi-command=" + fakeCommand(defaultCapture(t)),
+				"--web.telemetry-path=" + path,
+			}, app.Options{})
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "web.telemetry-path")
+		})
+	}
+}
+
+// TestCustomTelemetryPath proves a valid custom telemetry path serves the
+// metrics there and nothing on the default path.
+func TestCustomTelemetryPath(t *testing.T) {
+	t.Parallel()
+
+	baseURL := startExporter(t,
+		"--nvidia-smi-command="+fakeCommand(defaultCapture(t)),
+		"--web.telemetry-path=/custom-metrics")
+
+	status, body := httpGet(t, baseURL+"/custom-metrics")
+	assert.Equal(t, http.StatusOK, status)
+	assert.Contains(t, body, "nvidia_smi_gpu_info")
+
+	status, _ = httpGet(t, baseURL+"/metrics")
+	assert.Equal(t, http.StatusNotFound, status)
+}
+
+// TestMaxRequestsLimit proves scrapes beyond the concurrency limit are
+// answered with an immediate 503 instead of queueing behind the slow
+// collection holding the only slot.
+func TestMaxRequestsLimit(t *testing.T) {
+	t.Parallel()
+
+	baseURL := startExporter(t,
+		"--nvidia-smi-command="+fakeCommand(defaultCapture(t), "--delay", "3s"),
+		"--web.max-requests=1")
+
+	first := make(chan int, 1)
+
+	go func() {
+		// plain client instead of the helper: test assertions must not run
+		// off the test goroutine
+		resp, err := http.Get(baseURL + "/metrics") //nolint:noctx
+		if err != nil {
+			first <- 0
+
+			return
+		}
+
+		resp.Body.Close()
+
+		first <- resp.StatusCode
+	}()
+
+	// give the first scrape time to occupy the only slot
+	time.Sleep(500 * time.Millisecond)
+
+	start := time.Now()
+	status, body := httpGet(t, baseURL+"/metrics")
+
+	assert.Equal(t, http.StatusServiceUnavailable, status)
+	assert.Contains(t, body, "limit of 1 concurrent requests")
+	assert.Less(t, time.Since(start), 2*time.Second, "the rejection must be immediate, not queued")
+
+	// the health endpoints are not behind the limit
+	healthStatus, _ := httpGet(t, baseURL+"/-/healthy")
+	assert.Equal(t, http.StatusOK, healthStatus)
+
+	assert.Equal(t, http.StatusOK, <-first, "the scrape holding the slot must still succeed")
+}
+
+// TestConcurrentScrapesShareOneCollection proves the single-flight sharing
+// through the real HTTP path: several scrapes fired at once against a slow
+// collection all succeed in roughly one collection's time, not one
+// collection each, and all serve the same snapshot (pinned by the wall-clock
+// families, which differ between distinct collections).
+func TestConcurrentScrapesShareOneCollection(t *testing.T) {
+	t.Parallel()
+
+	const scrapers = 5
+
+	delay := 2 * time.Second
+
+	baseURL := startExporter(t,
+		"--nvidia-smi-command="+fakeCommand(defaultCapture(t), "--delay", delay.String()))
+
+	bodies := make(chan string, scrapers)
+
+	start := time.Now()
+
+	for range scrapers {
+		go func() {
+			// plain client, test assertions must not run off the test goroutine
+			resp, err := http.Get(baseURL + "/metrics") //nolint:noctx
+			if err != nil {
+				bodies <- "error: " + err.Error()
+
+				return
+			}
+
+			defer resp.Body.Close()
+
+			body, readErr := io.ReadAll(resp.Body)
+			if readErr != nil {
+				bodies <- "error: " + readErr.Error()
+
+				return
+			}
+
+			bodies <- string(body)
+		}()
+	}
+
+	timestamps := make(map[string]bool)
+
+	for range scrapers {
+		body := <-bodies
+		require.NotContains(t, body, "error: ")
+		assert.Contains(t, body, "nvidia_smi_last_collect_success 1")
+
+		match := regexp.MustCompile(`(?m)^nvidia_smi_last_collect_success_timestamp_seconds .*$`).
+			FindString(body)
+		require.NotEmpty(t, match)
+
+		timestamps[match] = true
+	}
+
+	elapsed := time.Since(start)
+
+	assert.Len(t, timestamps, 1, "all concurrent scrapes must serve the same collection's snapshot")
+	assert.Less(t, elapsed, time.Duration(scrapers-1)*delay,
+		"the scrapes must not have run one collection each, serialized")
+}
+
+// TestShutdownDuringInFlightScrape proves shutting the exporter down while a
+// synchronous scrape is mid-collection cancels that collection and exits
+// promptly and cleanly, instead of waiting out the collection behind the
+// shutdown grace period.
+func TestShutdownDuringInFlightScrape(t *testing.T) {
+	t.Parallel()
+
+	delay := 6 * time.Second
+
+	ctx, cancel := context.WithCancel(t.Context())
+
+	listenCh := make(chan []net.Addr, 1)
+	doneCh := make(chan error, 1)
+
+	go func() {
+		doneCh <- app.Run(ctx, []string{
+			"--web.listen-address=127.0.0.1:0",
+			"--log.level=error",
+			"--nvidia-smi-command=" + fakeCommand(defaultCapture(t), "--delay", delay.String()),
+		}, app.Options{
+			OnListen: func(addrs []net.Addr) { listenCh <- addrs },
+		})
+	}()
+
+	var baseURL string
+
+	select {
+	case addrs := <-listenCh:
+		require.Len(t, addrs, 1)
+
+		baseURL = "http://" + addrs[0].String()
+	case <-time.After(startupTimeout):
+		t.Fatal("timed out waiting for the exporter to listen")
+	}
+
+	scrapeDone := make(chan struct{})
+
+	go func() {
+		defer close(scrapeDone)
+
+		// the response may complete or be cut short by the shutdown, only
+		// the run's exit matters; plain client, since test assertions must
+		// not run off the test goroutine
+		resp, err := http.Get(baseURL + "/metrics") //nolint:noctx
+		if err == nil {
+			resp.Body.Close()
+		}
+	}()
+
+	// let the scrape reach the collection, then shut down mid-collection
+	time.Sleep(time.Second)
+
+	shutdownStart := time.Now()
+
+	cancel()
+
+	select {
+	case err := <-doneCh:
+		require.NoError(t, err, "shutdown during an in-flight scrape must be clean")
+		assert.Less(t, time.Since(shutdownStart), delay-2*time.Second,
+			"shutdown must not wait out the in-flight collection")
+	case <-time.After(startupTimeout):
+		t.Fatal("timed out waiting for the exporter to shut down")
+	}
+
+	<-scrapeDone
+}
+
+// TestScrapeTimeoutHeaderBoundsCollection proves the timeout Prometheus
+// advertises on the scrape bounds the collection: when it fires, the scrape
+// is answered right away with the no-result state instead of waiting out the
+// slow collection.
+func TestScrapeTimeoutHeaderBoundsCollection(t *testing.T) {
+	t.Parallel()
+
+	delay := 5 * time.Second
+
+	baseURL := startExporter(t,
+		"--nvidia-smi-command="+fakeCommand(defaultCapture(t), "--delay", delay.String()),
+		// the startup field detection shares the fake's delay, so the
+		// collection timeout must comfortably exceed it
+		"--collect.timeout=20s",
+		"--web.timeout-offset=100ms")
+
+	start := time.Now()
+	status, body := httpGet(t, baseURL+"/metrics", "X-Prometheus-Scrape-Timeout-Seconds", "1")
+	elapsed := time.Since(start)
+
+	assert.Equal(t, http.StatusOK, status)
+	assert.Less(t, elapsed, delay, "the scrape must not wait out the collection")
+	assert.Contains(t, body, "nvidia_smi_last_collect_success 0")
+	assert.NotContains(t, body, "nvidia_smi_gpu_info")
 }
 
 // TestFieldExclusion proves an excluded field's family disappears while the

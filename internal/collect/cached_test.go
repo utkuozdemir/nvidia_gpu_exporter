@@ -14,6 +14,23 @@ import (
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvidiasmi"
 )
 
+// awaitFirstCollection waits until the source has a first outcome to serve:
+// reads never block on collection, so tests interested in a collection's
+// outcome have to poll for it.
+func awaitFirstCollection(t *testing.T, cached *collect.Cached) collect.Snapshot {
+	t.Helper()
+
+	var snapshot collect.Snapshot
+
+	require.Eventually(t, func() bool {
+		snapshot = cached.Latest(t.Context())
+
+		return snapshot.Attempted
+	}, 5*time.Second, time.Millisecond)
+
+	return snapshot
+}
+
 // startCached runs the source in the background and stops it on test cleanup.
 func startCached(t *testing.T, cached *collect.Cached) {
 	t.Helper()
@@ -47,6 +64,7 @@ func TestCachedServesCacheWithoutRecollecting(t *testing.T) {
 
 	cached := collect.NewCached(query, time.Hour, 0, nil, slogt.New(t))
 	startCached(t, cached)
+	awaitFirstCollection(t, cached)
 
 	for range 5 {
 		snapshot := cached.Latest(t.Context())
@@ -68,7 +86,7 @@ func TestCachedFailureDropsTableAndCountsOnce(t *testing.T) {
 	cached := collect.NewCached(query, time.Hour, 0, nil, slogt.New(t))
 	startCached(t, cached)
 
-	first := cached.Latest(t.Context())
+	first := awaitFirstCollection(t, cached)
 	second := cached.Latest(t.Context())
 
 	assert.True(t, first.Attempted)
@@ -99,7 +117,7 @@ func TestCachedCollectsOnTicks(t *testing.T) {
 	}, 5*time.Second, time.Millisecond)
 }
 
-func TestCachedFirstScrapeBlocksUntilFirstCollection(t *testing.T) {
+func TestCachedFirstScrapeServesNotReadyImmediately(t *testing.T) {
 	t.Parallel()
 
 	release := make(chan struct{})
@@ -112,33 +130,32 @@ func TestCachedFirstScrapeBlocksUntilFirstCollection(t *testing.T) {
 		}
 	}
 
-	cached := collect.NewCached(query, time.Hour, 0, nil, slogt.New(t))
+	cached := collect.NewCached(query, time.Millisecond, 0, nil, slogt.New(t))
 	startCached(t, cached)
 
-	got := make(chan collect.Snapshot, 1)
+	// the first collection is in flight; a read must not wait for it and must
+	// report the not-yet-collected state instead
+	snapshot := cached.Latest(t.Context())
 
-	go func() {
-		got <- cached.Latest(t.Context())
-	}()
-
-	// the reader must be blocked while the first collection is in flight
-	select {
-	case <-got:
-		t.Fatal("Latest returned before the first collection completed")
-	case <-time.After(50 * time.Millisecond):
-	}
+	assert.False(t, snapshot.Attempted)
+	assert.False(t, snapshot.Success)
+	assert.Nil(t, snapshot.Table)
+	assert.Equal(t, uint64(0), snapshot.Failures)
 
 	close(release)
 
-	snapshot := <-got
-	assert.True(t, snapshot.Success)
+	assert.Eventually(t, func() bool {
+		return cached.Latest(t.Context()).Success
+	}, 5*time.Second, time.Millisecond)
 }
 
-func TestCachedNotReadyWhenScrapeWinsTheRace(t *testing.T) {
+func TestCachedNeverBlocksOnWedgedCollection(t *testing.T) {
 	t.Parallel()
 
 	query := func(ctx context.Context) (collect.Reading, int, error) {
-		// never completes on its own; unblocked only by shutdown cancellation
+		// never completes on its own; unblocked only by shutdown cancellation.
+		// with a zero collection timeout this simulates an nvidia-smi stuck in
+		// an uninterruptible wait
 		<-ctx.Done()
 
 		return collect.Reading{}, -1, ctx.Err()
@@ -147,12 +164,10 @@ func TestCachedNotReadyWhenScrapeWinsTheRace(t *testing.T) {
 	cached := collect.NewCached(query, time.Hour, 0, nil, slogt.New(t))
 	startCached(t, cached)
 
-	// the reader gives up before the first collection completes
-	readCtx, readCancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
-	defer readCancel()
+	start := time.Now()
+	snapshot := cached.Latest(t.Context())
 
-	snapshot := cached.Latest(readCtx)
-
+	assert.Less(t, time.Since(start), 5*time.Second)
 	assert.False(t, snapshot.Attempted)
 	assert.False(t, snapshot.Success)
 	assert.Nil(t, snapshot.Table)
@@ -166,7 +181,7 @@ func TestCachedRunIsSingleUse(t *testing.T) {
 	startCached(t, cached)
 
 	// wait until the first Run is up and serving
-	snapshot := cached.Latest(t.Context())
+	snapshot := awaitFirstCollection(t, cached)
 	require.True(t, snapshot.Success)
 
 	require.Error(t, cached.Run(t.Context()))
@@ -185,7 +200,9 @@ func TestCachedRunStopsOnCancel(t *testing.T) {
 		done <- cached.Run(ctx)
 	}()
 
-	require.True(t, cached.Latest(ctx).Success)
+	require.Eventually(t, func() bool {
+		return cached.Latest(ctx).Success
+	}, 5*time.Second, time.Millisecond)
 
 	cancel()
 
@@ -209,7 +226,7 @@ func TestCachedTimeoutBoundsCollection(t *testing.T) {
 	cached := collect.NewCached(query, time.Hour, 50*time.Millisecond, nil, slogt.New(t))
 	startCached(t, cached)
 
-	snapshot := cached.Latest(t.Context())
+	snapshot := awaitFirstCollection(t, cached)
 
 	assert.True(t, snapshot.Attempted)
 	assert.False(t, snapshot.Success)
@@ -227,6 +244,7 @@ func TestCachedConcurrentReadsDuringCollections(t *testing.T) {
 		slogt.New(t),
 	)
 	startCached(t, cached)
+	awaitFirstCollection(t, cached)
 
 	done := make(chan struct{})
 

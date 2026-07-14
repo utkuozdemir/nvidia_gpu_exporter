@@ -162,6 +162,18 @@ func newComputeAppDescs(
 	return info, memory, count, success
 }
 
+// WithContext returns a collector that renders the same metrics but bounds
+// its collection by the given context. The HTTP handler uses it to bound each
+// scrape's collection by the scrape's own lifetime. The copy shares all
+// state with the original; only the context differs, and everything shared is
+// immutable after construction or owns its own synchronization.
+func (e *GPUExporter) WithContext(ctx context.Context) *GPUExporter {
+	scoped := *e
+	scoped.ctx = ctx
+
+	return &scoped
+}
+
 // Describe describes all the metrics ever exported by the exporter. It
 // implements prometheus.Collector.
 func (e *GPUExporter) Describe(descCh chan<- *prometheus.Desc) {

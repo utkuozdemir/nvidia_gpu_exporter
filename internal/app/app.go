@@ -11,7 +11,11 @@ import (
 	"net"
 	"net/http"
 	"net/http/pprof"
+	"path"
+	"strconv"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/coreos/go-systemd/v22/activation"
@@ -34,28 +38,14 @@ import (
 
 const appName = "nvidia_gpu_exporter"
 
-const redirectPageTemplate = `<html lang="en">
-<head><title>Nvidia GPU Exporter</title></head>
-<body>
-<h1>Nvidia GPU Exporter</h1>
-<p><a href="%s">Metrics</a></p>%s
-</body>
-</html>
-`
+// scrapeTimeoutHeader is set by Prometheus on every scrape to advertise the
+// timeout it applies to it.
+const scrapeTimeoutHeader = "X-Prometheus-Scrape-Timeout-Seconds"
 
-const pprofLinksHTML = `
-<h2>Profiling</h2>
-<ul>
-<li><a href="/debug/pprof/">Index</a></li>
-<li><a href="/debug/pprof/goroutine">Goroutines</a></li>
-<li><a href="/debug/pprof/heap">Heap</a></li>
-<li><a href="/debug/pprof/threadcreate">Threads</a></li>
-<li><a href="/debug/pprof/block">Block</a></li>
-<li><a href="/debug/pprof/mutex">Mutex</a></li>
-<li><a href="/debug/pprof/profile">CPU Profile</a></li>
-<li><a href="/debug/pprof/trace">Trace</a></li>
-</ul>
-`
+// maxScrapeTimeoutSeconds caps the advertised scrape timeout the exporter
+// honors. Values beyond it are nonsensical (and would overflow the duration
+// conversion), so they are treated like a missing header.
+const maxScrapeTimeoutSeconds = 24 * 60 * 60
 
 // Options carries what the callers inject into a run beyond the command-line
 // arguments.
@@ -80,7 +70,7 @@ type Options struct {
 // Run wires up the exporter from the given command-line arguments and serves
 // metrics until ctx is cancelled.
 //
-//nolint:funlen
+//nolint:funlen,cyclop
 func Run(ctx context.Context, args []string, opts Options) error {
 	app := kingpin.New(appName, "")
 
@@ -107,6 +97,17 @@ func Run(ctx context.Context, args []string, opts Options) error {
 			Default("60s").Duration()
 		metricsPath = app.Flag("web.telemetry-path", "Path under which to expose metrics.").
 				Default("/metrics").String()
+		maxRequests = app.Flag("web.max-requests",
+			"Maximum number of concurrent scrapes of the metrics endpoint. Requests beyond "+
+				"the limit are answered with a 503 immediately instead of queueing up behind "+
+				"a slow collection. 0 disables the limit.").
+			Default("40").Int()
+		timeoutOffset = app.Flag("web.timeout-offset",
+			"Offset subtracted from the scrape timeout Prometheus advertises in the "+
+				scrapeTimeoutHeader+" header, leaving time for the response to reach "+
+				"Prometheus. The advertised timeout minus this offset bounds each scrape's "+
+				"collection, on top of --collect.timeout.").
+			Default("500ms").Duration()
 		nvidiaSmiCommand = app.Flag("nvidia-smi-command",
 			"Path or command to be used for the nvidia-smi executable. "+
 				"Multiple words run the first as the executable with the rest as its arguments "+
@@ -176,6 +177,10 @@ func Run(ctx context.Context, args []string, opts Options) error {
 		return err
 	}
 
+	if err := validateWebFlags(*metricsPath, *maxRequests, *timeoutOffset); err != nil {
+		return err
+	}
+
 	if *collectBackend == backendNVML && *nvidiaSmiCommand != nvidiasmi.DefaultCommand {
 		// a custom command signals intent (ssh wrappers, sudo) the nvml
 		// backend cannot honor, so it is an error rather than a silent ignore
@@ -205,12 +210,20 @@ func Run(ctx context.Context, args []string, opts Options) error {
 
 	registry := prometheus.NewRegistry()
 
-	err := setupExporter(ctx, eg, collectCfg, registry, logger)
+	exp, err := setupExporter(ctx, eg, collectCfg, registry, logger)
 	if err != nil {
 		return err
 	}
 
-	mux := newServeMux(logger, *metricsPath, *enablePprof, registry)
+	mux, err := newServeMux(serveMuxConfig{
+		metricsPath:   *metricsPath,
+		enablePprof:   *enablePprof,
+		maxRequests:   *maxRequests,
+		timeoutOffset: *timeoutOffset,
+	}, registry, exp, logger)
+	if err != nil {
+		return err
+	}
 
 	srv := &http.Server{
 		ReadHeaderTimeout: *readHeaderTimeout,
@@ -218,6 +231,10 @@ func Run(ctx context.Context, args []string, opts Options) error {
 		WriteTimeout:      *writeTimeout,
 		IdleTimeout:       *idleTimeout,
 		Handler:           mux,
+		// request contexts descend from the process context, so shutdown also
+		// cancels the collections running inside in-flight scrapes instead of
+		// waiting out the shutdown grace period behind them
+		BaseContext: func(net.Listener) context.Context { return ctx },
 	}
 
 	serveHTTP(ctx, eg, srv, webConfig, *network, opts.OnListen, logger)
@@ -287,6 +304,72 @@ func validateCollectFlags(interval, timeout time.Duration) error {
 	return nil
 }
 
+// validateWebFlags rejects the web flag values kingpin's types cannot.
+func validateWebFlags(metricsPath string, maxRequests int, timeoutOffset time.Duration) error {
+	if err := validateMetricsPath(metricsPath); err != nil {
+		return err
+	}
+
+	if maxRequests < 0 {
+		return fmt.Errorf("web.max-requests must not be negative, got %d", maxRequests)
+	}
+
+	if timeoutOffset < 0 {
+		return fmt.Errorf("web.timeout-offset must not be negative, got %s", timeoutOffset)
+	}
+
+	return nil
+}
+
+// reservedPaths are the routes the exporter owns, which the telemetry path
+// must not collide with. A trailing slash reserves the whole subtree, no
+// trailing slash reserves exactly that path. The pprof subtree is reserved
+// even in runs that do not enable pprof, so enabling it later cannot turn a
+// working configuration into a startup failure.
+var reservedPaths = []string{"/-/healthy", "/-/ready", "/debug/pprof/"}
+
+// validateMetricsPath rejects telemetry path values that would collide with
+// the exporter's own routes or make the route registration panic at startup.
+func validateMetricsPath(metricsPath string) error {
+	if err := validateMetricsPathShape(metricsPath); err != nil {
+		return err
+	}
+
+	for _, reserved := range reservedPaths {
+		subtree := strings.HasSuffix(reserved, "/")
+		if metricsPath == strings.TrimSuffix(reserved, "/") || (subtree && strings.HasPrefix(metricsPath, reserved)) {
+			return fmt.Errorf("web.telemetry-path %q collides with the exporter's own routes", metricsPath)
+		}
+	}
+
+	return nil
+}
+
+// validateMetricsPathShape rejects malformed telemetry path values. Escapes
+// and mux pattern syntax are rejected wholesale rather than interpreted: the
+// mux unescapes and parses patterns, so a value like "/-/%68ealthy" or
+// "/x{y}" is either a disguised collision or a route that can never be
+// matched the way it reads.
+func validateMetricsPathShape(metricsPath string) error {
+	switch {
+	case !strings.HasPrefix(metricsPath, "/"):
+		return fmt.Errorf("web.telemetry-path must start with a slash, got %q", metricsPath)
+	case metricsPath == "/":
+		return errors.New(`web.telemetry-path must not be "/", it would collide with the landing page`)
+	case strings.HasSuffix(metricsPath, "/"):
+		return fmt.Errorf("web.telemetry-path must not end with a slash, got %q", metricsPath)
+	case path.Clean(metricsPath) != metricsPath:
+		return fmt.Errorf("web.telemetry-path must be a clean path without empty or relative segments, got %q",
+			metricsPath)
+	case strings.ContainsAny(metricsPath, "{}%?#"):
+		return fmt.Errorf("web.telemetry-path must not contain the characters {}%%?#, got %q", metricsPath)
+	case strings.ContainsFunc(metricsPath, unicode.IsSpace):
+		return fmt.Errorf("web.telemetry-path must not contain whitespace, got %q", metricsPath)
+	default:
+		return nil
+	}
+}
+
 // Collection backend names, the values of --collect.backend.
 const (
 	backendExec = "exec"
@@ -314,18 +397,20 @@ type collectConfig struct {
 
 // setupExporter resolves the query fields, builds the collection source
 // (adding the background collector to the errgroup when an interval is set),
-// and registers the exporter on the given registry, along with the collectors
-// the default registry would carry.
+// and builds the exporter. The exporter itself is returned instead of
+// registered: the metrics handler collects it under each scrape's own
+// context, so it lives in a per-scrape registry there. The given registry
+// gets the collectors whose output is scrape-independent.
 func setupExporter(
 	ctx context.Context,
 	eg *errgroup.Group,
 	cfg collectConfig,
 	registry *prometheus.Registry,
 	logger *slog.Logger,
-) error {
+) (*exporter.GPUExporter, error) {
 	resolved, query, exitCodeMetric, err := setupBackend(ctx, eg, cfg, logger)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	var src collect.Source
@@ -346,17 +431,16 @@ func setupExporter(
 	// the go and process collectors keep the exposed families identical to
 	// what the default registry used to serve
 	for _, collector := range []prometheus.Collector{
-		exp,
 		clientversion.NewCollector(appName),
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	} {
 		if err = registry.Register(collector); err != nil {
-			return fmt.Errorf("failed to register collector: %w", err)
+			return nil, fmt.Errorf("failed to register collector: %w", err)
 		}
 	}
 
-	return nil
+	return exp, nil
 }
 
 // setupBackend resolves the query fields and builds the collection function
@@ -452,51 +536,167 @@ func buildQueryFunc(
 	}
 }
 
-type RootHandler struct {
-	response []byte
-	logger   *slog.Logger
+// serveMuxConfig carries the web flags into the mux construction.
+type serveMuxConfig struct {
+	metricsPath   string
+	enablePprof   bool
+	maxRequests   int
+	timeoutOffset time.Duration
 }
 
-func NewRootHandler(logger *slog.Logger, metricsPath string, enablePprof bool) *RootHandler {
-	pprofLinks := ""
-	if enablePprof {
-		pprofLinks = pprofLinksHTML
-	}
-
-	return &RootHandler{
-		response: fmt.Appendf(nil, redirectPageTemplate, metricsPath, pprofLinks),
-		logger:   logger,
-	}
-}
-
-func (r *RootHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
-	if _, err := w.Write(r.response); err != nil {
-		r.logger.Error("failed to write redirect", "err", err)
-	}
-}
-
-// newServeMux builds the HTTP mux serving the root page, metrics and
-// optionally pprof. The metrics handler is instrumented the same way the
-// default promhttp handler is, so the promhttp_* families stay exposed.
+// newServeMux builds the HTTP mux: the landing page on exactly the root path
+// (anything unknown is a 404), the metrics endpoint, the health endpoints and
+// optionally pprof.
 func newServeMux(
-	logger *slog.Logger,
-	metricsPath string,
-	enablePprof bool,
+	cfg serveMuxConfig,
 	registry *prometheus.Registry,
-) *http.ServeMux {
+	exp *exporter.GPUExporter,
+	logger *slog.Logger,
+) (*http.ServeMux, error) {
 	mux := http.NewServeMux()
 
-	rootHandler := NewRootHandler(logger, metricsPath, enablePprof)
-	mux.Handle("GET /", rootHandler)
-	mux.Handle("GET "+metricsPath,
-		promhttp.InstrumentMetricHandler(registry, promhttp.HandlerFor(registry, promhttp.HandlerOpts{})))
+	landingPage, err := web.NewLandingPage(web.LandingConfig{
+		Name:        "Nvidia GPU Exporter",
+		Description: "Prometheus exporter for Nvidia GPUs, using nvidia-smi.",
+		Version:     version.Info(),
+		Links: []web.LandingLinks{
+			{Address: cfg.metricsPath, Text: "Metrics"},
+		},
+		Profiling: strconv.FormatBool(cfg.enablePprof),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create the landing page: %w", err)
+	}
 
-	if enablePprof {
+	mux.Handle("GET /{$}", landingPage)
+	mux.Handle("GET "+cfg.metricsPath, newMetricsHandler(cfg, registry, exp, logger))
+
+	// process-level health checks: reachable means healthy. Deliberately
+	// independent of collection success, a host whose nvidia-smi is failing
+	// must stay scrapeable so the health metrics can report the failure.
+	mux.HandleFunc("GET /-/healthy", healthHandler("Healthy"))
+	mux.HandleFunc("GET /-/ready", healthHandler("Ready"))
+
+	if cfg.enablePprof {
 		logger.Info("pprof endpoints enabled")
 		registerPprof(mux)
 	}
 
-	return mux
+	return mux, nil
+}
+
+// newMetricsHandler builds the metrics endpoint. Each scrape gathers the
+// exporter under the scrape's own context through a per-scrape registry,
+// since the collector interface has no context of its own; the collectors
+// whose output is scrape-independent live in the shared registry, which also
+// carries the promhttp instrumentation and error counter so the handler's
+// own health stays visible in the output.
+func newMetricsHandler(
+	cfg serveMuxConfig,
+	registry *prometheus.Registry,
+	exp *exporter.GPUExporter,
+	logger *slog.Logger,
+) http.Handler {
+	opts := promhttp.HandlerOpts{
+		ErrorLog:      promhttpLogger{logger: logger},
+		ErrorHandling: promhttp.HTTPErrorOnError,
+		Registry:      registry,
+	}
+
+	// the scrape context is derived from the request context, the linter just
+	// cannot see it through the helper
+	//nolint:contextcheck
+	handler := http.HandlerFunc(func(writer http.ResponseWriter, req *http.Request) {
+		ctx, cancel := scrapeContext(req, cfg.timeoutOffset)
+		defer cancel()
+
+		scrapeRegistry := prometheus.NewRegistry()
+		if err := scrapeRegistry.Register(exp.WithContext(ctx)); err != nil {
+			logger.Error("failed to register the exporter for a scrape", "err", err)
+			http.Error(writer, "failed to register the exporter", http.StatusInternalServerError)
+
+			return
+		}
+
+		// the scrape deadline travels through the context-scoped collector;
+		// stamping it onto the request as well is defensive (promhttp does
+		// not currently read the request context)
+		promhttp.HandlerFor(prometheus.Gatherers{registry, scrapeRegistry}, opts).
+			ServeHTTP(writer, req.WithContext(ctx))
+	})
+
+	return promhttp.InstrumentMetricHandler(registry, limitConcurrency(handler, cfg.maxRequests, logger))
+}
+
+// scrapeContext bounds a scrape by the timeout Prometheus advertises for it,
+// minus the configured offset, on top of the request's own lifetime (which
+// already ends on client disconnect). A missing, malformed or too-small
+// advertised value adds no deadline, leaving the collection timeout as the
+// only bound, so a bad header can never make things stricter than no header.
+func scrapeContext(req *http.Request, offset time.Duration) (context.Context, context.CancelFunc) {
+	raw := req.Header.Get(scrapeTimeoutHeader)
+	if raw == "" {
+		return req.Context(), func() {}
+	}
+
+	seconds, err := strconv.ParseFloat(raw, 64)
+	if err != nil || !(seconds > 0) || seconds > maxScrapeTimeoutSeconds {
+		return req.Context(), func() {}
+	}
+
+	timeout := time.Duration(seconds*float64(time.Second)) - offset
+	if timeout <= 0 {
+		return req.Context(), func() {}
+	}
+
+	return context.WithTimeout(req.Context(), timeout)
+}
+
+// limitConcurrency bounds the number of scrapes served at once, so overload
+// (scrapes piling up behind a slow or wedged collection) turns into immediate
+// 503s instead of an unbounded queue of goroutines and connections.
+func limitConcurrency(next http.Handler, limit int, logger *slog.Logger) http.Handler {
+	if limit <= 0 {
+		return next
+	}
+
+	slots := make(chan struct{}, limit)
+
+	return http.HandlerFunc(func(writer http.ResponseWriter, req *http.Request) {
+		select {
+		case slots <- struct{}{}:
+			defer func() { <-slots }()
+
+			next.ServeHTTP(writer, req)
+		default:
+			logger.Warn("refused a scrape: concurrent request limit reached", "limit", limit)
+			http.Error(writer, fmt.Sprintf("limit of %d concurrent requests reached, try again later", limit),
+				http.StatusServiceUnavailable)
+		}
+	})
+}
+
+// healthHandler answers a health endpoint. The check is process-level: being
+// served at all is what it reports.
+func healthHandler(status string) http.HandlerFunc {
+	body := []byte("Nvidia GPU Exporter is " + status + ".\n")
+
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+
+		_, _ = w.Write(body)
+	}
+}
+
+// promhttpLogger adapts the exporter's logger to the promhttp error log
+// interface, so errors gathering or encoding the metrics land in the
+// exporter's own logs instead of vanishing.
+type promhttpLogger struct {
+	logger *slog.Logger
+}
+
+func (l promhttpLogger) Println(v ...any) {
+	l.logger.Error(strings.TrimSuffix(fmt.Sprintln(v...), "\n"))
 }
 
 // registerPprof wires up the net/http/pprof handlers on the given mux.

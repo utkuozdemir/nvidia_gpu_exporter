@@ -33,6 +33,19 @@ Flags:
                                 request when keep-alive is enabled.
       --web.telemetry-path="/metrics"
                                 Path under which to expose metrics.
+      --web.max-requests=40     Maximum number of concurrent scrapes of the
+                                metrics endpoint. Requests beyond the limit
+                                are answered with a 503 immediately instead of
+                                queueing up behind a slow collection. 0 disables
+                                the limit.
+      --web.timeout-offset=500ms
+                                Offset subtracted from the scrape
+                                timeout Prometheus advertises in the
+                                X-Prometheus-Scrape-Timeout-Seconds header,
+                                leaving time for the response to reach
+                                Prometheus. The advertised timeout minus this
+                                offset bounds each scrape's collection, on top
+                                of --collect.timeout.
       --nvidia-smi-command="nvidia-smi"
                                 Path or command to be used for the nvidia-smi
                                 executable. Multiple words run the first as the
@@ -147,31 +160,43 @@ cannot be excluded, since the rest of the metrics are labeled by GPU UUID.
 
 ## Background collection
 
-By default the exporter runs `nvidia-smi` once per scrape. If the exporter is
-scraped frequently or by several Prometheus servers at once, that means a lot
-of short-lived `nvidia-smi` processes.
+By default the exporter runs `nvidia-smi` once per scrape. Scrapes that
+arrive while a run is already in progress share that run and serve its
+result, so several Prometheus servers scraping the same exporter at once (a
+common HA setup) do not multiply the `nvidia-smi` runs. Frequent scraping
+still means frequent short-lived `nvidia-smi` processes, though.
 
-Setting `--collect.interval` decouples the two: `nvidia-smi` runs in the
-background at the given interval, and scrapes serve the most recent result.
-The number of `nvidia-smi` runs then depends only on the interval, no matter
-how often the exporter is scraped.
+Setting `--collect.interval` decouples the two completely: `nvidia-smi` runs
+in the background at the given interval, and scrapes serve the most recent
+result. The number of `nvidia-smi` runs then depends only on the interval, no
+matter how often the exporter is scraped.
 
 ```bash
 # Run nvidia-smi every 15 seconds regardless of scrape traffic
 nvidia_gpu_exporter --collect.interval 15s
 ```
 
-Two things to keep in mind in this mode:
+Things to keep in mind in this mode:
 
-- A served reading can be up to one interval old. Prometheus timestamps
-  samples at scrape time, so use `nvidia_smi_last_collect_success_timestamp_seconds`
-  to see how fresh the data actually is. A staleness alert should also cover
-  the case where no collection has succeeded yet, for example:
+- A served reading can be roughly one interval plus the duration of the
+  in-flight collection old, since a new snapshot is only published once its
+  collection completes. Prometheus timestamps samples at scrape time, so use
+  `nvidia_smi_last_collect_success_timestamp_seconds` to see how fresh the
+  data actually is. A staleness alert should budget a few intervals plus
+  `--collect.timeout`, so a single failed cycle does not fire it, and also
+  cover the case where no collection has succeeded yet. For example three
+  intervals plus the timeout, with a 15s interval and the default 10s
+  timeout:
 
   ```text
-  time() - nvidia_smi_last_collect_success_timestamp_seconds > 45
+  time() - nvidia_smi_last_collect_success_timestamp_seconds > 55
     or nvidia_smi_last_collect_success == 0
   ```
+
+- Scrapes never wait for a collection. A scrape arriving before the very
+  first collection completes is answered immediately with
+  `nvidia_smi_last_collect_success 0` and no GPU series; the GPU data appears
+  once the first successful collection completes.
 
 - When a background run fails, the GPU metrics disappear from the output until
   the next successful run instead of going stale silently.
@@ -193,12 +218,36 @@ best-effort: it reliably kills a normal `nvidia-smi`, but it cannot interrupt
 a process stuck in an uninterruptible kernel wait, and with a wrapper command
 (such as the SSH setup above) it only signals the wrapper itself.
 
-If you raise `--collect.timeout` in synchronous mode, keep it below
-`--web.write-timeout` and below the Prometheus `scrape_timeout`, otherwise
-a slow run fails at the HTTP or Prometheus layer first. Background mode is
-mostly unaffected since scrapes only read the cached result, with one
-exception: a scrape arriving before the very first collection completes
-waits for it, so it can take up to `--collect.timeout` once at startup.
+In synchronous mode, a scrape's collection is also bounded by the scrape
+itself: by the timeout Prometheus advertises for it (minus
+`--web.timeout-offset`, so the answer still reaches Prometheus in time) and
+by the scrape connection's lifetime. A collection that outlives its scrape
+this way is cancelled, and the scrape is answered with
+`nvidia_smi_last_collect_success 0` instead of data. So there is no need to
+keep `--collect.timeout` below the Prometheus `scrape_timeout` manually; if
+you raise it, just keep it below `--web.write-timeout`. The advertised
+timeout only comes from scrapers that send the header (Prometheus and its
+agents do); for anything else, only the connection lifetime and
+`--collect.timeout` bound the collection. Background mode is unaffected
+since scrapes only read the cached result.
+
+## Scrape concurrency
+
+The metrics endpoint serves at most `--web.max-requests` scrapes at once
+(default 40, 0 disables the limit). Scrapes beyond the limit are answered
+with a 503 immediately. Without the bound, scrapes piling up behind a slow or
+wedged collection would each hold a goroutine and a connection indefinitely,
+which is exactly the situation where the exporter should instead fail fast
+and stay otherwise responsive.
+
+## Health endpoints
+
+`/-/healthy` and `/-/ready` answer 200 as long as the exporter process is up
+and serving. Both are process-level on purpose: they do not depend on
+collection success, so a host whose `nvidia-smi` is failing stays scrapeable
+and the failure stays visible in the health metrics, instead of the target
+disappearing from scraping. The Helm chart's liveness and readiness probes
+use these endpoints.
 
 ## Per-process GPU metrics
 
