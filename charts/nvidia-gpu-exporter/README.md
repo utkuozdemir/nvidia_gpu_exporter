@@ -9,6 +9,10 @@ and the pods must run with the NVIDIA runtime. Either the runtime is the
 default on your nodes, or you set `runtimeClassName` (usually to `nvidia`)
 and make sure that RuntimeClass exists.
 
+To try the experimental NVML backend, which reads the driver library
+directly instead of running `nvidia-smi`, set the image tag to a `-nvml`
+variant (for example `1.7.0-nvml`).
+
 The exporter deliberately requests no `nvidia.com/gpu` resource. The device
 plugin allocates whole GPUs exclusively, so a monitoring pod that requested
 one would take that GPU away from real workloads. The runtime environment

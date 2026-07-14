@@ -30,7 +30,43 @@ builds:
       - goos: darwin
         goarch: arm64
 
+  # The nvml flavor carries the experimental --collect.backend=nvml backend,
+  # which needs cgo (go-nvml). It is a separate artifact so the main builds
+  # above stay CGO_ENABLED=0 and fully static. Linux amd64 only for now:
+  # arm64 needs a cross C toolchain in CI, deferred until the backend leaves
+  # experimental.
+  - id: nvidia_gpu_exporter-nvml
+    main: ./cmd/nvidia_gpu_exporter
+    binary: nvidia_gpu_exporter
+    ldflags:
+      - -s -w
+      # this flavor exists for the nvml backend, so it defaults to it
+      - -X github.com/utkuozdemir/nvidia_gpu_exporter/internal/app.DefaultBackend=nvml
+      - -X github.com/prometheus/common/version.Version={{.Version}}
+      - -X github.com/prometheus/common/version.Revision={{.Commit}}
+      - -X github.com/prometheus/common/version.Branch={{.Branch}}
+      - -X github.com/prometheus/common/version.BuildUser=goreleaser
+      - -X github.com/prometheus/common/version.BuildDate={{.Date}}
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - linux
+    goarch:
+      - amd64
+
 archives:
+  - id: nvidia_gpu_exporter-nvml-archive
+    name_template: >-
+      {{ .ProjectName }}-nvml_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+    ids:
+      - nvidia_gpu_exporter-nvml
+    files:
+      - LICENSE
+
   - id: nvidia_gpu_exporter-archive
     name_template: >-
       {{ .ProjectName }}_
@@ -53,6 +89,9 @@ archives:
 
 nfpms:
   - id: nvidia_gpu_exporter
+    # only the static build; the cgo nvml flavor must never leak into the packages
+    ids:
+      - nvidia_gpu_exporter
     package_name: nvidia-gpu-exporter
     bindir: /usr/bin
     vendor: Utku Ozdemir
@@ -157,15 +196,34 @@ changelog:
       - go mod tidy
 
 dockers_v2:
-  - images:
+  - id: nvidia_gpu_exporter
+    images:
       - docker.io/utkuozdemir/nvidia_gpu_exporter
       - ghcr.io/utkuozdemir/nvidia_gpu_exporter
+    # only the static build; the cgo nvml flavor must never leak into this image
+    ids:
+      - nvidia_gpu_exporter
     tags:
       - "{{ .Version }}" # keep the existing no-"v" tag scheme (e.g. 1.4.1)
       - "{{ if not .Prerelease }}latest{{ end }}"
     platforms:
       - linux/amd64
       - linux/arm64
+
+  # The nvml flavor as a tag variant of the same image (postgres:16-alpine
+  # style): carries the cgo binary and defaults to the nvml backend.
+  - id: nvidia_gpu_exporter-nvml
+    images:
+      - docker.io/utkuozdemir/nvidia_gpu_exporter
+      - ghcr.io/utkuozdemir/nvidia_gpu_exporter
+    dockerfile: Dockerfile.nvml
+    ids:
+      - nvidia_gpu_exporter-nvml
+    tags:
+      - "{{ .Version }}-nvml"
+      - "{{ if not .Prerelease }}latest-nvml{{ end }}"
+    platforms:
+      - linux/amd64
 
 scoops:
   - repository:

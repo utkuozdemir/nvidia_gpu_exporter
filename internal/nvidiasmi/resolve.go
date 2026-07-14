@@ -240,3 +240,51 @@ func removeDuplicates[T comparable](fields []T) []T {
 
 	return uniques
 }
+
+// ResolveFromCatalog resolves fields against a backend-provided catalog
+// instead of querying nvidia-smi. AUTO selects the full catalog in the given
+// order; an explicit field list fails on fields the catalog does not know, so
+// it is never silently narrowed. Exclusions and the fixed identity fields
+// behave exactly as in ResolveFields.
+func ResolveFromCatalog(
+	order []QField,
+	catalog map[QField]RField,
+	qFieldsRaw string,
+	qFieldsExcludeRaw string,
+	logger *slog.Logger,
+) (ResolvedFields, error) {
+	qFieldsSeparated := strings.Split(qFieldsRaw, ",")
+	auto := len(qFieldsSeparated) == 1 && qFieldsSeparated[0] == qFieldsAuto
+
+	var qFields []QField
+
+	if auto {
+		qFields = slices.Clone(order)
+	} else {
+		qFields = toQFieldSlice(qFieldsSeparated)
+		for _, infoField := range infoFields {
+			qFields = append(qFields, infoField.QField)
+		}
+
+		qFields = removeDuplicates(qFields)
+	}
+
+	qFields = filterExcludedQFields(qFields, qFieldsExcludeRaw, logger)
+
+	returned := make(map[QField]RField, len(qFields))
+
+	for _, qField := range qFields {
+		rField, ok := catalog[qField]
+		if !ok {
+			return ResolvedFields{}, fmt.Errorf("query field %q is not supported by this backend", qField)
+		}
+
+		returned[qField] = rField
+	}
+
+	return ResolvedFields{
+		Query:    qFields,
+		Returned: returned,
+		Info:     slices.Clone(infoFields),
+	}, nil
+}

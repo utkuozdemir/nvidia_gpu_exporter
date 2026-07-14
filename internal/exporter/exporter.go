@@ -16,6 +16,27 @@ import (
 
 const DefaultPrefix = "nvidia_smi"
 
+// ExitCodeMetric names the per-backend collection status metric. The exec
+// backend reports the process exit code; the nvml backend has no process, so
+// it reports the NVML return code under a different name rather than
+// silently changing an established metric's meaning.
+type ExitCodeMetric struct {
+	Name string
+	Help string
+}
+
+// ExecExitCodeMetric is the exec backend's collection status metric.
+var ExecExitCodeMetric = ExitCodeMetric{
+	Name: "command_exit_code",
+	Help: "Exit code of the most recent nvidia-smi run",
+}
+
+// NVMLReturnCodeMetric is the nvml backend's collection status metric.
+var NVMLReturnCodeMetric = ExitCodeMetric{
+	Name: "nvml_return_code",
+	Help: "NVML return code of the most recent collection (0 = success)",
+}
+
 // computeAppLabels is the label set on the per-process metrics.
 var computeAppLabels = []string{"uuid", "pid", "process_name"}
 
@@ -50,6 +71,7 @@ func New(
 	fields nvidiasmi.ResolvedFields,
 	source collect.Source,
 	computeApps bool,
+	exitCodeMetric ExitCodeMetric,
 	logger *slog.Logger,
 ) *GPUExporter {
 	qFieldToMetricInfoMap := BuildQFieldToMetricInfoMap(prefix, fields.Returned, logger)
@@ -78,8 +100,8 @@ func New(
 			nil,
 			nil),
 		exitCodeDesc: prometheus.NewDesc(
-			prometheus.BuildFQName(prefix, "", "command_exit_code"),
-			"Exit code of the most recent nvidia-smi run",
+			prometheus.BuildFQName(prefix, "", exitCodeMetric.Name),
+			exitCodeMetric.Help,
 			nil,
 			nil),
 		collectSuccessDesc: prometheus.NewDesc(

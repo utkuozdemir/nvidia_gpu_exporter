@@ -5,6 +5,9 @@ This is an example output of the returned metrics.
 Note that when `AUTO` query fields mode is used (it is the default),
 the exporter will discover new fields and expose them on a best-effort basis.
 
+The experimental NVML backend exports the same metrics, except it reports
+`nvidia_smi_nvml_return_code` in place of `nvidia_smi_command_exit_code`.
+
 ## Enum-valued metrics
 
 Many `nvidia-smi` fields report a state rather than a number. The exporter maps

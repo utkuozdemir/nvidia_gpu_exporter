@@ -59,6 +59,11 @@ mv nvidia_gpu_exporter /usr/bin
 nvidia_gpu_exporter --help
 ```
 
+Linux x86_64 releases also ship an `nvidia_gpu_exporter-nvml_*` archive: the
+same exporter with the experimental NVML backend built in and used by
+default, so it needs no `nvidia-smi` binary. See
+[CONFIGURE.md](CONFIGURE.md) for the details and limits.
+
 ### Verifying the download
 
 Each release also ships a `checksums.txt` and a detached GPG signature
@@ -243,6 +248,10 @@ the container only needs the `nvidia-smi`/NVML tier. Recent toolkit versions
 inject the full driver userspace either way, so treat the variable as
 documentation of intent and compatibility with older setups rather than a
 restriction.
+
+There is also an experimental `-nvml` image variant (for example
+`utkuozdemir/nvidia_gpu_exporter:1.7.0-nvml`) that reads the driver library
+directly instead of running `nvidia-smi`. See [CONFIGURE.md](CONFIGURE.md).
 
 > [!TIP]
 > The Docker image is also available from GHCR as `ghcr.io/utkuozdemir/nvidia_gpu_exporter`
