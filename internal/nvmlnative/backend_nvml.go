@@ -66,14 +66,14 @@ func New(logger *slog.Logger) (*Backend, error) {
 }
 
 func newWithAPI(api nvmlAPI, logger *slog.Logger) (*Backend, error) {
-	b := &Backend{api: api, logger: logger}
-	if ret := b.api.init(); ret != nvml.SUCCESS {
+	backend := &Backend{api: api, logger: logger}
+	if ret := backend.api.init(); ret != nvml.SUCCESS {
 		return nil, fmt.Errorf("failed to initialize NVML: %s", ret.String())
 	}
 
-	b.initialized = true
+	backend.initialized = true
 
-	return b, nil
+	return backend, nil
 }
 
 // DriverVersion reports the installed driver version, used to pick the
@@ -112,6 +112,7 @@ func (b *Backend) Close() {
 // box (the kernel blocks device removal while a client holds it), so this
 // path is covered by mock tests, not captures.
 func isLifecycleError(ret nvml.Return) bool {
+	//nolint:exhaustive // every other return is by definition not lifecycle-class
 	switch ret {
 	case nvml.ERROR_GPU_IS_LOST, nvml.ERROR_UNINITIALIZED, nvml.ERROR_DRIVER_NOT_LOADED,
 		nvml.ERROR_LIB_RM_VERSION_MISMATCH, nvml.ERROR_GPU_NOT_FOUND:
@@ -127,6 +128,7 @@ func isLifecycleError(ret nvml.Return) bool {
 // ERROR_UNKNOWN at init, not per field); all tokens parse as absent in the
 // shared transform layer either way, so the exported series stay identical.
 func tok(ret nvml.Return) string {
+	//nolint:exhaustive // every unclassified return renders as the unknown token
 	switch ret {
 	case nvml.ERROR_NOT_SUPPORTED:
 		return tokenNotAvailable
@@ -218,6 +220,8 @@ func (b *Backend) collectCycle(
 
 // collectTable runs one GPU collection cycle over all devices. The caller
 // holds the backend lock.
+//
+//nolint:cyclop,funlen // one linear pass: init, count, per-device collect, assemble
 func (b *Backend) collectTable(
 	ctx context.Context,
 	fields nvidiasmi.ResolvedFields,
@@ -259,14 +263,14 @@ func (b *Backend) collectTable(
 	rows := make([]nvidiasmi.Row, 0, count)
 	qFieldToCells := make(map[nvidiasmi.QField][]nvidiasmi.Cell, len(fields.Query))
 
-	for i := range count {
+	for deviceIdx := range count {
 		if err := ctx.Err(); err != nil {
 			return nil, -1, fmt.Errorf("collection interrupted: %w", err)
 		}
 
-		dev, ret := b.api.deviceByIndex(i)
+		dev, ret := b.api.deviceByIndex(deviceIdx)
 		if ret != nvml.SUCCESS {
-			return nil, int(ret), b.lifecycle(ret, fmt.Errorf("failed to get device %d", i))
+			return nil, int(ret), b.lifecycle(ret, fmt.Errorf("failed to get device %d", deviceIdx))
 		}
 
 		values, err := b.collectDevice(ctx, dev, shared, plan)
@@ -283,8 +287,8 @@ func (b *Backend) collectTable(
 		cells := make([]nvidiasmi.Cell, 0, len(fields.Query))
 		rowCells := make(map[nvidiasmi.QField]nvidiasmi.Cell, len(fields.Query))
 
-		for _, q := range fields.Query {
-			raw, ok := values[canonicalQField(q)]
+		for _, qField := range fields.Query {
+			raw, ok := values[canonicalQField(qField)]
 			if !ok {
 				// a catalogued field this collector version has no reading
 				// for: emit the absent token so the behavior matches an
@@ -292,18 +296,18 @@ func (b *Backend) collectTable(
 				raw = tokenNotAvailable
 			}
 
-			cell := nvidiasmi.Cell{QField: q, RField: fields.Returned[q], RawValue: raw}
+			cell := nvidiasmi.Cell{QField: qField, RField: fields.Returned[qField], RawValue: raw}
 			cells = append(cells, cell)
-			rowCells[q] = cell
-			qFieldToCells[q] = append(qFieldToCells[q], cell)
+			rowCells[qField] = cell
+			qFieldToCells[qField] = append(qFieldToCells[qField], cell)
 		}
 
 		rows = append(rows, nvidiasmi.Row{QFieldToCells: rowCells, Cells: cells})
 	}
 
 	rFields := make([]nvidiasmi.RField, len(fields.Query))
-	for i, q := range fields.Query {
-		rFields[i] = fields.Returned[q]
+	for i, qField := range fields.Query {
+		rFields[i] = fields.Returned[qField]
 	}
 
 	return &nvidiasmi.Table{Rows: rows, RFields: rFields, QFieldToCells: qFieldToCells}, 0, nil
@@ -340,7 +344,7 @@ type lifecycleRetError struct {
 }
 
 func (e *lifecycleRetError) Error() string {
-	return fmt.Sprintf("device collection hit a lifecycle error: %s", e.ret.String())
+	return "device collection hit a lifecycle error: " + e.ret.String()
 }
 
 // sharedValues are once-per-cycle readings injected into every device row.
@@ -361,17 +365,17 @@ type plan struct {
 
 func newPlan(fields nvidiasmi.ResolvedFields) plan {
 	requested := make(map[nvidiasmi.QField]bool, len(fields.Query))
-	for _, q := range fields.Query {
-		requested[canonicalQField(q)] = true
+	for _, qField := range fields.Query {
+		requested[canonicalQField(qField)] = true
 	}
 
 	return plan{requested: requested}
 }
 
 // want reports whether any of the given fields was requested.
-func (p plan) want(fields ...nvidiasmi.QField) bool {
+func (reqs plan) want(fields ...nvidiasmi.QField) bool {
 	for _, f := range fields {
-		if p.requested[f] {
+		if reqs.requested[f] {
 			return true
 		}
 	}
@@ -458,76 +462,76 @@ const edppMultiplierFieldID = 274
 // collectDevice produces the raw cell strings for one device, exactly as
 // nvidia-smi would print them, calling only the getters the plan requires.
 //
-//nolint:funlen,maintidx,cyclop,gocognit,gocyclo // deliberately one linear pass mirroring the catalog order
+//nolint:funlen,maintidx,cyclop,gocognit,gocyclo,goconst // deliberately one linear pass mirroring the catalog order
 func (b *Backend) collectDevice(
 	ctx context.Context,
 	dev nvml.Device,
 	shared sharedValues,
-	p plan,
+	reqs plan,
 ) (map[nvidiasmi.QField]string, error) {
-	c := &devCollector{values: make(map[nvidiasmi.QField]string, len(fieldOrder))}
+	coll := &devCollector{values: make(map[nvidiasmi.QField]string, len(fieldOrder))}
 
-	c.values["timestamp"] = shared.timestamp
-	c.set("driver_version", shared.driverVersionRet, func() string { return shared.driverVersion })
-	c.set("count", shared.countRet, func() string { return strconv.Itoa(shared.count) })
+	coll.values["timestamp"] = shared.timestamp
+	coll.set("driver_version", shared.driverVersionRet, func() string { return shared.driverVersion })
+	coll.set("count", shared.countRet, func() string { return strconv.Itoa(shared.count) })
 
-	if p.want("name") {
+	if reqs.want("name") {
 		name, ret := dev.GetName()
-		c.set("name", ret, func() string { return name })
+		coll.set("name", ret, func() string { return name })
 	}
 
-	if p.want("serial") {
+	if reqs.want("serial") {
 		serial, ret := dev.GetSerial()
-		c.set("serial", ret, func() string { return serial })
+		coll.set("serial", ret, func() string { return serial })
 	}
 
-	if p.want("uuid") {
+	if reqs.want("uuid") {
 		uuid, ret := dev.GetUUID()
-		c.set("uuid", ret, func() string { return uuid })
+		coll.set("uuid", ret, func() string { return uuid })
 	}
 
-	if p.want("index") {
+	if reqs.want("index") {
 		index, ret := dev.GetIndex()
-		c.set("index", ret, func() string { return strconv.Itoa(index) })
+		coll.set("index", ret, func() string { return strconv.Itoa(index) })
 	}
 
-	if p.want("pci.bus_id", "pci.domain", "pci.bus", "pci.device", "pci.baseClass",
+	if reqs.want("pci.bus_id", "pci.domain", "pci.bus", "pci.device", "pci.baseClass",
 		"pci.subClass", "pci.device_id", "pci.sub_device_id") {
 		pci, ret := dev.GetPciInfoExt()
-		c.set("pci.bus_id", ret, func() string { return i8str(pci.BusId[:]) })
-		c.set("pci.domain", ret, func() string { return fmt.Sprintf("0x%04X", pci.Domain) })
-		c.set("pci.bus", ret, func() string { return fmt.Sprintf("0x%02X", pci.Bus) })
-		c.set("pci.device", ret, func() string { return fmt.Sprintf("0x%02X", pci.Device) })
-		c.set("pci.baseClass", ret, func() string { return fmt.Sprintf("0x%X", pci.BaseClass) })
-		c.set("pci.subClass", ret, func() string { return fmt.Sprintf("0x%X", pci.SubClass) })
-		c.set("pci.device_id", ret, func() string { return fmt.Sprintf("0x%08X", pci.PciDeviceId) })
-		c.set("pci.sub_device_id", ret, func() string { return fmt.Sprintf("0x%08X", pci.PciSubSystemId) })
+		coll.set("pci.bus_id", ret, func() string { return i8str(pci.BusId[:]) })
+		coll.set("pci.domain", ret, func() string { return fmt.Sprintf("0x%04X", pci.Domain) })
+		coll.set("pci.bus", ret, func() string { return fmt.Sprintf("0x%02X", pci.Bus) })
+		coll.set("pci.device", ret, func() string { return fmt.Sprintf("0x%02X", pci.Device) })
+		coll.set("pci.baseClass", ret, func() string { return fmt.Sprintf("0x%X", pci.BaseClass) })
+		coll.set("pci.subClass", ret, func() string { return fmt.Sprintf("0x%X", pci.SubClass) })
+		coll.set("pci.device_id", ret, func() string { return fmt.Sprintf("0x%08X", pci.PciDeviceId) })
+		coll.set("pci.sub_device_id", ret, func() string { return fmt.Sprintf("0x%08X", pci.PciSubSystemId) })
 	}
 
-	if p.want("pcie.link.gen.current", "pcie.link.gen.gpucurrent") {
+	if reqs.want("pcie.link.gen.current", "pcie.link.gen.gpucurrent") {
 		gen, ret := dev.GetCurrPcieLinkGeneration()
-		c.set("pcie.link.gen.current", ret, func() string { return strconv.Itoa(gen) })
-		c.set("pcie.link.gen.gpucurrent", ret, func() string { return strconv.Itoa(gen) })
+		coll.set("pcie.link.gen.current", ret, func() string { return strconv.Itoa(gen) })
+		coll.set("pcie.link.gen.gpucurrent", ret, func() string { return strconv.Itoa(gen) })
 	}
 
-	if p.want("pcie.link.gen.max") {
+	if reqs.want("pcie.link.gen.max") {
 		maxGen, ret := dev.GetMaxPcieLinkGeneration()
-		c.set("pcie.link.gen.max", ret, func() string { return strconv.Itoa(maxGen) })
+		coll.set("pcie.link.gen.max", ret, func() string { return strconv.Itoa(maxGen) })
 	}
 
-	if p.want("pcie.link.gen.gpumax") {
+	if reqs.want("pcie.link.gen.gpumax") {
 		gpuMaxGen, ret := dev.GetGpuMaxPcieLinkGeneration()
-		c.set("pcie.link.gen.gpumax", ret, func() string { return strconv.Itoa(gpuMaxGen) })
+		coll.set("pcie.link.gen.gpumax", ret, func() string { return strconv.Itoa(gpuMaxGen) })
 	}
 
-	if p.want("pcie.link.width.current") {
+	if reqs.want("pcie.link.width.current") {
 		width, ret := dev.GetCurrPcieLinkWidth()
-		c.set("pcie.link.width.current", ret, func() string { return strconv.Itoa(width) })
+		coll.set("pcie.link.width.current", ret, func() string { return strconv.Itoa(width) })
 	}
 
-	if p.want("pcie.link.width.max") {
+	if reqs.want("pcie.link.width.max") {
 		maxWidth, ret := dev.GetMaxPcieLinkWidth()
-		c.set("pcie.link.width.max", ret, func() string { return strconv.Itoa(maxWidth) })
+		coll.set("pcie.link.width.max", ret, func() string { return strconv.Itoa(maxWidth) })
 	}
 
 	// the deprecation-listed fields (see deprecatedFields) get the token
@@ -535,105 +539,105 @@ func (b *Backend) collectDevice(
 	// not even call the getters for them. Pinned to the verified driver
 	// generation; the corpus drift test guards the list.
 	for _, field := range deprecatedFields {
-		c.values[field] = tokenDeprecated
+		coll.values[field] = tokenDeprecated
 	}
 
-	if p.want("display_attached") {
+	if reqs.want("display_attached") {
 		dispMode, ret := dev.GetDisplayMode()
-		c.set("display_attached", ret, func() string { return yesNo(dispMode == nvml.FEATURE_ENABLED) })
+		coll.set("display_attached", ret, func() string { return yesNo(dispMode == nvml.FEATURE_ENABLED) })
 	}
 
-	if p.want("display_active") {
+	if reqs.want("display_active") {
 		dispActive, ret := dev.GetDisplayActive()
-		c.set("display_active", ret, func() string { return onOff(dispActive == nvml.FEATURE_ENABLED) })
+		coll.set("display_active", ret, func() string { return onOff(dispActive == nvml.FEATURE_ENABLED) })
 	}
 
-	if p.want("persistence_mode") {
+	if reqs.want("persistence_mode") {
 		persistence, ret := dev.GetPersistenceMode()
-		c.set("persistence_mode", ret, func() string { return onOff(persistence == nvml.FEATURE_ENABLED) })
+		coll.set("persistence_mode", ret, func() string { return onOff(persistence == nvml.FEATURE_ENABLED) })
 	}
 
-	if p.want("addressing_mode") {
+	if reqs.want("addressing_mode") {
 		addrMode, ret := dev.GetAddressingMode()
-		c.set("addressing_mode", ret, func() string { return addressingModeStr(addrMode.Value) })
+		coll.set("addressing_mode", ret, func() string { return addressingModeStr(addrMode.Value) })
 	}
 
-	if p.want("accounting.mode") {
+	if reqs.want("accounting.mode") {
 		accMode, ret := dev.GetAccountingMode()
-		c.set("accounting.mode", ret, func() string { return onOff(accMode == nvml.FEATURE_ENABLED) })
+		coll.set("accounting.mode", ret, func() string { return onOff(accMode == nvml.FEATURE_ENABLED) })
 	}
 
-	if p.want("accounting.buffer_size") {
+	if reqs.want("accounting.buffer_size") {
 		accBuf, ret := dev.GetAccountingBufferSize()
-		c.set("accounting.buffer_size", ret, func() string { return strconv.Itoa(accBuf) })
+		coll.set("accounting.buffer_size", ret, func() string { return strconv.Itoa(accBuf) })
 	}
 
-	if p.want("driver_model.current", "driver_model.pending") {
+	if reqs.want("driver_model.current", "driver_model.pending") {
 		dmCur, dmPend, ret := dev.GetDriverModel()
-		c.set("driver_model.current", ret, func() string { return driverModelStr(int32(dmCur)) })
-		c.set("driver_model.pending", ret, func() string { return driverModelStr(int32(dmPend)) })
+		coll.set("driver_model.current", ret, func() string { return driverModelStr(int32(dmCur)) })
+		coll.set("driver_model.pending", ret, func() string { return driverModelStr(int32(dmPend)) })
 	}
 
-	if p.want("vbios_version") {
+	if reqs.want("vbios_version") {
 		vbios, ret := dev.GetVbiosVersion()
-		c.set("vbios_version", ret, func() string { return vbios })
+		coll.set("vbios_version", ret, func() string { return vbios })
 	}
 
-	if p.want("inforom.img") {
+	if reqs.want("inforom.img") {
 		img, ret := dev.GetInforomImageVersion()
-		c.set("inforom.img", ret, func() string { return img })
+		coll.set("inforom.img", ret, func() string { return img })
 	}
 
-	if p.want("inforom.oem") {
+	if reqs.want("inforom.oem") {
 		oem, ret := dev.GetInforomVersion(nvml.INFOROM_OEM)
-		c.set("inforom.oem", ret, func() string { return oem })
+		coll.set("inforom.oem", ret, func() string { return oem })
 	}
 
-	if p.want("inforom.ecc") {
+	if reqs.want("inforom.ecc") {
 		eccVer, ret := dev.GetInforomVersion(nvml.INFOROM_ECC)
-		c.set("inforom.ecc", ret, func() string { return eccVer })
+		coll.set("inforom.ecc", ret, func() string { return eccVer })
 	}
 
-	if p.want("inforom.pwr") {
+	if reqs.want("inforom.pwr") {
 		pwr, ret := dev.GetInforomVersion(nvml.INFOROM_POWER)
-		c.set("inforom.pwr", ret, func() string { return pwr })
+		coll.set("inforom.pwr", ret, func() string { return pwr })
 	}
 
-	if p.want("inforom.checksum_validation") {
+	if reqs.want("inforom.checksum_validation") {
 		// "valid" is capture-verified; the corruption spelling is not
 		ret := b.api.validateInforom(dev)
-		c.set("inforom.checksum_validation", ret, func() string { return "valid" })
+		coll.set("inforom.checksum_validation", ret, func() string { return "valid" })
 	}
 
-	if p.want("gom.current", "gom.pending") {
+	if reqs.want("gom.current", "gom.pending") {
 		gomCur, gomPend, ret := dev.GetGpuOperationMode()
-		c.set("gom.current", ret, func() string { return gomStr(int32(gomCur)) })
-		c.set("gom.pending", ret, func() string { return gomStr(int32(gomPend)) })
+		coll.set("gom.current", ret, func() string { return gomStr(int32(gomCur)) })
+		coll.set("gom.pending", ret, func() string { return gomStr(int32(gomPend)) })
 	}
 
-	if p.want("fan.speed") {
+	if reqs.want("fan.speed") {
 		fan, ret := dev.GetFanSpeed()
-		c.set("fan.speed", ret, func() string { return pct(fan) })
+		coll.set("fan.speed", ret, func() string { return pct(fan) })
 	}
 
-	if p.want("pstate") {
+	if reqs.want("pstate") {
 		pstate, ret := dev.GetPerformanceState()
-		c.set("pstate", ret, func() string { return fmt.Sprintf("P%d", pstate) })
+		coll.set("pstate", ret, func() string { return fmt.Sprintf("P%d", pstate) })
 	}
 
-	if p.want("clocks_event_reasons.supported") {
+	if reqs.want("clocks_event_reasons.supported") {
 		supported, ret := dev.GetSupportedClocksEventReasons()
-		c.set("clocks_event_reasons.supported", ret,
+		coll.set("clocks_event_reasons.supported", ret,
 			func() string { return fmt.Sprintf("0x%016X", supported) })
 	}
 
-	if p.want("clocks_event_reasons.active", "clocks_event_reasons.gpu_idle",
+	if reqs.want("clocks_event_reasons.active", "clocks_event_reasons.gpu_idle",
 		"clocks_event_reasons.applications_clocks_setting", "clocks_event_reasons.sw_power_cap",
 		"clocks_event_reasons.hw_slowdown", "clocks_event_reasons.sync_boost",
 		"clocks_event_reasons.sw_thermal_slowdown", "clocks_event_reasons.hw_thermal_slowdown",
 		"clocks_event_reasons.hw_power_brake_slowdown") {
 		active, ret := dev.GetCurrentClocksEventReasons()
-		c.set("clocks_event_reasons.active", ret, func() string { return fmt.Sprintf("0x%016X", active) })
+		coll.set("clocks_event_reasons.active", ret, func() string { return fmt.Sprintf("0x%016X", active) })
 
 		for field, bit := range map[nvidiasmi.QField]uint64{
 			"clocks_event_reasons.gpu_idle":                    reasonGpuIdle,
@@ -645,134 +649,142 @@ func (b *Backend) collectDevice(
 			"clocks_event_reasons.hw_thermal_slowdown":         reasonHwThermal,
 			"clocks_event_reasons.hw_power_brake_slowdown":     reasonHwPowerBrake,
 		} {
-			if !p.want(field) {
+			if !reqs.want(field) {
 				// keep the permission diagnostics limited to requested fields
 				continue
 			}
 
-			c.set(field, ret, func() string { return activeNotActive(active, bit) })
+			coll.set(field, ret, func() string { return activeNotActive(active, bit) })
 		}
 	}
 
-	b.collectFieldValues(dev, c, p)
+	b.collectFieldValues(dev, coll, reqs)
 
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("device collection interrupted: %w", err)
 	}
 
-	if p.want("memory.total", "memory.reserved", "memory.used", "memory.free") {
+	if reqs.want("memory.total", "memory.reserved", "memory.used", "memory.free") {
 		mem, ret := dev.GetMemoryInfo_v2()
-		c.set("memory.total", ret, func() string { return mib(mem.Total) })
-		c.set("memory.reserved", ret, func() string { return mib(mem.Reserved) })
-		c.set("memory.used", ret, func() string { return mib(mem.Used) })
-		c.set("memory.free", ret, func() string { return mib(mem.Free) })
+		coll.set("memory.total", ret, func() string { return mib(mem.Total) })
+		coll.set("memory.reserved", ret, func() string { return mib(mem.Reserved) })
+		coll.set("memory.used", ret, func() string { return mib(mem.Used) })
+		coll.set("memory.free", ret, func() string { return mib(mem.Free) })
 	}
 
-	if p.want("compute_mode") {
+	if reqs.want("compute_mode") {
 		cm, ret := dev.GetComputeMode()
-		c.set("compute_mode", ret, func() string { return computeModeStr(int32(cm)) })
+		coll.set("compute_mode", ret, func() string { return computeModeStr(int32(cm)) })
 	}
 
-	if p.want("compute_cap") {
+	if reqs.want("compute_cap") {
 		major, minor, ret := dev.GetCudaComputeCapability()
-		c.set("compute_cap", ret, func() string { return fmt.Sprintf("%d.%d", major, minor) })
+		coll.set("compute_cap", ret, func() string { return fmt.Sprintf("%d.%d", major, minor) })
 	}
 
-	if p.want("utilization.gpu", "utilization.memory") {
+	if reqs.want("utilization.gpu", "utilization.memory") {
 		util, ret := dev.GetUtilizationRates()
-		c.set("utilization.gpu", ret, func() string { return pct(util.Gpu) })
-		c.set("utilization.memory", ret, func() string { return pct(util.Memory) })
+		coll.set("utilization.gpu", ret, func() string { return pct(util.Gpu) })
+		coll.set("utilization.memory", ret, func() string { return pct(util.Memory) })
 	}
 
-	if p.want("utilization.encoder") {
+	if reqs.want("utilization.encoder") {
 		encUtil, _, ret := dev.GetEncoderUtilization()
-		c.set("utilization.encoder", ret, func() string { return pct(encUtil) })
+		coll.set("utilization.encoder", ret, func() string { return pct(encUtil) })
 	}
 
-	if p.want("utilization.decoder") {
+	if reqs.want("utilization.decoder") {
 		decUtil, _, ret := dev.GetDecoderUtilization()
-		c.set("utilization.decoder", ret, func() string { return pct(decUtil) })
+		coll.set("utilization.decoder", ret, func() string { return pct(decUtil) })
 	}
 
-	if p.want("utilization.jpeg") {
+	if reqs.want("utilization.jpeg") {
 		jpgUtil, _, ret := dev.GetJpgUtilization()
-		c.set("utilization.jpeg", ret, func() string { return pct(jpgUtil) })
+		coll.set("utilization.jpeg", ret, func() string { return pct(jpgUtil) })
 	}
 
-	if p.want("utilization.ofa") {
+	if reqs.want("utilization.ofa") {
 		ofaUtil, _, ret := dev.GetOfaUtilization()
-		c.set("utilization.ofa", ret, func() string { return pct(ofaUtil) })
+		coll.set("utilization.ofa", ret, func() string { return pct(ofaUtil) })
 	}
 
-	if p.want("encoder.stats.sessionCount", "encoder.stats.averageFps", "encoder.stats.averageLatency") {
+	if reqs.want("encoder.stats.sessionCount", "encoder.stats.averageFps", "encoder.stats.averageLatency") {
 		sessions, fps, latency, ret := dev.GetEncoderStats()
-		c.set("encoder.stats.sessionCount", ret, func() string { return strconv.Itoa(sessions) })
-		c.set("encoder.stats.averageFps", ret, func() string { return strconv.FormatUint(uint64(fps), 10) })
-		c.set("encoder.stats.averageLatency", ret, func() string { return strconv.FormatUint(uint64(latency), 10) })
+		coll.set("encoder.stats.sessionCount", ret, func() string { return strconv.Itoa(sessions) })
+		coll.set("encoder.stats.averageFps", ret, func() string { return strconv.FormatUint(uint64(fps), 10) })
+		coll.set("encoder.stats.averageLatency", ret, func() string { return strconv.FormatUint(uint64(latency), 10) })
 	}
 
-	if p.want("dramEncryption.mode.current", "dramEncryption.mode.pending") {
+	if reqs.want("dramEncryption.mode.current", "dramEncryption.mode.pending") {
 		dramCur, dramPend, ret := dev.GetDramEncryptionMode()
-		c.set("dramEncryption.mode.current", ret, func() string { return onOff(dramCur.EncryptionState != 0) })
-		c.set("dramEncryption.mode.pending", ret, func() string { return onOff(dramPend.EncryptionState != 0) })
+		coll.set("dramEncryption.mode.current", ret, func() string { return onOff(dramCur.EncryptionState != 0) })
+		coll.set("dramEncryption.mode.pending", ret, func() string { return onOff(dramPend.EncryptionState != 0) })
 	}
 
-	if p.want("ecc.mode.current", "ecc.mode.pending") {
+	if reqs.want("ecc.mode.current", "ecc.mode.pending") {
 		eccCur, eccPend, ret := dev.GetEccMode()
-		c.set("ecc.mode.current", ret, func() string { return onOff(eccCur == nvml.FEATURE_ENABLED) })
-		c.set("ecc.mode.pending", ret, func() string { return onOff(eccPend == nvml.FEATURE_ENABLED) })
+		coll.set("ecc.mode.current", ret, func() string { return onOff(eccCur == nvml.FEATURE_ENABLED) })
+		coll.set("ecc.mode.pending", ret, func() string { return onOff(eccPend == nvml.FEATURE_ENABLED) })
 	}
 
-	collectEccCounters(dev, c, p)
-	collectSramEcc(dev, c, p)
+	collectEccCounters(dev, coll, reqs)
+	collectSramEcc(dev, coll, reqs)
 
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("device collection interrupted: %w", err)
 	}
 
-	if p.want("retired_pages.single_bit_ecc.count") {
+	if reqs.want("retired_pages.single_bit_ecc.count") {
 		sbePages, ret := dev.GetRetiredPages(nvml.PAGE_RETIREMENT_CAUSE_MULTIPLE_SINGLE_BIT_ECC_ERRORS)
-		c.set("retired_pages.single_bit_ecc.count", ret, func() string { return strconv.Itoa(len(sbePages)) })
+		coll.set("retired_pages.single_bit_ecc.count", ret, func() string { return strconv.Itoa(len(sbePages)) })
 	}
 
-	if p.want("retired_pages.double_bit.count") {
+	if reqs.want("retired_pages.double_bit.count") {
 		dbePages, ret := dev.GetRetiredPages(nvml.PAGE_RETIREMENT_CAUSE_DOUBLE_BIT_ECC_ERROR)
-		c.set("retired_pages.double_bit.count", ret, func() string { return strconv.Itoa(len(dbePages)) })
+		coll.set("retired_pages.double_bit.count", ret, func() string { return strconv.Itoa(len(dbePages)) })
 	}
 
-	if p.want("retired_pages.pending") {
+	if reqs.want("retired_pages.pending") {
 		retiredPending, ret := dev.GetRetiredPagesPendingStatus()
-		c.set("retired_pages.pending", ret, func() string { return yesNo(retiredPending == nvml.FEATURE_ENABLED) })
+		coll.set("retired_pages.pending", ret, func() string { return yesNo(retiredPending == nvml.FEATURE_ENABLED) })
 	}
 
-	if p.want("remapped_rows.correctable", "remapped_rows.uncorrectable",
+	if reqs.want("remapped_rows.correctable", "remapped_rows.uncorrectable",
 		"remapped_rows.pending", "remapped_rows.failure") {
 		corrRows, uncRows, isPending, failed, ret := dev.GetRemappedRows()
-		c.set("remapped_rows.correctable", ret, func() string { return strconv.Itoa(corrRows) })
-		c.set("remapped_rows.uncorrectable", ret, func() string { return strconv.Itoa(uncRows) })
-		c.set("remapped_rows.pending", ret, func() string { return yesNo(isPending) })
-		c.set("remapped_rows.failure", ret, func() string { return yesNo(failed) })
+		coll.set("remapped_rows.correctable", ret, func() string { return strconv.Itoa(corrRows) })
+		coll.set("remapped_rows.uncorrectable", ret, func() string { return strconv.Itoa(uncRows) })
+		coll.set("remapped_rows.pending", ret, func() string { return yesNo(isPending) })
+		coll.set("remapped_rows.failure", ret, func() string { return yesNo(failed) })
 	}
 
-	if p.want("remapped_rows.histogram.max", "remapped_rows.histogram.high",
+	if reqs.want("remapped_rows.histogram.max", "remapped_rows.histogram.high",
 		"remapped_rows.histogram.partial", "remapped_rows.histogram.low", "remapped_rows.histogram.none") {
 		hist, ret := dev.GetRowRemapperHistogram()
-		c.set("remapped_rows.histogram.max", ret, func() string { return strconv.FormatUint(uint64(hist.Max), 10) })
-		c.set("remapped_rows.histogram.high", ret, func() string { return strconv.FormatUint(uint64(hist.High), 10) })
-		c.set("remapped_rows.histogram.partial", ret,
+		coll.set("remapped_rows.histogram.max", ret, func() string { return strconv.FormatUint(uint64(hist.Max), 10) })
+		coll.set(
+			"remapped_rows.histogram.high",
+			ret,
+			func() string { return strconv.FormatUint(uint64(hist.High), 10) },
+		)
+		coll.set("remapped_rows.histogram.partial", ret,
 			func() string { return strconv.FormatUint(uint64(hist.Partial), 10) })
-		c.set("remapped_rows.histogram.low", ret, func() string { return strconv.FormatUint(uint64(hist.Low), 10) })
-		c.set("remapped_rows.histogram.none", ret, func() string { return strconv.FormatUint(uint64(hist.None), 10) })
+		coll.set("remapped_rows.histogram.low", ret, func() string { return strconv.FormatUint(uint64(hist.Low), 10) })
+		coll.set(
+			"remapped_rows.histogram.none",
+			ret,
+			func() string { return strconv.FormatUint(uint64(hist.None), 10) },
+		)
 	}
 
-	if p.want("temperature.gpu") {
+	if reqs.want("temperature.gpu") {
 		temp, ret := dev.GetTemperature(nvml.TEMPERATURE_GPU)
-		c.set("temperature.gpu", ret, func() string { return strconv.FormatUint(uint64(temp), 10) })
+		coll.set("temperature.gpu", ret, func() string { return strconv.FormatUint(uint64(temp), 10) })
 	}
 
-	if p.want("temperature.gpu.tlimit") {
+	if reqs.want("temperature.gpu.tlimit") {
 		margin, ret := dev.GetMarginTemperature()
-		c.set("temperature.gpu.tlimit", ret, func() string {
+		coll.set("temperature.gpu.tlimit", ret, func() string {
 			return strconv.FormatInt(int64(margin.MarginTemperature), 10)
 		})
 	}
@@ -781,30 +793,30 @@ func (b *Backend) collectDevice(
 		return nil, fmt.Errorf("device collection interrupted: %w", err)
 	}
 
-	if p.want("power.draw") {
+	if reqs.want("power.draw") {
 		powerUsage, ret := dev.GetPowerUsage()
-		c.set("power.draw", ret, func() string { return milliwatts(powerUsage) })
+		coll.set("power.draw", ret, func() string { return milliwatts(powerUsage) })
 	}
 
-	if p.want("power.limit") {
+	if reqs.want("power.limit") {
 		limit, ret := dev.GetPowerManagementLimit()
-		c.set("power.limit", ret, func() string { return milliwatts(limit) })
+		coll.set("power.limit", ret, func() string { return milliwatts(limit) })
 	}
 
-	if p.want("enforced.power.limit") {
+	if reqs.want("enforced.power.limit") {
 		enforced, ret := dev.GetEnforcedPowerLimit()
-		c.set("enforced.power.limit", ret, func() string { return milliwatts(enforced) })
+		coll.set("enforced.power.limit", ret, func() string { return milliwatts(enforced) })
 	}
 
-	if p.want("power.default_limit") {
+	if reqs.want("power.default_limit") {
 		defLimit, ret := dev.GetPowerManagementDefaultLimit()
-		c.set("power.default_limit", ret, func() string { return milliwatts(defLimit) })
+		coll.set("power.default_limit", ret, func() string { return milliwatts(defLimit) })
 	}
 
-	if p.want("power.min_limit", "power.max_limit") {
+	if reqs.want("power.min_limit", "power.max_limit") {
 		minLimit, maxLimit, ret := dev.GetPowerManagementLimitConstraints()
-		c.set("power.min_limit", ret, func() string { return milliwatts(minLimit) })
-		c.set("power.max_limit", ret, func() string { return milliwatts(maxLimit) })
+		coll.set("power.min_limit", ret, func() string { return milliwatts(minLimit) })
+		coll.set("power.max_limit", ret, func() string { return milliwatts(maxLimit) })
 	}
 
 	for field, clockType := range map[nvidiasmi.QField]nvml.ClockType{
@@ -813,12 +825,12 @@ func (b *Backend) collectDevice(
 		"clocks.current.memory":   nvml.CLOCK_MEM,
 		"clocks.current.video":    nvml.CLOCK_VIDEO,
 	} {
-		if !p.want(field) {
+		if !reqs.want(field) {
 			continue
 		}
 
 		clock, cret := dev.GetClockInfo(clockType)
-		c.set(field, cret, func() string { return mhz(clock) })
+		coll.set(field, cret, func() string { return mhz(clock) })
 	}
 
 	for field, clockType := range map[nvidiasmi.QField]nvml.ClockType{
@@ -826,113 +838,139 @@ func (b *Backend) collectDevice(
 		"clocks.max.sm":       nvml.CLOCK_SM,
 		"clocks.max.memory":   nvml.CLOCK_MEM,
 	} {
-		if !p.want(field) {
+		if !reqs.want(field) {
 			continue
 		}
 
 		clock, cret := dev.GetMaxClockInfo(clockType)
-		c.set(field, cret, func() string { return mhz(clock) })
+		coll.set(field, cret, func() string { return mhz(clock) })
 	}
 
-	if p.want("mig.mode.current", "mig.mode.pending") {
+	if reqs.want("mig.mode.current", "mig.mode.pending") {
 		migCur, migPend, ret := dev.GetMigMode()
-		c.set("mig.mode.current", ret, func() string { return onOff(migCur == 1) })
-		c.set("mig.mode.pending", ret, func() string { return onOff(migPend == 1) })
+		coll.set("mig.mode.current", ret, func() string { return onOff(migCur == 1) })
+		coll.set("mig.mode.pending", ret, func() string { return onOff(migPend == 1) })
 	}
 
-	if p.want("gsp.mode.current", "gsp.mode.default") {
+	if reqs.want("gsp.mode.current", "gsp.mode.default") {
 		gspEnabled, gspDefault, ret := dev.GetGspFirmwareMode()
-		c.set("gsp.mode.current", ret, func() string { return onOff(gspEnabled) })
-		c.set("gsp.mode.default", ret, func() string { return onOff(gspDefault) })
+		coll.set("gsp.mode.current", ret, func() string { return onOff(gspEnabled) })
+		coll.set("gsp.mode.default", ret, func() string { return onOff(gspDefault) })
 	}
 
-	if p.want("c2c.mode") {
+	if reqs.want("c2c.mode") {
 		c2c, ret := dev.GetC2cModeInfoV().V1()
-		c.set("c2c.mode", ret, func() string { return onOff(c2c.IsC2cEnabled != 0) })
+		coll.set("c2c.mode", ret, func() string { return onOff(c2c.IsC2cEnabled != 0) })
 	}
 
-	if p.want("protected_memory.total", "protected_memory.used", "protected_memory.free") {
+	if reqs.want("protected_memory.total", "protected_memory.used", "protected_memory.free") {
 		protected, ret := dev.GetConfComputeProtectedMemoryUsage()
-		c.set("protected_memory.total", ret, func() string { return mib(protected.Total) })
-		c.set("protected_memory.used", ret, func() string { return mib(protected.Used) })
-		c.set("protected_memory.free", ret, func() string { return mib(protected.Free) })
+		coll.set("protected_memory.total", ret, func() string { return mib(protected.Total) })
+		coll.set("protected_memory.used", ret, func() string { return mib(protected.Used) })
+		coll.set("protected_memory.free", ret, func() string { return mib(protected.Free) })
 	}
 
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("device collection interrupted: %w", err)
 	}
 
-	collectFabric(dev, c, p)
-	collectPlatform(dev, c, p)
+	collectFabric(dev, coll, reqs)
+	collectPlatform(dev, coll, reqs)
 
-	if p.want("hostname") {
+	if reqs.want("hostname") {
 		hostname, ret := dev.GetHostname_v1()
-		c.set("hostname", ret, func() string { return hostname })
+		coll.set("hostname", ret, func() string { return hostname })
 	}
 
-	if len(c.denied) > 0 && !b.permLogged {
+	if len(coll.denied) > 0 && !b.permLogged {
 		b.permLogged = true
 
 		b.logger.Warn("some NVML readings are permission-denied and will be absent",
-			"fields", fmt.Sprintf("%v", c.denied))
+			"fields", fmt.Sprintf("%v", coll.denied))
 	}
 
 	// a required NVML function being unavailable usually means driver drift
 	// (the library dropped or renamed an entry point this backend expects);
 	// users on brand-new drivers are the earliest signal, so say it once
-	if len(c.notFound) > 0 && !b.fnfLogged {
+	if len(coll.notFound) > 0 && !b.fnfLogged {
 		b.fnfLogged = true
 
 		b.logger.Warn("required NVML functions are unavailable in this driver; "+
 			"the affected fields will be absent - please report this on the project's issue tracker",
-			"fields", fmt.Sprintf("%v", c.notFound),
+			"fields", fmt.Sprintf("%v", coll.notFound),
 			"driver_version", shared.driverVersion)
 	}
 
-	if c.fatal != nil {
-		return nil, &lifecycleRetError{ret: *c.fatal}
+	if coll.fatal != nil {
+		return nil, &lifecycleRetError{ret: *coll.fatal}
 	}
 
-	return c.values, nil
+	return coll.values, nil
 }
 
 // collectFieldValues batches everything served by nvmlDeviceGetFieldValues.
 // The field-ID choices are trace-verified against nvidia-smi's own calls.
-func (b *Backend) collectFieldValues(dev nvml.Device, c *devCollector, p plan) {
+//
+//nolint:cyclop,funlen // one linear pass over the batched entries and their outcomes
+func (b *Backend) collectFieldValues(dev nvml.Device, coll *devCollector, reqs plan) {
 	entries := []struct {
 		field  nvidiasmi.QField
 		id     uint32
 		bare   bool
 		format func(v float64) string
 	}{
-		{"power.draw.average", nvml.FI_DEV_POWER_AVERAGE, false,
-			func(v float64) string { return fmt.Sprintf("%.2f W", v/1000.0) }},
-		{"power.draw.instant", nvml.FI_DEV_POWER_INSTANT, false,
-			func(v float64) string { return fmt.Sprintf("%.2f W", v/1000.0) }},
-		{"temperature.memory", nvml.FI_DEV_MEMORY_TEMP, true,
-			func(v float64) string { return strconv.FormatInt(int64(v), 10) }},
-		{"clocks_event_reasons_counters.sw_power_cap", nvml.FI_DEV_CLOCKS_EVENT_REASON_SW_POWER_CAP, false,
-			func(v float64) string { return fmt.Sprintf("%d us", int64(v)) }},
-		{"clocks_event_reasons_counters.sync_boost", nvml.FI_DEV_CLOCKS_EVENT_REASON_SYNC_BOOST, false,
-			func(v float64) string { return fmt.Sprintf("%d us", int64(v)) }},
-		{"clocks_event_reasons_counters.sw_thermal_slowdown", nvml.FI_DEV_CLOCKS_EVENT_REASON_SW_THERM_SLOWDOWN, false,
-			func(v float64) string { return fmt.Sprintf("%d us", int64(v)) }},
-		{"clocks_event_reasons_counters.hw_thermal_slowdown", nvml.FI_DEV_CLOCKS_EVENT_REASON_HW_THERM_SLOWDOWN, false,
-			func(v float64) string { return fmt.Sprintf("%d us", int64(v)) }},
-		{"clocks_event_reasons_counters.hw_power_brake_slowdown",
+		{
+			"power.draw.average", nvml.FI_DEV_POWER_AVERAGE, false,
+			func(v float64) string { return fmt.Sprintf("%.2f W", v/1000.0) },
+		},
+		{
+			"power.draw.instant", nvml.FI_DEV_POWER_INSTANT, false,
+			func(v float64) string { return fmt.Sprintf("%.2f W", v/1000.0) },
+		},
+		{
+			"temperature.memory", nvml.FI_DEV_MEMORY_TEMP, true,
+			func(v float64) string { return strconv.FormatInt(int64(v), 10) },
+		},
+		{
+			"clocks_event_reasons_counters.sw_power_cap", nvml.FI_DEV_CLOCKS_EVENT_REASON_SW_POWER_CAP, false,
+			func(v float64) string { return fmt.Sprintf("%d us", int64(v)) },
+		},
+		{
+			"clocks_event_reasons_counters.sync_boost", nvml.FI_DEV_CLOCKS_EVENT_REASON_SYNC_BOOST, false,
+			func(v float64) string { return fmt.Sprintf("%d us", int64(v)) },
+		},
+		{
+			"clocks_event_reasons_counters.sw_thermal_slowdown",
+			nvml.FI_DEV_CLOCKS_EVENT_REASON_SW_THERM_SLOWDOWN,
+			false,
+			func(v float64) string { return fmt.Sprintf("%d us", int64(v)) },
+		},
+		{
+			"clocks_event_reasons_counters.hw_thermal_slowdown",
+			nvml.FI_DEV_CLOCKS_EVENT_REASON_HW_THERM_SLOWDOWN,
+			false,
+			func(v float64) string { return fmt.Sprintf("%d us", int64(v)) },
+		},
+		{
+			"clocks_event_reasons_counters.hw_power_brake_slowdown",
 			nvml.FI_DEV_CLOCKS_EVENT_REASON_HW_POWER_BRAKE_SLOWDOWN, false,
-			func(v float64) string { return fmt.Sprintf("%d us", int64(v)) }},
-		{"gpu_recovery_action", nvml.FI_DEV_GET_GPU_RECOVERY_ACTION, false,
-			func(v float64) string { return recoveryActionStr(uint64(v)) }},
-		{"edpp_multiplier", edppMultiplierFieldID, false,
-			func(v float64) string { return fmt.Sprintf("%.2f %%", v) }},
+			func(v float64) string { return fmt.Sprintf("%d us", int64(v)) },
+		},
+		{
+			"gpu_recovery_action", nvml.FI_DEV_GET_GPU_RECOVERY_ACTION, false,
+			func(v float64) string { return recoveryActionStr(uint64(v)) },
+		},
+		{
+			"edpp_multiplier", edppMultiplierFieldID, false,
+			func(v float64) string { return fmt.Sprintf("%.2f %%", v) },
+		},
 	}
 
 	wanted := entries[:0]
 
-	for _, e := range entries {
-		if p.want(e.field) {
-			wanted = append(wanted, e)
+	for _, entry := range entries {
+		if reqs.want(entry.field) {
+			wanted = append(wanted, entry)
 		}
 	}
 
@@ -947,58 +985,60 @@ func (b *Backend) collectFieldValues(dev nvml.Device, c *devCollector, p plan) {
 
 	ret := dev.GetFieldValues(values)
 	if ret != nvml.SUCCESS {
-		for _, e := range wanted {
-			if e.bare {
-				c.setBare(e.field, ret, nil)
+		for _, entry := range wanted {
+			if entry.bare {
+				coll.setBare(entry.field, ret, nil)
 			} else {
-				c.set(e.field, ret, nil)
+				coll.set(entry.field, ret, nil)
 			}
 		}
 
 		return
 	}
 
-	for i, e := range wanted {
+	for i, entry := range wanted {
 		fieldValue := values[i]
+		//nolint:gosec // G115: the field carries an nvmlReturn_t
 		fret := nvml.Return(fieldValue.NvmlReturn)
 		value, decodeOK := decodeFieldValue(fieldValue)
 
 		switch {
-		case fret != nvml.SUCCESS && e.bare:
-			c.setBare(e.field, fret, nil)
+		case fret != nvml.SUCCESS && entry.bare:
+			coll.setBare(entry.field, fret, nil)
 		case fret != nvml.SUCCESS:
-			c.set(e.field, fret, nil)
+			coll.set(entry.field, fret, nil)
 		case !decodeOK:
 			// an unknown value type from a newer driver: absent, never a panic
 			b.logger.Warn("cannot decode NVML field value",
-				"field", e.field, "value_type", fieldValue.ValueType)
-			c.set(e.field, nvml.SUCCESS, nil)
+				"field", entry.field, "value_type", fieldValue.ValueType)
+			coll.set(entry.field, nvml.SUCCESS, nil)
 		default:
-			c.values[e.field] = e.format(value)
+			coll.values[entry.field] = entry.format(value)
 		}
 	}
 }
 
+//nolint:gosec // G115: reinterpreting the C value union's bytes is the point
 func decodeFieldValue(fv nvml.FieldValue) (float64, bool) {
-	b := fv.Value[:]
+	raw := fv.Value[:]
 
 	switch fv.ValueType {
 	case uint32(nvml.VALUE_TYPE_DOUBLE):
-		return math.Float64frombits(binary.LittleEndian.Uint64(b)), true
+		return math.Float64frombits(binary.LittleEndian.Uint64(raw)), true
 	case uint32(nvml.VALUE_TYPE_UNSIGNED_INT):
-		return float64(binary.LittleEndian.Uint32(b)), true
+		return float64(binary.LittleEndian.Uint32(raw)), true
 	case uint32(nvml.VALUE_TYPE_UNSIGNED_LONG), uint32(nvml.VALUE_TYPE_UNSIGNED_LONG_LONG):
-		return float64(binary.LittleEndian.Uint64(b)), true
+		return float64(binary.LittleEndian.Uint64(raw)), true
 	case uint32(nvml.VALUE_TYPE_SIGNED_LONG_LONG):
-		return float64(int64(binary.LittleEndian.Uint64(b))), true
+		return float64(int64(binary.LittleEndian.Uint64(raw))), true
 	case uint32(nvml.VALUE_TYPE_SIGNED_INT):
-		return float64(int32(binary.LittleEndian.Uint32(b))), true
+		return float64(int32(binary.LittleEndian.Uint32(raw))), true
 	default:
 		return 0, false
 	}
 }
 
-func collectEccCounters(dev nvml.Device, c *devCollector, p plan) {
+func collectEccCounters(dev nvml.Device, coll *devCollector, reqs plan) {
 	locations := map[string]nvml.MemoryLocation{
 		"device_memory":  nvml.MEMORY_LOCATION_DEVICE_MEMORY,
 		"dram":           nvml.MEMORY_LOCATION_DRAM,
@@ -1020,26 +1060,26 @@ func collectEccCounters(dev nvml.Device, c *devCollector, p plan) {
 		} {
 			for locName, loc := range locations {
 				field := nvidiasmi.QField(fmt.Sprintf("ecc.errors.%s.%s.%s", kindName, cntName, locName))
-				if !p.want(field) {
+				if !reqs.want(field) {
 					continue
 				}
 
 				v, ret := dev.GetMemoryErrorCounter(errType, cntType, loc)
-				c.set(field, ret, func() string { return strconv.FormatUint(v, 10) })
+				coll.set(field, ret, func() string { return strconv.FormatUint(v, 10) })
 			}
 
 			field := nvidiasmi.QField(fmt.Sprintf("ecc.errors.%s.%s.total", kindName, cntName))
-			if !p.want(field) {
+			if !reqs.want(field) {
 				continue
 			}
 
 			v, ret := dev.GetTotalEccErrors(errType, cntType)
-			c.set(field, ret, func() string { return strconv.FormatUint(v, 10) })
+			coll.set(field, ret, func() string { return strconv.FormatUint(v, 10) })
 		}
 	}
 }
 
-func collectSramEcc(dev nvml.Device, c *devCollector, p plan) {
+func collectSramEcc(dev nvml.Device, coll *devCollector, reqs plan) {
 	sramFields := []nvidiasmi.QField{
 		"ecc.errors.uncorrected.volatile.sram.parity", "ecc.errors.uncorrected.volatile.sram.secded",
 		"ecc.errors.uncorrected.aggregate.sram.parity", "ecc.errors.uncorrected.aggregate.sram.secded",
@@ -1048,87 +1088,89 @@ func collectSramEcc(dev nvml.Device, c *devCollector, p plan) {
 		"ecc.errors.uncorrected.aggregate.sram.mcu", "ecc.errors.uncorrected.aggregate.sram.pcie",
 		"ecc.errors.uncorrected.aggregate.sram.other",
 	}
-	if !p.want(sramFields...) {
+	if !reqs.want(sramFields...) {
 		return
 	}
 
-	s, ret := dev.GetSramEccErrorStatus()
+	status, ret := dev.GetSramEccErrorStatus()
 
 	set := func(field nvidiasmi.QField, v uint64) {
-		c.set(field, ret, func() string { return strconv.FormatUint(v, 10) })
+		coll.set(field, ret, func() string { return strconv.FormatUint(v, 10) })
 	}
 
-	set("ecc.errors.uncorrected.volatile.sram.parity", s.VolatileUncParity)
-	set("ecc.errors.uncorrected.volatile.sram.secded", s.VolatileUncSecDed)
-	set("ecc.errors.uncorrected.aggregate.sram.parity", s.AggregateUncParity)
-	set("ecc.errors.uncorrected.aggregate.sram.secded", s.AggregateUncSecDed)
-	c.set("ecc.errors.uncorrected.aggregate.sram.thresholdExceeded", ret,
-		func() string { return yesNo(s.BThresholdExceeded != 0) })
-	set("ecc.errors.uncorrected.aggregate.sram.l2", s.AggregateUncBucketL2)
-	set("ecc.errors.uncorrected.aggregate.sram.sm", s.AggregateUncBucketSm)
-	set("ecc.errors.uncorrected.aggregate.sram.mcu", s.AggregateUncBucketMcu)
-	set("ecc.errors.uncorrected.aggregate.sram.pcie", s.AggregateUncBucketPcie)
-	set("ecc.errors.uncorrected.aggregate.sram.other", s.AggregateUncBucketOther)
+	set("ecc.errors.uncorrected.volatile.sram.parity", status.VolatileUncParity)
+	set("ecc.errors.uncorrected.volatile.sram.secded", status.VolatileUncSecDed)
+	set("ecc.errors.uncorrected.aggregate.sram.parity", status.AggregateUncParity)
+	set("ecc.errors.uncorrected.aggregate.sram.secded", status.AggregateUncSecDed)
+	coll.set("ecc.errors.uncorrected.aggregate.sram.thresholdExceeded", ret,
+		func() string { return yesNo(status.BThresholdExceeded != 0) })
+	set("ecc.errors.uncorrected.aggregate.sram.l2", status.AggregateUncBucketL2)
+	set("ecc.errors.uncorrected.aggregate.sram.sm", status.AggregateUncBucketSm)
+	set("ecc.errors.uncorrected.aggregate.sram.mcu", status.AggregateUncBucketMcu)
+	set("ecc.errors.uncorrected.aggregate.sram.pcie", status.AggregateUncBucketPcie)
+	set("ecc.errors.uncorrected.aggregate.sram.other", status.AggregateUncBucketOther)
 }
 
 // collectFabric fills the fabric.* fields. When there is no fabric (state 0
 // or the call fails), every field prints the bare N/A token
 // (capture-verified). Lifecycle-class failures still poison the cycle.
-func collectFabric(dev nvml.Device, c *devCollector, p plan) {
+func collectFabric(dev nvml.Device, coll *devCollector, reqs plan) {
 	fabricFields := []nvidiasmi.QField{
 		"fabric.state", "fabric.status", "fabric.cliqueId", "fabric.clusterUuid",
 	}
-	if !p.want(fabricFields...) {
+	if !reqs.want(fabricFields...) {
 		return
 	}
 
 	info, ret := dev.GetGpuFabricInfoV().V2()
 	if ret != nvml.SUCCESS || info.State == 0 {
-		c.classify("fabric.state", ret)
+		coll.classify("fabric.state", ret)
 
 		for _, f := range fabricFields {
-			c.values[f] = tokenBareNotAvailable
+			coll.values[f] = tokenBareNotAvailable
 		}
 
 		return
 	}
 
-	c.values["fabric.state"] = fabricStateStr(info.State)
+	coll.values["fabric.state"] = fabricStateStr(info.State)
 
 	status := "Success"
-	if nvml.Return(info.Status) != nvml.SUCCESS {
-		// a completed probe can still carry a lifecycle-class status
-		c.classify("fabric.status", nvml.Return(info.Status))
 
-		status = nvml.Return(info.Status).String()
+	fabricStatus := nvml.Return(info.Status) //nolint:gosec // G115: the field carries an nvmlReturn_t
+	if fabricStatus != nvml.SUCCESS {
+		// a completed probe can still carry a lifecycle-class status
+		coll.classify("fabric.status", fabricStatus)
+
+		status = fabricStatus.String()
 	}
 
-	c.values["fabric.status"] = status
-	c.values["fabric.cliqueId"] = strconv.FormatUint(uint64(info.CliqueId), 10)
-	c.values["fabric.clusterUuid"] = uuidBytes(info.ClusterUuid)
+	coll.values["fabric.status"] = status
+	coll.values["fabric.cliqueId"] = strconv.FormatUint(uint64(info.CliqueId), 10)
+	coll.values["fabric.clusterUuid"] = uuidBytes(info.ClusterUuid)
 }
 
-func collectPlatform(dev nvml.Device, c *devCollector, p plan) {
-	if !p.want("platform.chassis_serial_number", "platform.slot_number", "platform.tray_index",
+func collectPlatform(dev nvml.Device, coll *devCollector, reqs plan) {
+	if !reqs.want("platform.chassis_serial_number", "platform.slot_number", "platform.tray_index",
 		"platform.host_id", "platform.peer_type", "platform.module_id", "platform.gpu_fabric_guid") {
 		return
 	}
 
 	info, ret := dev.GetPlatformInfo()
 
-	c.set("platform.chassis_serial_number", ret, func() string { return cstr(info.ChassisSerialNumber[:]) })
-	c.set("platform.slot_number", ret, func() string { return strconv.FormatUint(uint64(info.SlotNumber), 10) })
-	c.set("platform.tray_index", ret, func() string { return strconv.FormatUint(uint64(info.TrayIndex), 10) })
-	c.set("platform.host_id", ret, func() string { return strconv.FormatUint(uint64(info.HostId), 10) })
-	c.set("platform.peer_type", ret, func() string {
+	coll.set("platform.chassis_serial_number", ret, func() string { return cstr(info.ChassisSerialNumber[:]) })
+	coll.set("platform.slot_number", ret, func() string { return strconv.FormatUint(uint64(info.SlotNumber), 10) })
+	coll.set("platform.tray_index", ret, func() string { return strconv.FormatUint(uint64(info.TrayIndex), 10) })
+	coll.set("platform.host_id", ret, func() string { return strconv.FormatUint(uint64(info.HostId), 10) })
+	coll.set("platform.peer_type", ret, func() string {
 		if info.PeerType == 0 {
 			return "Direct Connected"
 		}
 
 		return fmt.Sprintf("Unknown(%d)", info.PeerType)
 	})
-	c.set("platform.module_id", ret, func() string { return strconv.FormatUint(uint64(info.ModuleId), 10) })
-	c.set("platform.gpu_fabric_guid", ret, func() string {
+	coll.set("platform.module_id", ret, func() string { return strconv.FormatUint(uint64(info.ModuleId), 10) })
+	coll.set("platform.gpu_fabric_guid", ret, func() string {
 		return fmt.Sprintf("0x%016X", binary.BigEndian.Uint64(info.IbGuid[:8]))
 	})
 }
@@ -1138,6 +1180,8 @@ func collectPlatform(dev nvml.Device, c *devCollector, p plan) {
 // Reading contract, but lifecycle-class returns still mark the backend for
 // re-initialization so the next cycle recovers. The caller holds the
 // backend lock.
+//
+//nolint:cyclop // one linear pass over devices and their process lists
 func (b *Backend) collectComputeApps(ctx context.Context) ([]nvidiasmi.ComputeApp, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("per-process collection interrupted: %w", err)
@@ -1150,24 +1194,24 @@ func (b *Backend) collectComputeApps(ctx context.Context) ([]nvidiasmi.ComputeAp
 
 	var apps []nvidiasmi.ComputeApp
 
-	for i := range count {
+	for deviceIdx := range count {
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("per-process collection interrupted: %w", err)
 		}
 
-		dev, ret := b.api.deviceByIndex(i)
+		dev, ret := b.api.deviceByIndex(deviceIdx)
 		if ret != nvml.SUCCESS {
-			return nil, b.softLifecycle(ret, fmt.Errorf("failed to get device %d", i))
+			return nil, b.softLifecycle(ret, fmt.Errorf("failed to get device %d", deviceIdx))
 		}
 
 		uuid, ret := dev.GetUUID()
 		if ret != nvml.SUCCESS {
-			return nil, b.softLifecycle(ret, fmt.Errorf("failed to get device %d uuid", i))
+			return nil, b.softLifecycle(ret, fmt.Errorf("failed to get device %d uuid", deviceIdx))
 		}
 
 		procs, ret := dev.GetComputeRunningProcesses()
 		if ret != nvml.SUCCESS {
-			return nil, b.softLifecycle(ret, fmt.Errorf("failed to list processes of device %d", i))
+			return nil, b.softLifecycle(ret, fmt.Errorf("failed to list processes of device %d", deviceIdx))
 		}
 
 		for _, proc := range procs {

@@ -29,8 +29,11 @@ import (
 // bracket range, and absent fields must be absent on both sides. This is
 // what catches value-format drift (rounding, unit, token spelling changes)
 // that the offline corpus tests cannot see.
+//
+//nolint:paralleltest // deliberately serial: both tests own the real GPU and NVML lifecycle
 func TestBackendParityOnRealGPU(t *testing.T) {
 	logger := slogt.New(t)
+
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 	defer cancel()
 
@@ -47,10 +50,10 @@ func TestBackendParityOnRealGPU(t *testing.T) {
 	require.NoError(t, err)
 
 	// bracketed sampling: exec, native, exec
-	execBefore := queryExec(t, ctx, resolved)
+	execBefore := queryExec(ctx, t, resolved)
 	nativeReading, _, err := backend.QueryFunc(nativeResolved, false)(ctx)
 	require.NoError(t, err)
-	execAfter := queryExec(t, ctx, resolved)
+	execAfter := queryExec(ctx, t, resolved)
 
 	native := nativeReading.Table
 	require.NotNil(t, native)
@@ -102,6 +105,8 @@ func isVolatileField(q nvidiasmi.QField) bool {
 
 // compareField checks one field of one GPU across the bracket, returning the
 // number of mismatches reported.
+//
+//nolint:cyclop,funlen // one linear pass over the comparison rules keeps them readable
 func compareField(
 	t *testing.T,
 	uuid string,
@@ -189,6 +194,8 @@ var timestampShapeRegex = regexp.MustCompile(`^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{
 // unit suffix) must match a bracket byte for byte, since that is where
 // format drift lives; the numeric part must fall inside the bracket range,
 // which may legitimately move. States must equal one of the brackets.
+//
+//nolint:cyclop,funlen // one linear pass over the comparison rules keeps them readable
 func compareVolatile(t *testing.T, uuid string, qField nvidiasmi.QField, before, native, after string) int {
 	t.Helper()
 
@@ -318,7 +325,7 @@ func isAbsentValue(raw string) bool {
 	}
 }
 
-func queryExec(t *testing.T, ctx context.Context, resolved nvidiasmi.ResolvedFields) *nvidiasmi.Table {
+func queryExec(ctx context.Context, t *testing.T, resolved nvidiasmi.ResolvedFields) *nvidiasmi.Table {
 	t.Helper()
 
 	table, _, err := nvidiasmi.Query(ctx, nvidiasmi.DefaultCommand, resolved.Query, nvidiasmi.DefaultRunFunc)
@@ -346,6 +353,8 @@ func rowsByUUID(t *testing.T, table *nvidiasmi.Table) map[string]nvidiasmi.Row {
 // family only exec serves is a failure unless it derives from a field the
 // catalog knowingly lacks, in which case it is reported, mirroring the
 // corpus drift rule.
+//
+//nolint:paralleltest // deliberately serial: both tests own the real GPU and NVML lifecycle
 func TestBackendMetricFamilyParityOnRealGPU(t *testing.T) {
 	execFamilies := scrapeBackend(t, "exec")
 	nativeFamilies := scrapeBackend(t, "nvml")
