@@ -34,7 +34,22 @@ mode is experimental and exports the exact same metrics; see
 This project is based on [a0s/nvidia-smi-exporter](https://github.com/a0s/nvidia-smi-exporter).
 However, this one is written in Go to produce a single, static binary.
 
-**If you are a gamer who's into monitoring, you are in for a treat.**
+## Use cases
+
+- Consumer and prosumer GPUs (GeForce/RTX), where the datacenter tooling
+  exposes little and `nvidia-smi` is often the only uniform source of
+  utilization, memory, power and temperature
+- Small Kubernetes clusters, edge boxes and homelabs that want GPU metrics
+  without installing the NVIDIA GPU Operator stack
+- Virtualized or restricted setups (vGPU guests, locked-down containers)
+  where the deeper GPU counters are not exposed but `nvidia-smi` still answers
+- Mixed fleets of old and new cards that need one exporter that behaves the
+  same everywhere
+- Gaming rigs, for watching your GPU stats on a dashboard while you play
+
+If you run datacenter cards on Kubernetes with the GPU Operator already
+installed, [DCGM-exporter](https://github.com/NVIDIA/dcgm-exporter) is
+probably the better fit; this exporter aims at the cases above.
 
 ## Highlights
 
