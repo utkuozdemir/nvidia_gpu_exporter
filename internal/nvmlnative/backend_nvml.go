@@ -55,6 +55,7 @@ type Backend struct {
 	mu          sync.Mutex
 	initialized bool
 	permLogged  bool
+	fnfLogged   bool
 	logger      *slog.Logger
 }
 
@@ -381,9 +382,10 @@ func (p plan) want(fields ...nvidiasmi.QField) bool {
 // devCollector accumulates one device's readings and remembers the first
 // lifecycle-class return and any permission-denied fields it sees.
 type devCollector struct {
-	values map[nvidiasmi.QField]string
-	fatal  *nvml.Return
-	denied []nvidiasmi.QField
+	values   map[nvidiasmi.QField]string
+	fatal    *nvml.Return
+	denied   []nvidiasmi.QField
+	notFound []nvidiasmi.QField
 }
 
 // classify tracks a non-success return's collection-level consequences.
@@ -394,6 +396,10 @@ func (c *devCollector) classify(field nvidiasmi.QField, ret nvml.Return) {
 
 	if ret == nvml.ERROR_NO_PERMISSION {
 		c.denied = append(c.denied, field)
+	}
+
+	if ret == nvml.ERROR_FUNCTION_NOT_FOUND {
+		c.notFound = append(c.notFound, field)
 	}
 }
 
@@ -869,6 +875,18 @@ func (b *Backend) collectDevice(
 
 		b.logger.Warn("some NVML readings are permission-denied and will be absent",
 			"fields", fmt.Sprintf("%v", c.denied))
+	}
+
+	// a required NVML function being unavailable usually means driver drift
+	// (the library dropped or renamed an entry point this backend expects);
+	// users on brand-new drivers are the earliest signal, so say it once
+	if len(c.notFound) > 0 && !b.fnfLogged {
+		b.fnfLogged = true
+
+		b.logger.Warn("required NVML functions are unavailable in this driver; "+
+			"the affected fields will be absent - please report this on the project's issue tracker",
+			"fields", fmt.Sprintf("%v", c.notFound),
+			"driver_version", shared.driverVersion)
 	}
 
 	if c.fatal != nil {
