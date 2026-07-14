@@ -113,25 +113,31 @@ func compareField(
 	beforeCell, inExec := before.QFieldToCells[qField]
 	nativeCell, inNative := native.QFieldToCells[qField]
 
+	afterCell := after.QFieldToCells[qField]
+
 	switch {
 	case inExec && !inNative:
-		// exec advertises a field the catalog lacks: drift when it carries a
-		// real value (mirrors the corpus test's rule for new fields)
-		if !isAbsentValue(beforeCell.RawValue) {
+		// exec advertises a field the catalog lacks: drift when either
+		// bracket carries a real value and the gap is not a recorded
+		// deferral (mirrors the corpus test's rule for new fields)
+		realValue := !isAbsentValue(beforeCell.RawValue) || !isAbsentValue(afterCell.RawValue)
+
+		switch {
+		case realValue && !nvmlnative.IsDeferredField(qField):
 			t.Errorf("exec exports a field the nvml backend does not serve\n"+
-				"  gpu: %s\n  field: %s\n  exec value: %q\n"+
+				"  gpu: %s\n  field: %s\n  exec values: %q / %q\n"+
 				"  fix: add it to the catalog in internal/nvmlnative, or record the deferral",
-				uuid, qField, beforeCell.RawValue)
+				uuid, qField, beforeCell.RawValue, afterCell.RawValue)
 
 			return 1
+		case realValue:
+			t.Logf("recorded deferral with real values on this hardware: %s (%q)", qField, beforeCell.RawValue)
 		}
 
 		return 0
 	case !inExec:
 		return 0
 	}
-
-	afterCell := after.QFieldToCells[qField]
 
 	execAbsent := isAbsentValue(beforeCell.RawValue) && isAbsentValue(afterCell.RawValue)
 	nativeAbsent := isAbsentValue(nativeCell.RawValue)
@@ -146,6 +152,18 @@ func compareField(
 	}
 
 	if nativeAbsent {
+		// same absence is not enough: the exact token spelling is part of
+		// the contract ([N/A] vs bare N/A vs the deprecation token), and
+		// collapsing them would hide error-classification drift
+		if nativeCell.RawValue != beforeCell.RawValue && nativeCell.RawValue != afterCell.RawValue {
+			t.Errorf("absence token mismatch between the backends\n"+
+				"  gpu: %s\n  field: %s\n  exec: %q / %q\n  nvml: %q\n"+
+				"  fix: the error-to-token mapping for this field in internal/nvmlnative",
+				uuid, qField, beforeCell.RawValue, afterCell.RawValue, nativeCell.RawValue)
+
+			return 1
+		}
+
 		return 0
 	}
 
@@ -165,15 +183,61 @@ func compareField(
 	return compareVolatile(t, uuid, qField, beforeCell.RawValue, nativeCell.RawValue, afterCell.RawValue)
 }
 
-// compareVolatile checks a volatile reading: numeric values must fall inside
-// the bracket range (with a small tolerance for quantization), states must
-// equal one of the brackets.
+var timestampShapeRegex = regexp.MustCompile(`^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$`)
+
+// compareVolatile checks a volatile reading: the non-numeric remainder (the
+// unit suffix) must match a bracket byte for byte, since that is where
+// format drift lives; the numeric part must fall inside the bracket range,
+// which may legitimately move. States must equal one of the brackets.
 func compareVolatile(t *testing.T, uuid string, qField nvidiasmi.QField, before, native, after string) int {
 	t.Helper()
+
+	if qField == "timestamp" {
+		// wall-clock values always differ; only the shape is the contract
+		if !timestampShapeRegex.MatchString(strings.TrimSpace(native)) {
+			t.Errorf("timestamp shape mismatch\n  gpu: %s\n  nvml: %q\n"+
+				"  fix: the timestamp layout in internal/nvmlnative/format.go", uuid, native)
+
+			return 1
+		}
+
+		return 0
+	}
+
+	// hex bitmasks (clock reason masks) are states, not magnitudes: a
+	// numeric-prefix parse would truncate 0x... to 0 and compare nothing
+	if strings.HasPrefix(strings.TrimSpace(native), "0x") ||
+		strings.HasPrefix(strings.TrimSpace(before), "0x") {
+		if native != before && native != after {
+			t.Errorf("volatile bitmask mismatch\n"+
+				"  gpu: %s\n  field: %s\n  exec: %q / %q\n  nvml: %q\n"+
+				"  fix: the mask formatting for this field in internal/nvmlnative",
+				uuid, qField, before, after, native)
+
+			return 1
+		}
+
+		return 0
+	}
 
 	beforeNum, beforeOK := parseNumeric(before)
 	nativeNum, nativeOK := parseNumeric(native)
 	afterNum, afterOK := parseNumeric(after)
+
+	if nativeOK {
+		nativeSuffix := numericValueRegex.ReplaceAllString(strings.TrimSpace(native), "")
+		beforeSuffix := numericValueRegex.ReplaceAllString(strings.TrimSpace(before), "")
+		afterSuffix := numericValueRegex.ReplaceAllString(strings.TrimSpace(after), "")
+
+		if nativeSuffix != beforeSuffix && nativeSuffix != afterSuffix {
+			t.Errorf("unit or format suffix mismatch on a volatile field\n"+
+				"  gpu: %s\n  field: %s\n  exec: %q / %q\n  nvml: %q\n"+
+				"  fix: the formatter for this field in internal/nvmlnative/format.go",
+				uuid, qField, before, after, native)
+
+			return 1
+		}
+	}
 
 	if !beforeOK || !afterOK || !nativeOK {
 		// non-numeric volatile state (pstate, reason flags): any bracket match is fine
@@ -276,9 +340,12 @@ func rowsByUUID(t *testing.T, table *nvidiasmi.Table) map[string]nvidiasmi.Row {
 }
 
 // TestBackendMetricFamilyParityOnRealGPU compares the rendered metric surface
-// of the two backends: family names, label sets and series shape must agree
-// for everything both serve, so a naming or labeling regression cannot hide
-// behind matching raw values.
+// of the two backends: for every family both serve, the full series identity
+// set (family plus complete label name/value pairs) must be equal, so a
+// naming or labeling regression cannot hide behind matching raw values. A
+// family only exec serves is a failure unless it derives from a field the
+// catalog knowingly lacks, in which case it is reported, mirroring the
+// corpus drift rule.
 func TestBackendMetricFamilyParityOnRealGPU(t *testing.T) {
 	execFamilies := scrapeBackend(t, "exec")
 	nativeFamilies := scrapeBackend(t, "nvml")
@@ -291,17 +358,27 @@ func TestBackendMetricFamilyParityOnRealGPU(t *testing.T) {
 		nativeSeries, ok := nativeFamilies[family]
 		if !ok {
 			t.Errorf("metric family missing from the nvml backend\n"+
-				"  family: %s (%d series on exec)\n"+
+				"  family: %s (%d exec series, e.g. %s)\n"+
 				"  fix: the catalog or collector in internal/nvmlnative; if the family comes from a "+
 				"field the catalog defers, this is recorded drift",
-				family, execSeries)
+				family, len(execSeries), anySeries(execSeries))
 
 			continue
 		}
 
-		if execSeries != nativeSeries {
-			t.Errorf("series count mismatch\n  family: %s\n  exec: %d series, nvml: %d series",
-				family, execSeries, nativeSeries)
+		for series := range execSeries {
+			if _, ok := nativeSeries[series]; !ok {
+				t.Errorf("series missing from the nvml backend\n  family: %s\n  series: %s\n"+
+					"  fix: label construction for this family in internal/exporter or the nvml collector",
+					family, series)
+			}
+		}
+
+		for series := range nativeSeries {
+			if _, ok := execSeries[series]; !ok {
+				t.Errorf("series only the nvml backend exports\n  family: %s\n  series: %s",
+					family, series)
+			}
 		}
 	}
 
@@ -312,9 +389,17 @@ func TestBackendMetricFamilyParityOnRealGPU(t *testing.T) {
 	}
 }
 
+func anySeries(series map[string]bool) string {
+	for s := range series {
+		return s
+	}
+
+	return ""
+}
+
 // scrapeBackend runs the exporter in-process with the given backend and
-// returns nvidia_smi_* family -> series count.
-func scrapeBackend(t *testing.T, backend string) map[string]int {
+// returns nvidia_smi_* family -> set of series signatures (name{labels}).
+func scrapeBackend(t *testing.T, backend string) map[string]map[string]bool {
 	t.Helper()
 
 	baseURL := startExporter(t,
@@ -324,19 +409,29 @@ func scrapeBackend(t *testing.T, backend string) map[string]int {
 	)
 	body := scrape(t, baseURL)
 
-	families := map[string]int{}
+	families := map[string]map[string]bool{}
 
 	for line := range strings.SplitSeq(body, "\n") {
 		if !strings.HasPrefix(line, "nvidia_smi_") {
 			continue
 		}
 
-		name := line
-		if cut := strings.IndexAny(line, "{ "); cut > 0 {
-			name = line[:cut]
+		// series signature: metric name plus the full label block, value cut
+		signature := line
+		if cut := strings.LastIndex(line, " "); cut > 0 {
+			signature = line[:cut]
 		}
 
-		families[name]++
+		name := signature
+		if cut := strings.IndexAny(signature, "{"); cut > 0 {
+			name = signature[:cut]
+		}
+
+		if families[name] == nil {
+			families[name] = map[string]bool{}
+		}
+
+		families[name][signature] = true
 	}
 
 	require.NotEmpty(t, families, "backend %s served no nvidia_smi_ metrics", backend)

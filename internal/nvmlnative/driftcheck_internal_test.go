@@ -1,6 +1,7 @@
 package nvmlnative
 
 import (
+	"encoding/csv"
 	"regexp"
 	"strconv"
 	"strings"
@@ -27,14 +28,29 @@ func TestCatalogDriftAgainstCaptures(t *testing.T) {
 	names := linuxCaptureNames(t)
 	require.NotEmpty(t, names)
 
-	newest := newestByDriverVersion(t, names)
-	t.Logf("newest capture (hard assertions): %s", newest)
+	maxVersion := maxDriverVersion(t, names)
+	t.Logf("newest driver (hard assertions): %v", maxVersion)
+
+	aliasExercised := false
 
 	for _, name := range names {
+		version := versionComponents(t, driverVersionFromCaptureName(t, name))
+		if version[0] < eventReasonsMinDriverMajor {
+			aliasExercised = true
+		}
+
+		isNewest := !versionLess(version, maxVersion)
+
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			checkCaptureDrift(t, name, name == newest)
+			checkCaptureDrift(t, name, isNewest)
 		})
+	}
+
+	if !aliasExercised {
+		t.Logf("note: no capture predates driver %d, so the clocks_throttle_reasons alias "+
+			"spelling is still unexercised; contributing an older capture would close that gap",
+			eventReasonsMinDriverMajor)
 	}
 }
 
@@ -65,18 +81,21 @@ func checkCaptureDrift(t *testing.T, name string, isNewest bool) {
 				name, qField, query.headers[cellIdx], wantHeader)
 		}
 
-		// rule 2: deprecation-list drift, both directions
+		// rule 2: deprecation-list drift, both directions, on every capture
+		// of the verified driver generation (the hardcoded list is pinned to
+		// >= 590; older drivers may legitimately still serve these fields)
+		deprecationChecked := versionComponents(t, query.driverVersion)[0] >= deprecatedFieldsMinDriverMajor
 		deprecated := strings.EqualFold(strings.TrimSpace(query.values[cellIdx]), tokenDeprecated)
 		hardcoded := isHardcodedDeprecated(qField)
 
-		if deprecated && !hardcoded && isNewest {
+		if deprecated && !hardcoded && deprecationChecked {
 			t.Errorf("field newly deprecated by nvidia-smi\n"+
 				"  capture: %s\n  field:   %s\n  value:   %q\n"+
 				"  fix: add it to deprecatedFields in internal/nvmlnative/catalog.go",
 				name, qField, query.values[cellIdx])
 		}
 
-		if !deprecated && hardcoded && isNewest {
+		if !deprecated && hardcoded && deprecationChecked {
 			t.Errorf("field no longer deprecated by nvidia-smi\n"+
 				"  capture: %s\n  field:   %s\n  value:   %q\n"+
 				"  fix: remove it from deprecatedFields in internal/nvmlnative/catalog.go and collect it",
@@ -106,7 +125,7 @@ func checkCaptureDrift(t *testing.T, name string, isNewest bool) {
 	// rule 4: unknown fields. On the newest capture a field with a real
 	// value fails: the exec backend would export it and this backend cannot.
 	// Absent or consciously deferred fields are reported for visibility.
-	var unknownAbsent, unknownDeferred []string
+	var unknownAbsent, unknownReal, unknownDeferred []string
 
 	for cellIdx, qField := range query.qFields {
 		if _, inCatalog := vocabulary[qField]; inCatalog {
@@ -125,7 +144,7 @@ func checkCaptureDrift(t *testing.T, name string, isNewest bool) {
 				"(catalog.go, backend_nvml.go), or record the deferral in deferredFields",
 				name, qField, query.values[cellIdx])
 		default:
-			unknownAbsent = append(unknownAbsent, string(qField)+" (non-absent)")
+			unknownReal = append(unknownReal, string(qField))
 		}
 	}
 
@@ -135,8 +154,14 @@ func checkCaptureDrift(t *testing.T, name string, isNewest bool) {
 	}
 
 	if len(unknownAbsent) > 0 {
-		t.Logf("%s: %d advertised fields are not in the catalog (all absent on this hardware): %s",
+		t.Logf("%s: %d advertised fields are not in the catalog (absent on this hardware): %s",
 			name, len(unknownAbsent), strings.Join(unknownAbsent, ", "))
+	}
+
+	if len(unknownReal) > 0 {
+		t.Logf("%s: %d advertised fields with REAL values are not in the catalog "+
+			"(this older driver predates the hard assertion; the newest capture governs): %s",
+			name, len(unknownReal), strings.Join(unknownReal, ", "))
 	}
 
 	if isNewest {
@@ -225,7 +250,12 @@ func parseCaptureQuery(t *testing.T, name string) captureQuery {
 			continue
 		}
 
-		cells := strings.Split(line, ", ")
+		reader := csv.NewReader(strings.NewReader(line))
+		reader.TrimLeadingSpace = true
+
+		cells, csvErr := reader.Read()
+		require.NoError(t, csvErr, "capture %s: cannot parse a query-gpu row as CSV", name)
+
 		for i := range cells {
 			cells[i] = strings.TrimSpace(cells[i])
 		}
@@ -300,6 +330,15 @@ func newestByDriverVersion(t *testing.T, names []string) string {
 	}
 
 	return newest
+}
+
+// maxDriverVersion returns the highest driver version among the captures;
+// every capture at that version carries the hard assertions, so a tie means
+// several anchors.
+func maxDriverVersion(t *testing.T, names []string) []int {
+	t.Helper()
+
+	return versionComponents(t, driverVersionFromCaptureName(t, newestByDriverVersion(t, names)))
 }
 
 func versionComponents(t *testing.T, version string) []int {

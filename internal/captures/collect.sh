@@ -309,11 +309,13 @@ nvml_symbols_section() {
   done
   [ -z "$lib" ] && return 0
 
-  local symbols=""
+  local symbols="" tool=""
   if command -v readelf >/dev/null 2>&1; then
+    tool="readelf"
     symbols="$(readelf --dyn-syms --wide "$lib" 2>/dev/null \
       | awk '$4=="FUNC" && $7!="UND" {print $8}' | grep '^nvml' | sed 's/@@.*//' | sort -u)"
   elif command -v nm >/dev/null 2>&1; then
+    tool="nm"
     symbols="$(nm -D --defined-only "$lib" 2>/dev/null \
       | awk '$2=="T" {print $3}' | grep '^nvml' | sed 's/@@.*//' | sort -u)"
   fi

@@ -489,6 +489,8 @@ func Resolve(
 // prints the token for these without calling the getter). The corpus drift
 // test checks this list against every capture's data row, so a driver
 // un-deprecating or newly deprecating a field fails loudly.
+//
+//nolint:gochecknoglobals // shared between the collector and the drift test
 var deprecatedFields = []nvidiasmi.QField{
 	"display_mode",
 	"power.management",
@@ -497,6 +499,11 @@ var deprecatedFields = []nvidiasmi.QField{
 	"clocks.default_applications.graphics",
 	"clocks.default_applications.memory",
 }
+
+// deprecatedFieldsMinDriverMajor is the driver generation the hardcoded
+// deprecation list was verified against; the drift test enforces the list on
+// every capture from this generation on.
+const deprecatedFieldsMinDriverMajor = 590
 
 // deferredFields are query fields nvidia-smi advertises that this backend
 // consciously does not serve yet: no verified NVML mapping exists, or the
@@ -517,6 +524,13 @@ var deferredFields = map[nvidiasmi.QField]bool{
 var deferredFieldPrefixes = []string{
 	"vgpu_", "module.power.", "module.enforced.", "gpu.base.", "power_smoothing.",
 	"bbx.", "fabric.health.",
+}
+
+// IsDeferredField reports whether an unknown field is a recorded, conscious
+// deferral rather than new drift. The GPU parity test uses it to apply the
+// same policy as the corpus drift test.
+func IsDeferredField(qField nvidiasmi.QField) bool {
+	return isDeferredField(qField)
 }
 
 // isDeferredField reports whether an unknown field is a recorded, conscious
