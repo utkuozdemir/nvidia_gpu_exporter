@@ -240,13 +240,6 @@ scoops:
 
 winget:
   - name: nvidia_gpu_exporter
-    # Publishing is paused until the initial submissions clear human review:
-    # https://github.com/microsoft/winget-pkgs/pull/394494
-    # https://github.com/microsoft/winget-pkgs/pull/396604
-    # Manifests are still generated under dist/, but nothing is pushed and no
-    # PR is opened against microsoft/winget-pkgs. Set back to false to resume
-    # publishing.
-    skip_upload: true
     publisher: utkuozdemir
     package_identifier: utkuozdemir.nvidia_gpu_exporter
     package_name: Nvidia GPU Exporter
