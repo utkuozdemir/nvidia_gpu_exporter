@@ -481,3 +481,54 @@ func Resolve(
 
 	return resolved, nil
 }
+
+// deprecatedFields are the fields nvidia-smi answers with its deprecation
+// token regardless of what NVML returns (H100/590 verified; the collector
+// prints the token for these without calling the getter). The corpus drift
+// test checks this list against every capture's data row, so a driver
+// un-deprecating or newly deprecating a field fails loudly.
+var deprecatedFields = []nvidiasmi.QField{
+	"display_mode",
+	"power.management",
+	"clocks.applications.graphics",
+	"clocks.applications.memory",
+	"clocks.default_applications.graphics",
+	"clocks.default_applications.memory",
+}
+
+// deferredFields are query fields nvidia-smi advertises that this backend
+// consciously does not serve yet: no verified NVML mapping exists, or the
+// family needs hardware nobody has captured. On the hardware captured so far
+// they all read as absent, so both backends export nothing for them. The
+// corpus drift test fails when a NEW unknown field shows a real value in the
+// newest capture and it is not listed here; adding a field here is the
+// explicit "defer" decision, adding it to the catalog is the fix.
+var deferredFields = map[nvidiasmi.QField]bool{
+	"kmd_version":                          true,
+	"pcie.link.gen.hostmax":                true,
+	"remapped_rows.correctable_inactive":   true,
+	"remapped_rows.uncorrectable_inactive": true,
+}
+
+// deferredFieldPrefixes covers whole deferred families (vGPU capabilities,
+// Blackwell power smoothing, GB200 module power, fabric health...).
+var deferredFieldPrefixes = []string{
+	"vgpu_", "module.power.", "module.enforced.", "gpu.base.", "power_smoothing.",
+	"bbx.", "fabric.health.",
+}
+
+// isDeferredField reports whether an unknown field is a recorded, conscious
+// deferral rather than new drift.
+func isDeferredField(qField nvidiasmi.QField) bool {
+	if deferredFields[qField] {
+		return true
+	}
+
+	for _, prefix := range deferredFieldPrefixes {
+		if strings.HasPrefix(string(qField), prefix) {
+			return true
+		}
+	}
+
+	return false
+}
