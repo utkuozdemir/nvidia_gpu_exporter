@@ -1,0 +1,54 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+annotations:
+  artifacthub.io/license: MIT
+  artifacthub.io/links: |
+    - name: Grafana dashboard
+      url: https://grafana.com/grafana/dashboards/14574
+    - name: Grafana dashboard (multi-GPU overview)
+      url: https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/docs/grafana/dashboard-overview.json
+  artifacthub.io/signKey: |
+    fingerprint: 93122B2C53431C2F60964EB7EAC49314A32B9205
+    url: https://utkuozdemir.github.io/nvidia_gpu_exporter/pubkey.asc
+apiVersion: v2
+appVersion: 1.11.0
+description: Nvidia GPU exporter for prometheus, using nvidia-smi binary to gather
+  metrics.
+home: https://github.com/utkuozdemir/nvidia_gpu_exporter
+icon: https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/docs/img/nvidia.png
+keywords:
+- - nvidia
+- - gpu
+- - exporter
+- - nvidia-smi
+- - prometheus
+maintainers:
+- - email: utkuozdemir@gmail.com
+  name: Utku Özdemir
+  url: https://utkuozdemir.org
+name: nvidia-gpu-exporter
+sources:
+- - https://github.com/utkuozdemir/nvidia_gpu_exporter
+type: application
+version: 2.11.0
+
+...
+files:
+  nvidia-gpu-exporter-2.11.0.tgz: sha256:ee86fdce1c7e8cb52b2cc3990d558ba37c73f8e64bdbf81693bf39cbb0ed60c8
+-----BEGIN PGP SIGNATURE-----
+
+wsFcBAEBCgAQBQJqV7ZeCRDqxJMUoyuSBQAAOnwQAF24ElRE1YBqgSA14y3v4XS+
+9OC7P26BPsIC/eDbWJXi8nOdozIF3LPdqx+Fnhtiv/taoIy0ssCOhtI/VIdK71+b
+Kq6GYuuqlouzTZFjp+0o7IO7djiCyjwrx5EyR6ZqtnjJ6SdUl5oSs7n7VEyGo9SO
+1Pl5D0QEevXrIG1u0djgMaVuq16HBKBvdJtRns25MHYa1i5TP1Ze7AiwwaPw+1dP
+bfvB6JbuuT/eClOynxEr1A1PkTYhKgez2FHugrxSUB/QEHLjs9KT7gU1ZM7L3mWN
+F/Znh3SCLvzQTMtg0OD9itmCSWtURdb4/a6VTWUllsc9XbcVhnGQT8SLla7vV8UX
+Zpi0KihQwTqL14k/7IbuXl14mTSrpNLl3glUHjHj1mCtSh/u8048v4zYTEUmhwO7
+ipS+JB+ykbwzUWyJwD8KCnXZ/BcMZhhnG4Rjy1eRiNjpSrDfKKUf/b0zv+xfazmM
+TC9WQV45VCtM3XZL2WnyWEDc8YkOiZZfsOFSF84NYBSuEUOe73XJfN6nKBa+JQZl
+22xUGL2TAij9em2nnhGvQbZvhhSLZgUNfZyM5q6/qDHE77V8mzZ0Wf1dcsTesrtf
++qGrg/4OYnY12p6rcmsBJZ7QIxWiX79fF3oXf/DprermaeZiXJ7Lf8+APtgIspCc
+GHQAeldHqaxcUdT0gfx9
+=Nyku
+-----END PGP SIGNATURE-----
