@@ -3,7 +3,7 @@
 # install and the connection test to pass. The image tag is pinned because the
 # in-repo appVersion is a placeholder.
 image:
-  tag: "1.7.0"
+  tag: "1.11.0"
 serviceMonitor:
   enabled: false
 podMonitor:

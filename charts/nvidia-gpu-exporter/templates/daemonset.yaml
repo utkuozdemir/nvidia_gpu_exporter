@@ -5,6 +5,14 @@ metadata:
   labels:
     {{- include "nvidia-gpu-exporter.labels" . | nindent 4 }}
 spec:
+  {{- with .Values.updateStrategy }}
+  updateStrategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- /* explicit emptiness check: `with` would swallow a literal 0 */}}
+  {{- if and (not (kindIs "invalid" .Values.revisionHistoryLimit)) (ne (.Values.revisionHistoryLimit | toString) "") }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "nvidia-gpu-exporter.selectorLabels" . | nindent 6 }}
@@ -15,13 +23,16 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        {{- include "nvidia-gpu-exporter.selectorLabels" . | nindent 8 }}
+        {{- /* merged so that the selector labels always win: overriding them
+        would desync the pod template from the immutable selector */}}
+        {{- merge (include "nvidia-gpu-exporter.selectorLabels" . | fromYaml) (.Values.podLabels | default dict) | toYaml | nindent 8 }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "nvidia-gpu-exporter.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.automountServiceAccountToken | default false }}
       {{- with .Values.runtimeClassName }}
       runtimeClassName: {{ . }}
       {{- end }}
@@ -50,24 +61,24 @@ spec:
             {{- end }}
           args:
             - --web.listen-address
-            - :{{ .Values.port }}
+            - ":{{ .Values.port }}"
             - --web.telemetry-path
-            - {{ .Values.telemetryPath }}
+            - {{ .Values.telemetryPath | quote }}
             - --nvidia-smi-command
-            - {{ .Values.nvidiaSmiCommand }}
+            - {{ .Values.nvidiaSmiCommand | quote }}
             - --query-field-names
-            - {{ join "," .Values.queryFieldNames }}
+            - {{ join "," .Values.queryFieldNames | quote }}
             {{- with .Values.queryFieldNamesExclude }}
             - --query-field-names-exclude
-            - {{ join "," . }}
+            - {{ join "," . | quote }}
             {{- end }}
             {{- if .Values.computeApps.enabled }}
             - --collect.compute-apps
             {{- end }}
             - --log.level
-            - {{ .Values.log.level }}
+            - {{ .Values.log.level | quote }}
             - --log.format
-            - {{ .Values.log.format }}
+            - {{ .Values.log.format | quote }}
             {{- with .Values.extraArgs }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -111,4 +122,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       hostNetwork: {{ .Values.hostNetwork }}
+      {{- if .Values.hostNetwork }}
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- end }}
       hostPID: {{ .Values.hostPID }}

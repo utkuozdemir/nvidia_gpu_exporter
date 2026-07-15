@@ -11,7 +11,9 @@ and make sure that RuntimeClass exists.
 
 To try the experimental NVML backend, which reads the driver library
 directly instead of running `nvidia-smi`, set the image tag to a `-nvml`
-variant (for example `1.7.0-nvml`).
+variant (for example `1.7.0-nvml`). The `-nvml` images are built for
+linux/amd64 only, so on mixed-architecture clusters add
+`kubernetes.io/arch: amd64` to `nodeSelector`.
 
 The exporter deliberately requests no `nvidia.com/gpu` resource. The device
 plugin allocates whole GPUs exclusively, so a monitoring pod that requested
@@ -80,6 +82,77 @@ run privileged with the `NVIDIA_MIG_MONITOR_DEVICES=all` environment variable
 GPU-level memory fields read `[Insufficient Permissions]`. Processes are
 attributed to the parent GPU's UUID, not to individual MIG instances.
 
+## Scheduling on GPU nodes
+
+By default the DaemonSet runs on every Linux node, including nodes without a
+GPU, where the pods come up but report `nvidia_smi_last_collect_success 0`.
+On mixed clusters, restrict it to GPU nodes via `nodeSelector`. There is no
+universal GPU node label, so use whatever your cluster has:
+
+- `nvidia.com/gpu.present: "true"` with GPU Feature Discovery (installed by
+  the NVIDIA GPU Operator, among others),
+- `feature.node.kubernetes.io/pci-0302_10de.present: "true"` with plain Node
+  Feature Discovery (the class segment varies by GPU model: `0302` for
+  datacenter 3D controllers, `0300` for display-class cards, so check your
+  node labels),
+- a cloud or in-house label of your own, e.g. `cloud.google.com/gke-accelerator`
+  on GKE (any value, so use `affinity` with an `Exists` match for that one).
+
+GPU node pools are also commonly tainted (for example
+`nvidia.com/gpu=present:NoSchedule`) so that only GPU workloads land on them.
+The exporter deliberately requests no `nvidia.com/gpu` resource, so it does
+not tolerate such taints by itself and will silently skip those nodes. Add a
+matching toleration:
+
+```yaml
+nodeSelector:
+  nvidia.com/gpu.present: "true"
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+```
+
+## Running next to the NVIDIA GPU Operator
+
+The GPU Operator and this chart coexist without conflicts. The Operator's
+own dcgm-exporter listens on a different port (9400 vs 9835) and exports a
+different metric namespace (`DCGM_FI_*` vs `nvidia_smi_*`), so nothing
+clashes; running both just means the GPUs are polled twice. The Operator
+also installs the pieces this chart needs anyway: the NVIDIA Container
+Toolkit, a `nvidia` RuntimeClass to set `runtimeClassName` to, and GPU
+Feature Discovery labels for the `nodeSelector` shown above.
+
+To replace dcgm-exporter instead of running both, disable it with
+`dcgmExporter.enabled=false` in the GPU Operator chart.
+
+## Restricted namespaces
+
+The pods run unprivileged, but the default security contexts are empty and
+the image runs as root, which the `restricted`
+[Pod Security Standard](https://kubernetes.io/docs/concepts/security/pod-security-standards/)
+rejects at admission. GPU access via the NVIDIA runtime does not require
+root (the injected device nodes are world-accessible on standard driver
+installs), so in enforcing namespaces set a compliant security context:
+
+```yaml
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+```
+
+Note that `hostNetwork` and `hostPort` are rejected in such namespaces no
+matter the security context (the `baseline` level already forbids them), and
+`computeApps` needs `hostPID`, which they forbid too. On OpenShift, leave
+`runAsUser` unset and let the namespace SCC assign one; the default
+`restricted-v2` SCC fits this workload.
+
 ## Upgrading from chart 1.x
 
 Chart 1.x lived in a [separate repository](https://github.com/utkuozdemir/helm-charts)
@@ -106,16 +179,43 @@ require the Prometheus Operator CRDs (enable one of them, not both).
 `prometheusRule` adds alerts on the exporter's collection health metrics: if
 the exporter also runs on nodes without GPUs, restrict the DaemonSet to GPU
 nodes via `nodeSelector` or `affinity` before enabling it, otherwise the
-alerts fire for nodes that cannot collect GPU metrics by design.
+alerts fire for nodes that cannot collect GPU metrics by design. The alert
+expressions select all `nvidia_smi_*` series, so when installing multiple
+releases of this chart, enable the rules in only one of them.
 `grafanaDashboard` ships the [Grafana dashboard](https://grafana.com/grafana/dashboards/14574)
 and its [multi-GPU overview companion](https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/docs/grafana/dashboard-overview.json)
 as a ConfigMap labeled for the Grafana sidecar.
+
+With [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack),
+enabling a monitor is usually not enough: by default its Prometheus only
+selects monitors carrying the stack's release label. Two more things bite in
+practice: the default `instance` label is the pod IP, which changes on every
+restart and splits the per-GPU series, so relabel it to the node name. And
+the Grafana sidecar only reads dashboard ConfigMaps from other namespaces
+when it runs with `sidecar.dashboards.searchNamespace=ALL`.
+
+```yaml
+serviceMonitor:
+  enabled: true
+  additionalLabels:
+    release: kube-prometheus-stack # your stack's release name
+  relabelings:
+    - sourceLabels: [__meta_kubernetes_pod_node_name]
+      targetLabel: instance
+prometheusRule:
+  enabled: true
+  additionalLabels:
+    release: kube-prometheus-stack
+grafanaDashboard:
+  enabled: true
+```
 
 ## Values
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | affinity | object | `{}` | Affinity for the pods |
+| automountServiceAccountToken | bool | `false` | Mount the service account token into the pods. The exporter never talks to the Kubernetes API, so it is off by default. Enable it only if something injected into the pods (e.g. a service mesh sidecar) needs the token. |
 | computeApps.enabled | bool | `false` | Also export per-process GPU metrics (`nvidia_smi_compute_app_*`). To see processes of other pods and containers, the exporter must share the host PID namespace: enable `hostPID` along with this. Note that the pid label churns with the processes, creating short-lived series. |
 | extraArgs | list | `[]` | Extra command line arguments for the exporter, e.g. `--collect.interval=30s` |
 | extraEnv | list | `[]` | Extra environment variables for the exporter container |
@@ -124,23 +224,24 @@ as a ConfigMap labeled for the Grafana sidecar.
 | grafanaDashboard.enabled | bool | `false` | Create a ConfigMap with the Grafana dashboards (single-GPU detail and multi-GPU overview), labeled for the Grafana sidecar to pick up |
 | grafanaDashboard.label | string | `"grafana_dashboard"` | Label that the Grafana sidecar watches for |
 | grafanaDashboard.labelValue | string | `"1"` | Value of the sidecar label |
-| hostNetwork | bool | `false` | Use the host network for the pods |
+| hostNetwork | bool | `false` | Use the host network for the pods. Also switches their DNS policy to `ClusterFirstWithHostNet` so that cluster DNS keeps working. |
 | hostPID | bool | `false` | Share the host PID namespace with the pods. Required for computeApps to see processes of other pods and containers, but it also lets the exporter pod see all host process names, which some security policies forbid. |
 | hostPort.enabled | bool | `false` | Expose the metrics port on the host |
 | hostPort.port | int | `9835` | The host port to expose the metrics on |
 | image.pullPolicy | string | `"IfNotPresent"` | Image pull policy |
 | image.repository | string | `"docker.io/utkuozdemir/nvidia_gpu_exporter"` | Image repository |
 | image.tag | string | `""` | Image tag (if not specified, defaults to the chart's appVersion) |
-| imagePullSecrets | list | `[]` | Image pull secrets |
+| imagePullSecrets | list | `[]` | Image pull secrets, used by both the exporter and the `helm test` pods |
 | livenessProbe | object | `{"httpGet":{"path":"/-/healthy","port":"http"}}` | Liveness probe for the exporter container. The default checks that the process serves HTTP at all; it deliberately does not depend on collection success, so a failing nvidia-smi keeps the pod scrapeable and the failure visible in the metrics. Set to `null` to disable the probe. |
 | log.format | string | `"logfmt"` | Log format: logfmt, json |
 | log.level | string | `"info"` | Log level: debug, info, warn, error |
 | nameOverride | string | `""` | Override the chart name |
-| nodeSelector | object | `{}` | Node selector for the pods, e.g. to restrict the DaemonSet to GPU nodes |
+| nodeSelector | object | `{"kubernetes.io/os":"linux"}` | Node selector for the pods. The images are Linux-only, hence the default. Add a GPU node label to keep the DaemonSet off non-GPU nodes, e.g. `nvidia.com/gpu.present: "true"` on clusters with GPU Feature Discovery (see the README section on scheduling). Helm merges maps key by key, so overriding with `{}` does not clear the default; set the whole value to `null` to remove it. |
 | nvidiaDriverCapabilities | string | `"utility"` | NVIDIA driver capability tier to request. `utility` is the nvidia-smi/NVML tier, which is all the exporter needs. |
 | nvidiaSmiCommand | string | `"nvidia-smi"` | The command to run to get `nvidia-smi` compatible output. Can be a custom path and/or args. |
 | nvidiaVisibleDevices | string | `"all"` | Which GPUs to make visible to the exporter. `all` monitors every GPU on the node. |
 | podAnnotations | object | `{}` | Annotations to add to the pods |
+| podLabels | object | `{}` | Extra labels to add to the pods |
 | podMonitor.additionalLabels | object | `{}` | Additional labels for the PodMonitor |
 | podMonitor.enabled | bool | `false` | Create a Prometheus Operator PodMonitor instead of a ServiceMonitor (requires the Prometheus Operator CRDs). Enable either this or the ServiceMonitor, not both, otherwise the targets are scraped twice. |
 | podMonitor.interval | string | `"15s"` | Scrape interval |
@@ -162,8 +263,10 @@ as a ConfigMap labeled for the Grafana sidecar.
 | queryFieldNamesExclude | list | `[]` | `nvidia-smi` fields to exclude from being queried. Names match literally, with `*` as a wildcard for any sequence of characters. |
 | readinessProbe | object | `{"httpGet":{"path":"/-/ready","port":"http"}}` | Readiness probe for the exporter container, process-level like the liveness probe. Set to `null` to disable the probe. |
 | resources | object | `{}` | Resources for the exporter container |
+| revisionHistoryLimit | string | `""` | How many old DaemonSet history revisions to retain for rollbacks. Empty means the Kubernetes default (10). |
 | runtimeClassName | string | `""` | Name of the RuntimeClass to run the pods with. GPU access is injected by the NVIDIA container runtime, so the pods must run with it: either set this to the name of your NVIDIA RuntimeClass (usually `nvidia`), or leave it empty if the NVIDIA runtime is the default runtime of your nodes. If neither is the case, the exporter will come up but serve no GPU metrics, reporting `nvidia_smi_last_collect_success 0`. |
 | securityContext | object | `{}` | Security context for the exporter container. The default is unprivileged: GPU access comes from the NVIDIA runtime, which requires no privileges. |
+| service.annotations | object | `{}` | Annotations to add to the Service |
 | service.enabled | bool | `true` | Create a Service for the exporter |
 | service.nodePort | string | `""` | Node port to use for NodePort/LoadBalancer service types |
 | service.port | int | `9835` | Service port |
@@ -181,7 +284,11 @@ as a ConfigMap labeled for the Grafana sidecar.
 | serviceMonitor.scrapeTimeout | string | `""` | Scrape timeout |
 | serviceMonitor.tlsConfig | object | `{}` | TLS configuration for scraping |
 | telemetryPath | string | `"/metrics"` | The path to expose the metrics from |
-| tolerations | list | `[]` | Tolerations for the pods |
+| test.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for the `helm test` pod |
+| test.image.repository | string | `"docker.io/library/busybox"` | Image repository for the `helm test` connection-check pod |
+| test.image.tag | string | `"1.37"` | Image tag for the `helm test` pod |
+| tolerations | list | `[]` | Tolerations for the pods. GPU node pools are often tainted (e.g. `nvidia.com/gpu=present:NoSchedule`) so that only GPU workloads land on them. This chart deliberately requests no GPU resource, so add a matching toleration here or the exporter will not schedule on those nodes. |
+| updateStrategy | object | `{"rollingUpdate":{"maxUnavailable":1},"type":"RollingUpdate"}` | Update strategy of the DaemonSet. Raise `rollingUpdate.maxUnavailable` (absolute or percentage) to roll out faster on large clusters, or use `type: OnDelete` for manually staged rollouts. |
 | volumeMounts | list | `[]` | Extra volume mounts for the exporter container |
 | volumes | list | `[]` | Extra volumes for the pods |
 

@@ -138,6 +138,12 @@
         "enabled": {
           "type": "boolean"
         },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
         "type": {
           "type": "string",
           "enum": [
@@ -180,6 +186,9 @@
         }
       },
       "additionalProperties": false
+    },
+    "automountServiceAccountToken": {
+      "type": "boolean"
     },
     "serviceMonitor": {
       "type": "object",
@@ -307,6 +316,12 @@
     "podAnnotations": {
       "type": "object"
     },
+    "podLabels": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
     "podSecurityContext": {
       "type": "object"
     },
@@ -334,8 +349,93 @@
     "priorityClassName": {
       "type": "string"
     },
+    "updateStrategy": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "RollingUpdate",
+            "OnDelete"
+          ]
+        },
+        "rollingUpdate": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "maxUnavailable": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "string",
+                  "pattern": "^[0-9]+%$"
+                }
+              ]
+            },
+            "maxSurge": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "string",
+                  "pattern": "^[0-9]+%$"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "revisionHistoryLimit": {
+      "oneOf": [
+        {
+          "const": ""
+        },
+        {
+          "type": "integer",
+          "minimum": 0
+        }
+      ]
+    },
     "imagePullSecrets": {
       "type": "array"
+    },
+    "test": {
+      "type": "object",
+      "properties": {
+        "image": {
+          "type": "object",
+          "properties": {
+            "repository": {
+              "type": "string",
+              "minLength": 1
+            },
+            "tag": {
+              "type": "string",
+              "minLength": 1
+            },
+            "pullPolicy": {
+              "type": "string",
+              "enum": [
+                "Always",
+                "IfNotPresent",
+                "Never"
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
     },
     "nameOverride": {
       "type": "string"
