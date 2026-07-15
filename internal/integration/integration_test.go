@@ -924,6 +924,23 @@ func TestNVMLBackendRejectsCustomCommand(t *testing.T) {
 	assert.Contains(t, err.Error(), "--nvidia-smi-command cannot be combined")
 }
 
+// TestExecBackendRejectsPcieThroughput pins the flag-validation contract in
+// the other direction: the PCIe throughput counters only exist in the driver
+// library, so requesting them with the exec backend must fail at startup.
+func TestExecBackendRejectsPcieThroughput(t *testing.T) {
+	t.Parallel()
+
+	err := app.Run(t.Context(), []string{
+		"--web.listen-address=127.0.0.1:0",
+		"--log.level=error",
+		"--collect.pcie-throughput",
+		"--nvidia-smi-command=" + fakeCommand(defaultCapture(t)),
+	}, app.Options{})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--collect.pcie-throughput requires --collect.backend=nvml")
+}
+
 // TestNVMLBackendStartupFailureWithoutDriver pins the startup behavior on
 // machines without a usable NVML setup: builds without the backend fail with
 // the unavailability message, cgo builds fail initializing the absent

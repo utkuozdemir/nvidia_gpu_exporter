@@ -208,7 +208,7 @@ func newTestExporter(
 
 	source := collect.NewLive(query, 0, nil, logger)
 
-	return exporter.New(ctx, prefix, resolved, source, false, exporter.ExecExitCodeMetric, logger)
+	return exporter.New(ctx, prefix, resolved, source, exporter.Features{}, exporter.ExecExitCodeMetric, logger)
 }
 
 // staticSource serves a fixed snapshot, for driving the render paths directly.
@@ -236,7 +236,29 @@ func newAppsExporter(t *testing.T, snapshot collect.Snapshot) *exporter.GPUExpor
 		"aaa",
 		resolved,
 		&staticSource{snapshot: snapshot},
-		true,
+		exporter.Features{ComputeApps: true},
+		exporter.ExecExitCodeMetric,
+		logger,
+	)
+}
+
+// newExtrasExporter wires an exporter with the given features to a fixed
+// snapshot, for driving the extras render paths directly.
+func newExtrasExporter(t *testing.T, features exporter.Features, snapshot collect.Snapshot) *exporter.GPUExporter {
+	t.Helper()
+
+	logger := slogt.New(t)
+
+	resolved, err := nvidiasmi.ResolveFields(
+		t.Context(), "bbb", "fan.speed", "", 0, nvidiasmi.DefaultRunFunc, logger)
+	require.NoError(t, err)
+
+	return exporter.New(
+		t.Context(),
+		"aaa",
+		resolved,
+		&staticSource{snapshot: snapshot},
+		features,
 		exporter.ExecExitCodeMetric,
 		logger,
 	)
@@ -451,7 +473,7 @@ func TestCollectDeliversMetricsOnFatalError(t *testing.T) {
 	}
 
 	source := collect.NewLive(query, 0, func(fatalErr error) { cancel(fatalErr) }, logger)
-	exp := exporter.New(ctx, "aaa", resolved, source, false, exporter.ExecExitCodeMetric, logger)
+	exp := exporter.New(ctx, "aaa", resolved, source, exporter.Features{}, exporter.ExecExitCodeMetric, logger)
 
 	families := gatherFamilies(t, exp)
 
@@ -552,7 +574,7 @@ func TestCollectComputeAppsDisabled(t *testing.T) {
 	// the feature is off
 	apps := []nvidiasmi.ComputeApp{{GPUUUID: "abc", PID: "42", ProcessName: "x", UsedMemory: "1 MiB"}}
 	source := &staticSource{snapshot: appsSnapshot(gpuTable("GPU-ABC"), apps, true)}
-	exp := exporter.New(t.Context(), "aaa", resolved, source, false, exporter.ExecExitCodeMetric, logger)
+	exp := exporter.New(t.Context(), "aaa", resolved, source, exporter.Features{}, exporter.ExecExitCodeMetric, logger)
 
 	families := gatherFamilies(t, exp)
 
@@ -560,4 +582,104 @@ func TestCollectComputeAppsDisabled(t *testing.T) {
 	assert.NotContains(t, families, "aaa_compute_apps")
 	assert.NotContains(t, families, "aaa_compute_app_info")
 	assert.NotContains(t, families, "aaa_compute_app_used_memory_bytes")
+}
+
+// extrasSnapshot builds a successful snapshot carrying the given extras.
+func extrasSnapshot(table *nvidiasmi.Table, extras collect.Extras) collect.Snapshot {
+	return collect.Snapshot{
+		Attempted:   true,
+		Success:     true,
+		Table:       table,
+		Extras:      extras,
+		LastSuccess: time.Now(),
+	}
+}
+
+// labelValue reads one label's value off a rendered metric.
+func labelValue(t *testing.T, metric *dto.Metric, name string) string {
+	t.Helper()
+
+	for _, label := range metric.GetLabel() {
+		if label.GetName() == name {
+			return label.GetValue()
+		}
+	}
+
+	t.Fatalf("label %s not found", name)
+
+	return ""
+}
+
+func TestExtrasRendered(t *testing.T) {
+	t.Parallel()
+
+	extras := collect.Extras{
+		CUDAVersion: "13.1",
+		PCIe: []collect.PCIeThroughput{
+			{UUID: "abc", TXBytesPerSecond: 123000, RXBytesPerSecond: 456000},
+		},
+		Energy: []collect.EnergyCounter{{UUID: "abc", Joules: 12345.678}},
+	}
+
+	features := exporter.Features{PCIeThroughput: true, Energy: true}
+	exp := newExtrasExporter(t, features, extrasSnapshot(gpuTable("GPU-ABC"), extras))
+
+	families := gatherFamilies(t, exp)
+
+	tx, ok := families["aaa_pcie_throughput_tx_bytes_per_second"]
+	require.True(t, ok)
+	assertFloat(t, 123000, tx.GetMetric()[0].GetGauge().GetValue())
+	assert.Equal(t, "abc", labelValue(t, tx.GetMetric()[0], "uuid"))
+
+	rx, ok := families["aaa_pcie_throughput_rx_bytes_per_second"]
+	require.True(t, ok)
+	assertFloat(t, 456000, rx.GetMetric()[0].GetGauge().GetValue())
+
+	energy, ok := families["aaa_energy_joules_total"]
+	require.True(t, ok)
+	assert.Equal(t, dto.MetricType_COUNTER, energy.GetType())
+	assertFloat(t, 12345.678, energy.GetMetric()[0].GetCounter().GetValue())
+	assert.Equal(t, "abc", labelValue(t, energy.GetMetric()[0], "uuid"))
+
+	info, ok := families["aaa_gpu_info"]
+	require.True(t, ok)
+	assert.Equal(t, "13.1", labelValue(t, info.GetMetric()[0], "cuda_version"))
+}
+
+func TestExtrasSuppressedWhenFeaturesOff(t *testing.T) {
+	t.Parallel()
+
+	// even a snapshot carrying extras data produces none of the gated
+	// families when the features are off
+	extras := collect.Extras{
+		CUDAVersion: "13.1",
+		PCIe:        []collect.PCIeThroughput{{UUID: "abc", TXBytesPerSecond: 1, RXBytesPerSecond: 2}},
+		Energy:      []collect.EnergyCounter{{UUID: "abc", Joules: 3}},
+	}
+
+	exp := newExtrasExporter(t, exporter.Features{}, extrasSnapshot(gpuTable("GPU-ABC"), extras))
+
+	families := gatherFamilies(t, exp)
+
+	assert.NotContains(t, families, "aaa_pcie_throughput_tx_bytes_per_second")
+	assert.NotContains(t, families, "aaa_pcie_throughput_rx_bytes_per_second")
+	assert.NotContains(t, families, "aaa_energy_joules_total")
+
+	// the cuda_version label is not feature-gated: it rides gpu_info in both
+	// backends
+	info, ok := families["aaa_gpu_info"]
+	require.True(t, ok)
+	assert.Equal(t, "13.1", labelValue(t, info.GetMetric()[0], "cuda_version"))
+}
+
+func TestCudaVersionLabelEmptyWhenUnknown(t *testing.T) {
+	t.Parallel()
+
+	exp := newExtrasExporter(t, exporter.Features{}, extrasSnapshot(gpuTable("GPU-ABC"), collect.Extras{}))
+
+	families := gatherFamilies(t, exp)
+
+	info, ok := families["aaa_gpu_info"]
+	require.True(t, ok)
+	assert.Empty(t, labelValue(t, info.GetMetric()[0], "cuda_version"))
 }

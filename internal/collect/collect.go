@@ -28,6 +28,9 @@ type Snapshot struct {
 	// AppsSuccess reports whether that per-process query succeeded, valid only
 	// when AppsAttempted.
 	AppsSuccess bool
+	// Extras holds the backend-specific readings of the most recent
+	// collection, zero when the latest collection failed.
+	Extras Extras
 	// ExitCode is the exit code of the most recent attempt, valid only when Attempted.
 	ExitCode int
 	// Duration is how long the most recent attempt took, valid only when Attempted.
@@ -62,6 +65,9 @@ type Reading struct {
 	AppsSuccess bool
 	// AppsErr is the per-process query's error, for source-owned logging only.
 	AppsErr error
+	// Extras holds the backend-specific readings outside the query-field
+	// schema. Like Apps, extras fail softly and never fail the collection.
+	Extras Extras
 }
 
 // QueryFunc runs one collection cycle: the nvidia-smi GPU query, plus the
@@ -150,6 +156,7 @@ func collectOnce(
 	snapshot.Apps = reading.Apps
 	snapshot.AppsAttempted = reading.AppsAttempted
 	snapshot.AppsSuccess = reading.AppsSuccess
+	snapshot.Extras = reading.Extras
 	snapshot.LastSuccess = now
 
 	return snapshot

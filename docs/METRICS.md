@@ -5,8 +5,36 @@ This is an example output of the returned metrics.
 Note that when `AUTO` query fields mode is used (it is the default),
 the exporter will discover new fields and expose them on a best-effort basis.
 
-The experimental NVML backend exports the same metrics, except it reports
-`nvidia_smi_nvml_return_code` in place of `nvidia_smi_command_exit_code`.
+The experimental NVML backend exports a superset of these metrics: every
+metric below is identical in both backends, except that the NVML backend
+reports `nvidia_smi_nvml_return_code` in place of
+`nvidia_smi_command_exit_code`. On top of that shared core it serves the
+NVML-only families described in the next section.
+
+## NVML-only metrics
+
+Some readings exist in the driver library but not in the `nvidia-smi` query
+interface, so only the NVML backend can export them:
+
+- `nvidia_smi_energy_joules_total{uuid}` (counter): total energy consumed by
+  the GPU in joules since the driver was last loaded. Always on in the NVML
+  backend; absent on GPUs that cannot report it (older than the Volta
+  generation). The counter resets when the driver reloads or the GPU is
+  reset, so read it through `rate()` or `increase()`.
+- `nvidia_smi_pcie_throughput_tx_bytes_per_second{uuid}` and
+  `nvidia_smi_pcie_throughput_rx_bytes_per_second{uuid}` (gauges): PCIe
+  traffic transmitted and received by the GPU. Opt-in via
+  `--collect.pcie-throughput` because of its collection cost; see
+  [CONFIGURE.md](CONFIGURE.md). The driver samples each direction over its
+  own 20ms counter window, so the two values are consecutive samples, not a
+  simultaneous pair.
+
+Both backends also stamp the CUDA version the installed driver supports onto
+`nvidia_smi_gpu_info` as the `cuda_version` label. This is the version of
+the CUDA API the driver carries, not an installed CUDA toolkit. The default
+backend reads it from `nvidia-smi --version` once at startup; the NVML
+backend asks the library directly. When it cannot be read, the label value
+is empty.
 
 ## Enum-valued metrics
 
@@ -229,9 +257,9 @@ nvidia_smi_failed_scrapes_total 0
 # HELP nvidia_smi_fan_speed_ratio fan.speed [%]
 # TYPE nvidia_smi_fan_speed_ratio gauge
 nvidia_smi_fan_speed_ratio{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 0.38
-# HELP nvidia_smi_gpu_info A metric with a constant '1' value labeled by gpu uuid, name, driver_model_current, driver_model_pending, vbios_version, driver_version, pci_bus_id, serial, compute_cap, pci_sub_device_id, index.
+# HELP nvidia_smi_gpu_info A metric with a constant '1' value labeled by gpu uuid, name, driver_model_current, driver_model_pending, vbios_version, driver_version, pci_bus_id, serial, compute_cap, pci_sub_device_id, index, cuda_version.
 # TYPE nvidia_smi_gpu_info gauge
-nvidia_smi_gpu_info{driver_model_current="WDDM",driver_model_pending="WDDM",driver_version="471.11",name="NVIDIA GeForce RTX 2080 SUPER",uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa",vbios_version="90.04.7a.40.73",pci_bus_id="00000000:71:00.0",serial="[N/A]",compute_cap="7.5",pci_sub_device_id="0x40051458",index="0"} 1
+nvidia_smi_gpu_info{cuda_version="11.4",driver_model_current="WDDM",driver_model_pending="WDDM",driver_version="471.11",name="NVIDIA GeForce RTX 2080 SUPER",uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa",vbios_version="90.04.7a.40.73",pci_bus_id="00000000:71:00.0",serial="[N/A]",compute_cap="7.5",pci_sub_device_id="0x40051458",index="0"} 1
 # HELP nvidia_smi_index index
 # TYPE nvidia_smi_index gauge
 nvidia_smi_index{uuid="df6e7a7c-7314-46f8-abc4-b88b36dcf3aa"} 0

@@ -37,8 +37,25 @@ var NVMLReturnCodeMetric = ExitCodeMetric{
 	Help: "NVML return code of the most recent collection (0 = success)",
 }
 
+// uuidLabel is the GPU identity label every per-GPU metric carries.
+const uuidLabel = "uuid"
+
 // computeAppLabels is the label set on the per-process metrics.
-var computeAppLabels = []string{"uuid", "pid", "process_name"}
+var computeAppLabels = []string{uuidLabel, "pid", "process_name"}
+
+// Features selects the conditionally-described metric families. Each one
+// follows the compute-apps precedent: its descriptors exist only when the
+// feature is enabled, so Describe and Collect stay consistent and a disabled
+// feature leaves no trace in the output.
+type Features struct {
+	// ComputeApps enables the per-process metric families.
+	ComputeApps bool
+	// PCIeThroughput enables the per-GPU PCIe throughput gauges (nvml
+	// backend, --collect.pcie-throughput).
+	PCIeThroughput bool
+	// Energy enables the per-GPU cumulative energy counter (nvml backend).
+	Energy bool
+}
 
 // GPUExporter renders the latest collection as Prometheus metrics. It is
 // agnostic to how the reading is produced: the source may collect inline on
@@ -58,32 +75,40 @@ type GPUExporter struct {
 	appMemoryDesc         *prometheus.Desc
 	appCountDesc          *prometheus.Desc
 	appsSuccessDesc       *prometheus.Desc
+	pcieTxDesc            *prometheus.Desc
+	pcieRxDesc            *prometheus.Desc
+	energyDesc            *prometheus.Desc
 	logger                *slog.Logger
 	ctx                   context.Context //nolint:containedctx
 }
 
-// New builds the exporter. The per-process descriptors exist only when
-// computeApps is set: with the feature off they stay nil and the exporter
-// neither describes nor emits any per-process series.
+// New builds the exporter. A metric family whose feature is off in features
+// gets nil descriptors: the exporter neither describes nor emits its series.
 func New(
 	ctx context.Context,
 	prefix string,
 	fields nvidiasmi.ResolvedFields,
 	source collect.Source,
-	computeApps bool,
+	features Features,
 	exitCodeMetric ExitCodeMetric,
 	logger *slog.Logger,
 ) *GPUExporter {
 	qFieldToMetricInfoMap := BuildQFieldToMetricInfoMap(prefix, fields.Returned, logger)
 
-	infoLabels := make([]string, len(fields.Info))
-	for i, infoField := range fields.Info {
-		infoLabels[i] = infoField.Label
+	// cuda_version rides gpu_info but is not a query field: it comes from the
+	// collection's extras, so it is appended after the resolved info fields
+	// rather than joining them (the qfield schema must not see it)
+	infoLabels := make([]string, 0, len(fields.Info)+1)
+	for _, infoField := range fields.Info {
+		infoLabels = append(infoLabels, infoField.Label)
 	}
 
-	appInfoDesc, appMemoryDesc, appCountDesc, appsSuccessDesc := newComputeAppDescs(prefix, computeApps)
+	infoLabels = append(infoLabels, "cuda_version")
 
-	return &GPUExporter{
+	appInfoDesc, appMemoryDesc, appCountDesc, appsSuccessDesc := newComputeAppDescs(prefix, features.ComputeApps)
+	pcieTxDesc, pcieRxDesc := newPCIeDescs(prefix, features.PCIeThroughput)
+
+	exp := &GPUExporter{
 		ctx:                   ctx,
 		prefix:                prefix,
 		fields:                fields,
@@ -93,32 +118,10 @@ func New(
 		appMemoryDesc:         appMemoryDesc,
 		appCountDesc:          appCountDesc,
 		appsSuccessDesc:       appsSuccessDesc,
+		pcieTxDesc:            pcieTxDesc,
+		pcieRxDesc:            pcieRxDesc,
+		energyDesc:            newEnergyDesc(prefix, features.Energy),
 		logger:                logger,
-		failedScrapesDesc: prometheus.NewDesc(
-			prometheus.BuildFQName(prefix, "", "failed_scrapes_total"),
-			"Number of failed collections",
-			nil,
-			nil),
-		exitCodeDesc: prometheus.NewDesc(
-			prometheus.BuildFQName(prefix, "", exitCodeMetric.Name),
-			exitCodeMetric.Help,
-			nil,
-			nil),
-		collectSuccessDesc: prometheus.NewDesc(
-			prometheus.BuildFQName(prefix, "", "last_collect_success"),
-			"Whether the most recent collection succeeded (1) or not (0)",
-			nil,
-			nil),
-		collectTimestampDesc: prometheus.NewDesc(
-			prometheus.BuildFQName(prefix, "", "last_collect_success_timestamp_seconds"),
-			"Unix timestamp of the most recent successful collection",
-			nil,
-			nil),
-		collectDurationDesc: prometheus.NewDesc(
-			prometheus.BuildFQName(prefix, "", "last_collect_duration_seconds"),
-			"Duration of the most recent collection",
-			nil,
-			nil),
 		gpuInfoDesc: prometheus.NewDesc(
 			prometheus.BuildFQName(prefix, "", "gpu_info"),
 			fmt.Sprintf("A metric with a constant '1' value labeled by gpu %s.",
@@ -126,6 +129,39 @@ func New(
 			infoLabels,
 			nil),
 	}
+
+	addHealthDescs(exp, prefix, exitCodeMetric)
+
+	return exp
+}
+
+// addHealthDescs builds the collection health descriptors.
+func addHealthDescs(exp *GPUExporter, prefix string, exitCodeMetric ExitCodeMetric) {
+	exp.failedScrapesDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(prefix, "", "failed_scrapes_total"),
+		"Number of failed collections",
+		nil,
+		nil)
+	exp.exitCodeDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(prefix, "", exitCodeMetric.Name),
+		exitCodeMetric.Help,
+		nil,
+		nil)
+	exp.collectSuccessDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(prefix, "", "last_collect_success"),
+		"Whether the most recent collection succeeded (1) or not (0)",
+		nil,
+		nil)
+	exp.collectTimestampDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(prefix, "", "last_collect_success_timestamp_seconds"),
+		"Unix timestamp of the most recent successful collection",
+		nil,
+		nil)
+	exp.collectDurationDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(prefix, "", "last_collect_duration_seconds"),
+		"Duration of the most recent collection",
+		nil,
+		nil)
 }
 
 // newComputeAppDescs builds the per-process metric descriptors (info, memory,
@@ -151,7 +187,7 @@ func newComputeAppDescs(
 	count := prometheus.NewDesc(
 		prometheus.BuildFQName(prefix, "", "compute_apps"),
 		"Number of processes with a compute context on the GPU.",
-		[]string{"uuid"},
+		[]string{uuidLabel},
 		nil)
 	success := prometheus.NewDesc(
 		prometheus.BuildFQName(prefix, "", "compute_apps_last_collect_success"),
@@ -160,6 +196,42 @@ func newComputeAppDescs(
 		nil)
 
 	return info, memory, count, success
+}
+
+// newPCIeDescs builds the PCIe throughput descriptors, nil when the feature
+// is disabled.
+func newPCIeDescs(prefix string, enabled bool) (*prometheus.Desc, *prometheus.Desc) {
+	if !enabled {
+		return nil, nil
+	}
+
+	tx := prometheus.NewDesc(
+		prometheus.BuildFQName(prefix, "", "pcie_throughput_tx_bytes_per_second"),
+		"PCIe traffic transmitted by the GPU, sampled by the driver over a dedicated 20ms window.",
+		[]string{uuidLabel},
+		nil)
+	rx := prometheus.NewDesc(
+		prometheus.BuildFQName(prefix, "", "pcie_throughput_rx_bytes_per_second"),
+		"PCIe traffic received by the GPU, sampled by the driver over a dedicated 20ms window.",
+		[]string{uuidLabel},
+		nil)
+
+	return tx, rx
+}
+
+// newEnergyDesc builds the energy counter descriptor, nil when the feature is
+// disabled.
+func newEnergyDesc(prefix string, enabled bool) *prometheus.Desc {
+	if !enabled {
+		return nil
+	}
+
+	return prometheus.NewDesc(
+		prometheus.BuildFQName(prefix, "", "energy_joules_total"),
+		"Total energy consumed by the GPU in joules since the driver was last loaded. "+
+			"Resets on a driver reload; absent on GPUs that cannot report it.",
+		[]string{uuidLabel},
+		nil)
 }
 
 // WithContext returns a collector that renders the same metrics but bounds
@@ -194,6 +266,15 @@ func (e *GPUExporter) Describe(descCh chan<- *prometheus.Desc) {
 		e.sendDesc(descCh, e.appCountDesc)
 		e.sendDesc(descCh, e.appsSuccessDesc)
 	}
+
+	if e.pcieTxDesc != nil {
+		e.sendDesc(descCh, e.pcieTxDesc)
+		e.sendDesc(descCh, e.pcieRxDesc)
+	}
+
+	if e.energyDesc != nil {
+		e.sendDesc(descCh, e.energyDesc)
+	}
 }
 
 // Collect fetches the latest reading from the source and delivers it as
@@ -208,10 +289,51 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 	}
 
 	for _, currentRow := range snapshot.Table.Rows {
-		e.renderRow(metricCh, currentRow)
+		e.renderRow(metricCh, currentRow, snapshot.Extras.CUDAVersion)
 	}
 
 	e.renderApps(metricCh, snapshot)
+	e.renderExtras(metricCh, snapshot)
+}
+
+// renderExtras emits the backend-specific families carried outside the
+// query-field schema. A nil descriptor (feature off) or an empty family emits
+// nothing: per family, absence is the signal for "could not be read".
+func (e *GPUExporter) renderExtras(metricCh chan<- prometheus.Metric, snapshot collect.Snapshot) {
+	if e.pcieTxDesc != nil {
+		for _, sample := range snapshot.Extras.PCIe {
+			e.sendConstWithUUID(metricCh, e.pcieTxDesc, prometheus.GaugeValue,
+				sample.TXBytesPerSecond, sample.UUID)
+			e.sendConstWithUUID(metricCh, e.pcieRxDesc, prometheus.GaugeValue,
+				sample.RXBytesPerSecond, sample.UUID)
+		}
+	}
+
+	if e.energyDesc != nil {
+		for _, counter := range snapshot.Extras.Energy {
+			e.sendConstWithUUID(metricCh, e.energyDesc, prometheus.CounterValue,
+				counter.Joules, counter.UUID)
+		}
+	}
+}
+
+// sendConstWithUUID emits one constant metric carrying the uuid label,
+// logging instead of failing if it cannot be built.
+func (e *GPUExporter) sendConstWithUUID(
+	metricCh chan<- prometheus.Metric,
+	desc *prometheus.Desc,
+	valueType prometheus.ValueType,
+	value float64,
+	uuid string,
+) {
+	metric, err := prometheus.NewConstMetric(desc, valueType, value, uuid)
+	if err != nil {
+		e.logger.Error("failed to create metric", "err", err, "desc", desc.String(), "uuid", uuid)
+
+		return
+	}
+
+	e.sendMetric(metricCh, metric)
 }
 
 // renderApps emits the per-process metrics. Failure must not look like idle:
@@ -345,11 +467,12 @@ func (e *GPUExporter) sendConst(
 }
 
 // renderRow emits the gpu_info metric and one metric per queried field for a
-// single GPU row.
-func (e *GPUExporter) renderRow(metricCh chan<- prometheus.Metric, row nvidiasmi.Row) {
+// single GPU row. cudaVersion fills the appended cuda_version label, which
+// comes from the collection's extras rather than the row's cells.
+func (e *GPUExporter) renderRow(metricCh chan<- prometheus.Metric, row nvidiasmi.Row, cudaVersion string) {
 	uuid := nvidiasmi.NormalizeUUID(row.QFieldToCells[nvidiasmi.UUIDQField].RawValue)
 
-	labelValues := make([]string, len(e.fields.Info))
+	labelValues := make([]string, len(e.fields.Info)+1)
 
 	for idx, infoField := range e.fields.Info {
 		if infoField.QField == nvidiasmi.UUIDQField {
@@ -360,6 +483,8 @@ func (e *GPUExporter) renderRow(metricCh chan<- prometheus.Metric, row nvidiasmi
 
 		labelValues[idx] = row.QFieldToCells[infoField.QField].RawValue
 	}
+
+	labelValues[len(e.fields.Info)] = cudaVersion
 
 	infoMetric, infoMetricErr := prometheus.NewConstMetric(e.gpuInfoDesc, prometheus.GaugeValue,
 		1, labelValues...)
@@ -444,7 +569,7 @@ func BuildQFieldToMetricInfoMap(
 
 func BuildMetricInfo(prefix string, rField nvidiasmi.RField, logger *slog.Logger) MetricInfo {
 	fqName, multiplier := BuildFQNameAndMultiplier(prefix, rField, logger)
-	desc := prometheus.NewDesc(fqName, string(rField), []string{"uuid"}, nil)
+	desc := prometheus.NewDesc(fqName, string(rField), []string{uuidLabel}, nil)
 
 	return MetricInfo{
 		desc:            desc,

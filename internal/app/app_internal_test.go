@@ -138,3 +138,44 @@ func TestScrapeContext(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateBackendFlags(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		backend        string
+		command        string
+		pcieThroughput bool
+		wantErr        string
+	}{
+		{name: "exec defaults", backend: backendExec, command: "nvidia-smi"},
+		{name: "exec with custom command", backend: backendExec, command: "sudo nvidia-smi"},
+		{name: "nvml defaults", backend: backendNVML, command: "nvidia-smi"},
+		{name: "nvml with pcie throughput", backend: backendNVML, command: "nvidia-smi", pcieThroughput: true},
+		{
+			name: "nvml rejects custom command", backend: backendNVML, command: "sudo nvidia-smi",
+			wantErr: "--nvidia-smi-command cannot be combined",
+		},
+		{
+			name: "exec rejects pcie throughput", backend: backendExec, command: "nvidia-smi",
+			pcieThroughput: true,
+			wantErr:        "--collect.pcie-throughput requires --collect.backend=nvml",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := validateBackendFlags(testCase.backend, testCase.command, testCase.pcieThroughput)
+			if testCase.wantErr == "" {
+				assert.NoError(t, err)
+
+				return
+			}
+
+			assert.ErrorContains(t, err, testCase.wantErr)
+		})
+	}
+}

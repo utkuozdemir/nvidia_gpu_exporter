@@ -35,6 +35,6 @@ func (b *Backend) Close() {}
 func (b *Backend) DriverVersion() string { return "" }
 
 // QueryFunc is never reachable: New always fails first.
-func (b *Backend) QueryFunc(_ nvidiasmi.ResolvedFields, _ bool) collect.QueryFunc {
+func (b *Backend) QueryFunc(_ nvidiasmi.ResolvedFields, _ CollectOptions) collect.QueryFunc {
 	panic("nvml backend is not available in this build")
 }
