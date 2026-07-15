@@ -11,9 +11,30 @@ metadata:
   annotations:
     helm.sh/hook: test
 spec:
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  automountServiceAccountToken: false
   containers:
+    {{- /* nil-safe lookups with inline fallbacks: upgrades with
+    --reuse-values keep the previous release's values, where the test
+    subtree may not exist yet */}}
+    {{- $testImage := dig "image" (dict) (.Values.test | default dict) }}
     - name: wget
-      image: busybox
+      image: "{{ $testImage.repository | default "docker.io/library/busybox" }}:{{ $testImage.tag | default "1.37" }}"
+      imagePullPolicy: {{ $testImage.pullPolicy | default "IfNotPresent" }}
+      # restricted-profile security context so the test pod passes admission
+      # in namespaces enforcing the "restricted" Pod Security Standard
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+        seccompProfile:
+          type: RuntimeDefault
       command:
         - sh
         - -c
@@ -21,7 +42,7 @@ spec:
       # startup field detection and begins listening
       args:
         - |
-          url="http://{{ include "nvidia-gpu-exporter.fullname" . }}:{{ .Values.service.port }}{{ .Values.telemetryPath }}"
+          url='http://{{ include "nvidia-gpu-exporter.fullname" . }}:{{ .Values.service.port }}{{ .Values.telemetryPath }}'
           for attempt in $(seq 1 30); do
             wget -qO- "$url" && exit 0
             echo "attempt $attempt failed, retrying"

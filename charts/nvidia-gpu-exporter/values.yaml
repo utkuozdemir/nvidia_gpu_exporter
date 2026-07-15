@@ -73,7 +73,8 @@ readinessProbe:
 # -- Extra command line arguments for the exporter, e.g. `--collect.interval=30s`
 extraArgs: []
 
-# -- Use the host network for the pods
+# -- Use the host network for the pods. Also switches their DNS policy to
+# `ClusterFirstWithHostNet` so that cluster DNS keeps working.
 hostNetwork: false
 
 # -- Share the host PID namespace with the pods. Required for computeApps to
@@ -90,6 +91,8 @@ hostPort:
 service:
   # -- Create a Service for the exporter
   enabled: true
+  # -- Annotations to add to the Service
+  annotations: {}
   # -- Service type
   type: ClusterIP
   # -- Service port
@@ -104,6 +107,11 @@ serviceAccount:
   annotations: {}
   # -- The name of the service account to use. If not set and create is true, a name is generated.
   name: ""
+
+# -- Mount the service account token into the pods. The exporter never talks
+# to the Kubernetes API, so it is off by default. Enable it only if something
+# injected into the pods (e.g. a service mesh sidecar) needs the token.
+automountServiceAccountToken: false
 
 serviceMonitor:
   # -- Create a Prometheus Operator ServiceMonitor (requires the Prometheus Operator CRDs)
@@ -179,6 +187,9 @@ grafanaDashboard:
 # -- Annotations to add to the pods
 podAnnotations: {}
 
+# -- Extra labels to add to the pods
+podLabels: {}
+
 # -- Security context for the pods
 podSecurityContext: {}
 
@@ -195,10 +206,19 @@ volumes: []
 # -- Extra volume mounts for the exporter container
 volumeMounts: []
 
-# -- Node selector for the pods, e.g. to restrict the DaemonSet to GPU nodes
-nodeSelector: {}
+# -- Node selector for the pods. The images are Linux-only, hence the default.
+# Add a GPU node label to keep the DaemonSet off non-GPU nodes, e.g.
+# `nvidia.com/gpu.present: "true"` on clusters with GPU Feature Discovery
+# (see the README section on scheduling). Helm merges maps key by key, so
+# overriding with `{}` does not clear the default; set the whole value to
+# `null` to remove it.
+nodeSelector:
+  kubernetes.io/os: linux
 
-# -- Tolerations for the pods
+# -- Tolerations for the pods. GPU node pools are often tainted (e.g.
+# `nvidia.com/gpu=present:NoSchedule`) so that only GPU workloads land on
+# them. This chart deliberately requests no GPU resource, so add a matching
+# toleration here or the exporter will not schedule on those nodes.
 tolerations: []
 
 # -- Affinity for the pods
@@ -207,8 +227,29 @@ affinity: {}
 # -- Priority class name for the pods
 priorityClassName: ""
 
-# -- Image pull secrets
+# -- Update strategy of the DaemonSet. Raise `rollingUpdate.maxUnavailable`
+# (absolute or percentage) to roll out faster on large clusters, or use
+# `type: OnDelete` for manually staged rollouts.
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+
+# -- How many old DaemonSet history revisions to retain for rollbacks.
+# Empty means the Kubernetes default (10).
+revisionHistoryLimit: ""
+
+# -- Image pull secrets, used by both the exporter and the `helm test` pods
 imagePullSecrets: []
+
+test:
+  image:
+    # -- Image repository for the `helm test` connection-check pod
+    repository: docker.io/library/busybox
+    # -- Image tag for the `helm test` pod
+    tag: "1.37"
+    # -- Image pull policy for the `helm test` pod
+    pullPolicy: IfNotPresent
 
 # -- Override the chart name
 nameOverride: ""

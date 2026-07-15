@@ -11,7 +11,9 @@ and make sure that RuntimeClass exists.
 
 To try the experimental NVML backend, which reads the driver library
 directly instead of running `nvidia-smi`, set the image tag to a `-nvml`
-variant (for example `1.7.0-nvml`).
+variant (for example `1.7.0-nvml`). The `-nvml` images are built for
+linux/amd64 only, so on mixed-architecture clusters add
+`kubernetes.io/arch: amd64` to `nodeSelector`.
 
 The exporter deliberately requests no `nvidia.com/gpu` resource. The device
 plugin allocates whole GPUs exclusively, so a monitoring pod that requested
@@ -80,6 +82,77 @@ run privileged with the `NVIDIA_MIG_MONITOR_DEVICES=all` environment variable
 GPU-level memory fields read `[Insufficient Permissions]`. Processes are
 attributed to the parent GPU's UUID, not to individual MIG instances.
 
+## Scheduling on GPU nodes
+
+By default the DaemonSet runs on every Linux node, including nodes without a
+GPU, where the pods come up but report `nvidia_smi_last_collect_success 0`.
+On mixed clusters, restrict it to GPU nodes via `nodeSelector`. There is no
+universal GPU node label, so use whatever your cluster has:
+
+- `nvidia.com/gpu.present: "true"` with GPU Feature Discovery (installed by
+  the NVIDIA GPU Operator, among others),
+- `feature.node.kubernetes.io/pci-0302_10de.present: "true"` with plain Node
+  Feature Discovery (the class segment varies by GPU model: `0302` for
+  datacenter 3D controllers, `0300` for display-class cards, so check your
+  node labels),
+- a cloud or in-house label of your own, e.g. `cloud.google.com/gke-accelerator`
+  on GKE (any value, so use `affinity` with an `Exists` match for that one).
+
+GPU node pools are also commonly tainted (for example
+`nvidia.com/gpu=present:NoSchedule`) so that only GPU workloads land on them.
+The exporter deliberately requests no `nvidia.com/gpu` resource, so it does
+not tolerate such taints by itself and will silently skip those nodes. Add a
+matching toleration:
+
+```yaml
+nodeSelector:
+  nvidia.com/gpu.present: "true"
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+```
+
+## Running next to the NVIDIA GPU Operator
+
+The GPU Operator and this chart coexist without conflicts. The Operator's
+own dcgm-exporter listens on a different port (9400 vs 9835) and exports a
+different metric namespace (`DCGM_FI_*` vs `nvidia_smi_*`), so nothing
+clashes; running both just means the GPUs are polled twice. The Operator
+also installs the pieces this chart needs anyway: the NVIDIA Container
+Toolkit, a `nvidia` RuntimeClass to set `runtimeClassName` to, and GPU
+Feature Discovery labels for the `nodeSelector` shown above.
+
+To replace dcgm-exporter instead of running both, disable it with
+`dcgmExporter.enabled=false` in the GPU Operator chart.
+
+## Restricted namespaces
+
+The pods run unprivileged, but the default security contexts are empty and
+the image runs as root, which the `restricted`
+[Pod Security Standard](https://kubernetes.io/docs/concepts/security/pod-security-standards/)
+rejects at admission. GPU access via the NVIDIA runtime does not require
+root (the injected device nodes are world-accessible on standard driver
+installs), so in enforcing namespaces set a compliant security context:
+
+```yaml
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+```
+
+Note that `hostNetwork` and `hostPort` are rejected in such namespaces no
+matter the security context (the `baseline` level already forbids them), and
+`computeApps` needs `hostPID`, which they forbid too. On OpenShift, leave
+`runAsUser` unset and let the namespace SCC assign one; the default
+`restricted-v2` SCC fits this workload.
+
 ## Upgrading from chart 1.x
 
 Chart 1.x lived in a [separate repository](https://github.com/utkuozdemir/helm-charts)
@@ -106,10 +179,36 @@ require the Prometheus Operator CRDs (enable one of them, not both).
 `prometheusRule` adds alerts on the exporter's collection health metrics: if
 the exporter also runs on nodes without GPUs, restrict the DaemonSet to GPU
 nodes via `nodeSelector` or `affinity` before enabling it, otherwise the
-alerts fire for nodes that cannot collect GPU metrics by design.
+alerts fire for nodes that cannot collect GPU metrics by design. The alert
+expressions select all `nvidia_smi_*` series, so when installing multiple
+releases of this chart, enable the rules in only one of them.
 `grafanaDashboard` ships the [Grafana dashboard](https://grafana.com/grafana/dashboards/14574)
 and its [multi-GPU overview companion](https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/docs/grafana/dashboard-overview.json)
 as a ConfigMap labeled for the Grafana sidecar.
+
+With [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack),
+enabling a monitor is usually not enough: by default its Prometheus only
+selects monitors carrying the stack's release label. Two more things bite in
+practice: the default `instance` label is the pod IP, which changes on every
+restart and splits the per-GPU series, so relabel it to the node name. And
+the Grafana sidecar only reads dashboard ConfigMaps from other namespaces
+when it runs with `sidecar.dashboards.searchNamespace=ALL`.
+
+```yaml
+serviceMonitor:
+  enabled: true
+  additionalLabels:
+    release: kube-prometheus-stack # your stack's release name
+  relabelings:
+    - sourceLabels: [__meta_kubernetes_pod_node_name]
+      targetLabel: instance
+prometheusRule:
+  enabled: true
+  additionalLabels:
+    release: kube-prometheus-stack
+grafanaDashboard:
+  enabled: true
+```
 
 {{ template "chart.valuesSection" . }}
 
