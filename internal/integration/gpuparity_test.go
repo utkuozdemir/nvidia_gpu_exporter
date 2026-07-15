@@ -5,6 +5,7 @@ package integration_test
 import (
 	"context"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -51,7 +52,7 @@ func TestBackendParityOnRealGPU(t *testing.T) {
 
 	// bracketed sampling: exec, native, exec
 	execBefore := queryExec(ctx, t, resolved)
-	nativeReading, _, err := backend.QueryFunc(nativeResolved, false)(ctx)
+	nativeReading, _, err := backend.QueryFunc(nativeResolved, nvmlnative.CollectOptions{})(ctx)
 	require.NoError(t, err)
 	execAfter := queryExec(ctx, t, resolved)
 
@@ -363,6 +364,35 @@ func TestBackendMetricFamilyParityOnRealGPU(t *testing.T) {
 	delete(execFamilies, "nvidia_smi_command_exit_code")
 	delete(nativeFamilies, "nvidia_smi_nvml_return_code")
 
+	// the always-on nvml-only families must be present, not merely allowed:
+	// a silently broken extras path must not pass as an accepted absence
+	// (the energy counter requires Volta or newer, which every GPU box
+	// qualifies as)
+	if !hasFamilyWithPrefix(nativeFamilies, "nvidia_smi_energy_joules_total") {
+		t.Error("nvml-only metric family missing from the nvml backend: nvidia_smi_energy_joules_total")
+	}
+
+	// cuda_version is derived independently per backend (the nvidia-smi
+	// --version text vs the NVML call), so a mismatch would fail the whole
+	// gpu_info family with a message that never mentions it; compare the
+	// label explicitly instead
+	execCuda := cudaVersionValues(execFamilies)
+	require.NotContains(t, execCuda, "",
+		"the exec backend parsed no CUDA version from nvidia-smi --version")
+	require.Equal(t, execCuda, cudaVersionValues(nativeFamilies),
+		"the two backends disagree on the cuda_version label")
+
+	// the opt-in PCIe throughput family is exercised under its flag
+	pcieFamilies := scrapeBackend(t, "nvml", "--collect.pcie-throughput")
+	for _, family := range []string{
+		"nvidia_smi_pcie_throughput_tx_bytes_per_second",
+		"nvidia_smi_pcie_throughput_rx_bytes_per_second",
+	} {
+		if _, ok := pcieFamilies[family]; !ok {
+			t.Errorf("metric family missing with --collect.pcie-throughput: %s", family)
+		}
+	}
+
 	for family, execSeries := range execFamilies {
 		nativeSeries, ok := nativeFamilies[family]
 		if !ok {
@@ -392,10 +422,66 @@ func TestBackendMetricFamilyParityOnRealGPU(t *testing.T) {
 	}
 
 	for family := range nativeFamilies {
-		if _, ok := execFamilies[family]; !ok {
+		if _, ok := execFamilies[family]; !ok && !isNVMLOnlyFamily(family) {
 			t.Errorf("metric family only the nvml backend exports\n  family: %s", family)
 		}
 	}
+}
+
+// nvmlOnlyFamilyPrefixes lists the metric family prefixes only the nvml
+// backend serves (the extras families). They are exempt from the family
+// parity requirement in the nvml direction, nothing more: presence is
+// asserted per scenario (always-on families in the default scrape, opt-in
+// families under their flag), since a single list doing both would force
+// every entry to appear in every scrape. Exec-only families remain a hard
+// failure.
+//
+//nolint:gochecknoglobals // shared test fixture
+var nvmlOnlyFamilyPrefixes = []string{
+	"nvidia_smi_energy_joules_total",
+	"nvidia_smi_pcie_throughput_",
+}
+
+func isNVMLOnlyFamily(family string) bool {
+	for _, prefix := range nvmlOnlyFamilyPrefixes {
+		if strings.HasPrefix(family, prefix) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func hasFamilyWithPrefix(families map[string]map[string]bool, prefix string) bool {
+	for family := range families {
+		if strings.HasPrefix(family, prefix) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// cudaVersionValues extracts the sorted set of cuda_version label values off
+// the gpu_info series.
+func cudaVersionValues(families map[string]map[string]bool) []string {
+	pattern := regexp.MustCompile(`cuda_version="([^"]*)"`)
+	seen := map[string]bool{}
+
+	for series := range families["nvidia_smi_gpu_info"] {
+		if match := pattern.FindStringSubmatch(series); match != nil {
+			seen[match[1]] = true
+		}
+	}
+
+	values := make([]string, 0, len(seen))
+	for value := range seen {
+		values = append(values, value)
+	}
+
+	slices.Sort(values)
+
+	return values
 }
 
 func anySeries(series map[string]bool) string {
@@ -408,14 +494,13 @@ func anySeries(series map[string]bool) string {
 
 // scrapeBackend runs the exporter in-process with the given backend and
 // returns nvidia_smi_* family -> set of series signatures (name{labels}).
-func scrapeBackend(t *testing.T, backend string) map[string]map[string]bool {
+func scrapeBackend(t *testing.T, backend string, extraArgs ...string) map[string]map[string]bool {
 	t.Helper()
 
-	baseURL := startExporter(t,
-		"--web.listen-address=127.0.0.1:0",
-		"--log.level=error",
-		"--collect.backend="+backend,
-	)
+	// startExporter injects the listen address and log level itself
+	args := append([]string{"--collect.backend=" + backend}, extraArgs...)
+
+	baseURL := startExporter(t, args...)
 	body := scrape(t, baseURL)
 
 	families := map[string]map[string]bool{}

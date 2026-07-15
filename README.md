@@ -28,8 +28,9 @@ This makes it possible to run it on Windows and get GPU metrics while gaming - n
 
 It can also skip `nvidia-smi` and read the metrics straight from the NVIDIA
 Management Library (NVML), the C library `nvidia-smi` itself is built on. This
-mode is experimental and exports the exact same metrics; see
-[CONFIGURE.md](docs/CONFIGURE.md).
+mode is experimental and exports a superset of the default mode's metrics: the
+same core set plus NVML-only extras like the GPU energy counter and opt-in
+PCIe throughput; see [CONFIGURE.md](docs/CONFIGURE.md).
 
 This project is based on [a0s/nvidia-smi-exporter](https://github.com/a0s/nvidia-smi-exporter).
 However, this one is written in Go to produce a single, static binary.
@@ -58,7 +59,7 @@ probably the better fit; this exporter aims at the cases above.
 - No need for a Docker or Kubernetes environment
 - Auto-discovery of the metric fields `nvidia-smi` can expose (future-compatible)
 - Optional per-process GPU metrics: see which process uses how much GPU memory
-- Experimental NVML mode: reads the driver library directly instead of running `nvidia-smi` (Linux)
+- Experimental NVML mode: reads the driver library directly instead of running `nvidia-smi`, and unlocks metrics `nvidia-smi` cannot provide (Linux)
 - Comes with its own [Grafana dashboard](https://grafana.com/grafana/dashboards/14574)
 
 ## Visualization

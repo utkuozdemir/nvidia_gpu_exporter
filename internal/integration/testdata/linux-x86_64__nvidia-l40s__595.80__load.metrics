@@ -204,9 +204,9 @@ nvidia_smi_enforced_power_limit_watts{uuid="00000000-0000-0000-0000-000000000000
 # HELP nvidia_smi_failed_scrapes_total Number of failed collections
 # TYPE nvidia_smi_failed_scrapes_total counter
 nvidia_smi_failed_scrapes_total 0
-# HELP nvidia_smi_gpu_info A metric with a constant '1' value labeled by gpu uuid, name, driver_model_current, driver_model_pending, vbios_version, driver_version, pci_bus_id, serial, compute_cap, pci_sub_device_id, index.
+# HELP nvidia_smi_gpu_info A metric with a constant '1' value labeled by gpu uuid, name, driver_model_current, driver_model_pending, vbios_version, driver_version, pci_bus_id, serial, compute_cap, pci_sub_device_id, index, cuda_version.
 # TYPE nvidia_smi_gpu_info gauge
-nvidia_smi_gpu_info{compute_cap="8.9",driver_model_current="[N/A]",driver_model_pending="[N/A]",driver_version="595.80",index="0",name="NVIDIA L40S",pci_bus_id="00000000:01:00.0",pci_sub_device_id="0x185110DE",serial="0000000000000",uuid="00000000-0000-0000-0000-000000000000",vbios_version="95.02.66.00.02"} 1
+nvidia_smi_gpu_info{compute_cap="8.9",cuda_version="13.2",driver_model_current="[N/A]",driver_model_pending="[N/A]",driver_version="595.80",index="0",name="NVIDIA L40S",pci_bus_id="00000000:01:00.0",pci_sub_device_id="0x185110DE",serial="0000000000000",uuid="00000000-0000-0000-0000-000000000000",vbios_version="95.02.66.00.02"} 1
 # HELP nvidia_smi_gpu_recovery_action gpu_recovery_action
 # TYPE nvidia_smi_gpu_recovery_action gauge
 nvidia_smi_gpu_recovery_action{uuid="00000000-0000-0000-0000-000000000000"} 0

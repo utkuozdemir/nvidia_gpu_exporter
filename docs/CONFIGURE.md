@@ -9,6 +9,7 @@ The exporter binary accepts the following arguments:
 ```text
 usage: nvidia_gpu_exporter [<flags>]
 
+
 Flags:
   -h, --[no-]help               Show context-sensitive help (also try
                                 --help-long and --help-man).
@@ -68,25 +69,43 @@ Flags:
                                 (for example `remapped_rows.histogram.*`).
                                 Useful to drop fields that are slow or
                                 unsupported on a given setup.
-      --collect.interval=0      Interval at which nvidia-smi runs in the
-                                background, with scrapes serving the most recent
-                                result. When 0, nvidia-smi runs synchronously on
-                                each scrape instead.
+      --collect.backend=exec    How to collect GPU metrics. `exec` runs
+                                nvidia-smi (the default); `nvml` is experimental
+                                and reads the driver library (libnvidia-ml)
+                                directly, without nvidia-smi. The nvml backend
+                                requires Linux and a build with the backend
+                                compiled in. It exposes every metric the exec
+                                backend exposes, plus NVML-only extras (see the
+                                docs).
+      --collect.interval=0      Interval at which the collection runs in the
+                                background, with scrapes serving the most
+                                recent result. When 0, the collection runs
+                                synchronously on each scrape instead.
       --collect.timeout=10s     Maximum duration a single collection cycle may
-                                take, including all nvidia-smi runs within it
-                                and the runs at startup. 0 disables the bound.
+                                take, including all the work within it (e.g.
+                                the nvidia-smi runs) and the runs at startup.
+                                0 disables the bound.
       --[no-]collect.compute-apps
                                 Also export per-process GPU metrics
-                                from `nvidia-smi --query-compute-apps`.
-                                Adds one nvidia-smi run per collection cycle.
+                                (from `nvidia-smi --query-compute-apps`,
+                                or the equivalent NVML calls in nvml mode).
                                 When the exporter runs in a container, seeing
                                 other workloads' processes requires sharing
                                 the host PID namespace (hostPID in Kubernetes,
                                 --pid=host in Docker).
-      --[no-]shutdown-on-error  Shut down the exporter if there is an error
-                                querying nvidia-smi. When false, exporter will
-                                simply log this error and export it as a metric,
-                                but will not crash.
+      --[no-]collect.pcie-throughput
+                                Also export the PCIe TX/RX throughput per
+                                GPU (requires --collect.backend=nvml). Each
+                                direction is sampled over a separate 20ms driver
+                                counter window, adding roughly 40ms per GPU
+                                to every collection cycle (~320ms on an 8-GPU
+                                node); pairing it with --collect.interval keeps
+                                scrapes unaffected.
+      --[no-]shutdown-on-error  Shut down the exporter if there is a fatal
+                                collection error (a failing nvidia-smi run,
+                                or a lost GPU/driver in nvml mode). When false,
+                                exporter will simply log this error and export
+                                it as a metric, but will not crash.
       --[no-]web.enable-pprof   Enable pprof endpoints for profiling under
                                 /debug/pprof/. Only enable this on a trusted
                                 network, as it exposes runtime internals.
@@ -294,9 +313,34 @@ Things to keep in mind:
 ## Experimental: native NVML backend
 
 `--collect.backend=nvml` reads GPU metrics directly from the driver library
-(`libnvidia-ml.so.1`) instead of running `nvidia-smi`. The exported metrics
-are the same: metric names, labels and values match the default backend on
-the same machine, verified field-by-field against live hardware.
+(`libnvidia-ml.so.1`) instead of running `nvidia-smi`. Its metric surface is
+a superset of the default backend's: every metric derived from the
+`nvidia-smi` query fields is identical in name, labels and value (verified
+field-by-field against live hardware), and on top of that shared core the
+nvml backend serves metric families only the driver library can provide.
+
+What each backend can do:
+
+| Capability | exec | nvml |
+| --- | --- | --- |
+| Query-field metrics (identical names, labels, values) | yes | yes |
+| `gpu_info` with the `cuda_version` label | yes | yes |
+| Per-process metrics (`--collect.compute-apps`) | yes | yes |
+| Collection status metric | `command_exit_code` | `nvml_return_code` |
+| Custom command, remote scraping (`--nvidia-smi-command`, ssh, sudo) | yes | no |
+| Strongest isolation against a wedged driver (killable subprocess) | yes | no |
+| Brand-new driver fields before the catalog catches up (`AUTO`) | yes | no |
+| Total energy counter (`energy_joules_total`) | no | yes |
+| PCIe throughput (`--collect.pcie-throughput`) | no | yes |
+
+The NVML-only families are documented in [METRICS.md](METRICS.md). The PCIe
+throughput family is opt-in via `--collect.pcie-throughput` because of its
+collection cost: the driver samples each direction over its own 20ms counter
+window, so it adds roughly 40ms per GPU to every collection cycle, entirely
+serial (~320ms per cycle on an 8-GPU node). Pairing it with
+`--collect.interval` keeps scrapes unaffected by that cost. The two
+directions are sampled over two consecutive windows, not one simultaneous
+pair.
 
 ```bash
 nvidia_gpu_exporter --collect.backend nvml

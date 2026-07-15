@@ -40,6 +40,13 @@ func yesNo(b bool) string {
 
 func milliwatts(mw uint32) string { return fmt.Sprintf("%.2f W", float64(mw)/1000.0) }
 
+// cudaVersionStr renders the encoded integer from
+// nvmlSystemGetCudaDriverVersion (major*1000 + minor*10) the way nvidia-smi
+// prints the CUDA version: 13010 -> "13.1".
+func cudaVersionStr(version int) string {
+	return fmt.Sprintf("%d.%d", version/1000, (version%1000)/10)
+}
+
 func mhz(v uint32) string { return fmt.Sprintf("%d MHz", v) }
 
 // mib formats a byte count the way nvidia-smi prints MiB values: CEILED, not

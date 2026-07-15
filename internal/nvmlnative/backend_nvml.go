@@ -26,24 +26,30 @@ const Available = true
 // the lifecycle and collection logic is testable with the go-nvml mock
 // device. Device-level getters are already behind the nvml.Device interface.
 type nvmlAPI struct {
-	init            func() nvml.Return
-	shutdown        func() nvml.Return
-	deviceCount     func() (int, nvml.Return)
-	deviceByIndex   func(int) (nvml.Device, nvml.Return)
-	driverVersion   func() (string, nvml.Return)
-	processName     func(int) (string, nvml.Return)
-	validateInforom func(nvml.Device) nvml.Return
+	init              func() nvml.Return
+	shutdown          func() nvml.Return
+	deviceCount       func() (int, nvml.Return)
+	deviceByIndex     func(int) (nvml.Device, nvml.Return)
+	driverVersion     func() (string, nvml.Return)
+	cudaDriverVersion func() (int, nvml.Return)
+	processName       func(int) (string, nvml.Return)
+	validateInforom   func(nvml.Device) nvml.Return
 }
 
 func realNVML() nvmlAPI {
 	return nvmlAPI{
-		init:            nvml.Init,
-		shutdown:        nvml.Shutdown,
-		deviceCount:     nvml.DeviceGetCount,
-		deviceByIndex:   func(i int) (nvml.Device, nvml.Return) { return nvml.DeviceGetHandleByIndex(i) },
-		driverVersion:   nvml.SystemGetDriverVersion,
-		processName:     nvml.SystemGetProcessName,
-		validateInforom: nvml.DeviceValidateInforom,
+		init:          nvml.Init,
+		shutdown:      nvml.Shutdown,
+		deviceCount:   nvml.DeviceGetCount,
+		deviceByIndex: func(i int) (nvml.Device, nvml.Return) { return nvml.DeviceGetHandleByIndex(i) },
+		driverVersion: nvml.SystemGetDriverVersion,
+		// deliberately the unversioned entry point: the _v2 variant asks
+		// libcuda and fails without it, while this one falls back to the
+		// driver's known supported version. The utility-only container
+		// capability (the documented deployment) injects no libcuda.
+		cudaDriverVersion: nvml.SystemGetCudaDriverVersion,
+		processName:       nvml.SystemGetProcessName,
+		validateInforom:   nvml.DeviceValidateInforom,
 	}
 }
 
@@ -56,7 +62,15 @@ type Backend struct {
 	initialized bool
 	permLogged  bool
 	fnfLogged   bool
-	logger      *slog.Logger
+	// lastCUDAVersion retains the most recent successfully read CUDA version
+	// so a transient per-cycle failure does not flap the gpu_info series to
+	// an empty cuda_version label. Guarded by mu like the rest of the cycle
+	// state.
+	lastCUDAVersion string
+	// extrasWarned makes a persistent extras failure visible exactly once
+	// per family, mirroring permLogged/fnfLogged.
+	extrasWarned map[string]bool
+	logger       *slog.Logger
 }
 
 // New dlopens and initializes NVML. Failure here is a startup error: the
@@ -156,7 +170,7 @@ func tok(ret nvml.Return) string {
 // piling up behind the stuck call. A FatalError surfaced by the abandoned
 // goroutine after abandonment is discarded with the rest of its result;
 // shutdown-on-error then fires one cycle later, when the re-detection runs.
-func (b *Backend) QueryFunc(fields nvidiasmi.ResolvedFields, computeApps bool) collect.QueryFunc {
+func (b *Backend) QueryFunc(fields nvidiasmi.ResolvedFields, opts CollectOptions) collect.QueryFunc {
 	return func(ctx context.Context) (collect.Reading, int, error) {
 		type outcome struct {
 			reading collect.Reading
@@ -167,7 +181,7 @@ func (b *Backend) QueryFunc(fields nvidiasmi.ResolvedFields, computeApps bool) c
 		resultCh := make(chan outcome, 1)
 
 		go func() {
-			reading, code, err := b.collectCycle(ctx, fields, computeApps)
+			reading, code, err := b.collectCycle(ctx, fields, opts)
 			resultCh <- outcome{reading: reading, code: code, err: err}
 		}()
 
@@ -188,7 +202,7 @@ func (b *Backend) QueryFunc(fields nvidiasmi.ResolvedFields, computeApps bool) c
 func (b *Backend) collectCycle(
 	ctx context.Context,
 	fields nvidiasmi.ResolvedFields,
-	computeApps bool,
+	opts CollectOptions,
 ) (collect.Reading, int, error) {
 	if !b.mu.TryLock() {
 		return collect.Reading{}, -1,
@@ -203,7 +217,7 @@ func (b *Backend) collectCycle(
 
 	reading := collect.Reading{Table: table}
 
-	if computeApps {
+	if opts.ComputeApps {
 		reading.AppsAttempted = true
 
 		apps, appsErr := b.collectComputeApps(ctx)
@@ -214,6 +228,8 @@ func (b *Backend) collectCycle(
 			reading.AppsSuccess = true
 		}
 	}
+
+	reading.Extras = b.collectExtras(ctx, opts)
 
 	return reading, code, nil
 }
@@ -1248,4 +1264,182 @@ func (b *Backend) softLifecycle(ret nvml.Return, err error) error {
 	}
 
 	return fmt.Errorf("%w: %s", err, ret.String())
+}
+
+// pcieThroughputKBMultiplier converts the driver's PCIe throughput reading
+// to bytes per second. NVML documents the unit as "KB/s"; whether that is
+// 1000 or 1024 bytes is pending live calibration, 1000 until proven
+// otherwise.
+const pcieThroughputKBMultiplier = 1000
+
+// collectExtras gathers the backend-specific readings that live outside the
+// query-field schema. Extras fail softly per the Reading contract: a family
+// that cannot be read is simply absent and the collection stays green. A
+// lifecycle-class return still marks the backend for re-initialization and
+// aborts the remaining extras work, since after markLost the library is
+// already shut down; whatever was collected before the abort is kept. The
+// caller holds the backend lock.
+//
+//nolint:cyclop // one linear pass over the extras families with per-device fallbacks
+func (b *Backend) collectExtras(ctx context.Context, opts CollectOptions) collect.Extras {
+	extras := collect.Extras{CUDAVersion: b.lastCUDAVersion}
+
+	if !b.initialized {
+		// a lifecycle error earlier in this cycle already tore NVML down
+		return extras
+	}
+
+	version, ret := b.api.cudaDriverVersion()
+
+	switch {
+	case ret == nvml.SUCCESS:
+		b.lastCUDAVersion = cudaVersionStr(version)
+		extras.CUDAVersion = b.lastCUDAVersion
+	case isLifecycleError(ret):
+		b.markLost()
+
+		return extras
+	default:
+		b.warnOnce("cuda-version", "cannot read the CUDA version", ret)
+	}
+
+	if !opts.Energy && !opts.PCIeThroughput {
+		return extras
+	}
+
+	count, ret := b.api.deviceCount()
+	if ret != nvml.SUCCESS {
+		b.extrasFailure("extras", "failed to enumerate devices for the extra metrics", ret)
+
+		return extras
+	}
+
+	for deviceIdx := range count {
+		if ctx.Err() != nil {
+			return extras
+		}
+
+		if !b.collectDeviceExtras(ctx, deviceIdx, opts, &extras) {
+			return extras
+		}
+	}
+
+	return extras
+}
+
+// collectDeviceExtras gathers one device's extras families. Reports whether
+// extras collection may continue: a non-lifecycle failure skips just this
+// device, a lifecycle-class one aborts the pass.
+func (b *Backend) collectDeviceExtras(
+	ctx context.Context,
+	deviceIdx int,
+	opts CollectOptions,
+	extras *collect.Extras,
+) bool {
+	dev, ret := b.api.deviceByIndex(deviceIdx)
+	if ret != nvml.SUCCESS {
+		return b.extrasFailure("extras", "failed to get a device for the extra metrics", ret)
+	}
+
+	uuid, ret := dev.GetUUID()
+	if ret != nvml.SUCCESS {
+		return b.extrasFailure("extras", "failed to get a device uuid for the extra metrics", ret)
+	}
+
+	uuid = nvidiasmi.NormalizeUUID(uuid)
+
+	if opts.Energy && !b.collectEnergy(dev, uuid, extras) {
+		return false
+	}
+
+	if opts.PCIeThroughput && !b.collectPcie(ctx, dev, uuid, extras) {
+		return false
+	}
+
+	return true
+}
+
+// collectEnergy appends one device's cumulative energy reading. A device
+// that cannot report it (pre-Volta) is skipped silently; other persistent
+// failures are logged once. Reports whether extras collection may continue.
+func (b *Backend) collectEnergy(dev nvml.Device, uuid string, extras *collect.Extras) bool {
+	millijoules, ret := dev.GetTotalEnergyConsumption()
+
+	//nolint:exhaustive // every other return is a plain failure
+	switch ret {
+	case nvml.SUCCESS:
+		extras.Energy = append(extras.Energy, collect.EnergyCounter{
+			UUID:   uuid,
+			Joules: float64(millijoules) / 1000.0,
+		})
+	case nvml.ERROR_NOT_SUPPORTED:
+	default:
+		return b.extrasFailure("energy", "cannot read the GPU energy counter", ret)
+	}
+
+	return true
+}
+
+// collectPcie appends one device's PCIe throughput sample. The two
+// directions are sampled over two consecutive 20ms driver windows, not one
+// simultaneous pair. Reports whether extras collection may continue.
+func (b *Backend) collectPcie(
+	ctx context.Context,
+	dev nvml.Device,
+	uuid string,
+	extras *collect.Extras,
+) bool {
+	tx, ret := dev.GetPcieThroughput(nvml.PCIE_UTIL_TX_BYTES)
+	if ret != nvml.SUCCESS {
+		return b.extrasFailure("pcie", "cannot sample the PCIe throughput", ret)
+	}
+
+	if ctx.Err() != nil {
+		return false
+	}
+
+	rx, ret := dev.GetPcieThroughput(nvml.PCIE_UTIL_RX_BYTES)
+	if ret != nvml.SUCCESS {
+		return b.extrasFailure("pcie", "cannot sample the PCIe throughput", ret)
+	}
+
+	extras.PCIe = append(extras.PCIe, collect.PCIeThroughput{
+		UUID:             uuid,
+		TXBytesPerSecond: float64(tx) * pcieThroughputKBMultiplier,
+		RXBytesPerSecond: float64(rx) * pcieThroughputKBMultiplier,
+	})
+
+	return true
+}
+
+// extrasFailure folds a failed extras call: a lifecycle-class return marks
+// the backend for re-initialization and stops the remaining extras work,
+// anything else skips just this reading. Either way the failure is logged
+// once per family. Reports whether extras collection may continue.
+func (b *Backend) extrasFailure(family, msg string, ret nvml.Return) bool {
+	b.warnOnce(family, msg, ret)
+
+	if isLifecycleError(ret) {
+		b.markLost()
+
+		return false
+	}
+
+	return true
+}
+
+// warnOnce logs a warning the first time a family fails, so a persistent
+// extras failure stays visible without flooding the log on every cycle.
+func (b *Backend) warnOnce(family, msg string, ret nvml.Return) {
+	if b.extrasWarned[family] {
+		return
+	}
+
+	if b.extrasWarned == nil {
+		b.extrasWarned = map[string]bool{}
+	}
+
+	b.extrasWarned[family] = true
+
+	b.logger.Warn(msg, "family", family, "nvml_return", ret.String())
 }

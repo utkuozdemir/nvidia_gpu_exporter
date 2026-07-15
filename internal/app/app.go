@@ -130,21 +130,30 @@ func Run(ctx context.Context, args []string, opts Options) error {
 			"How to collect GPU metrics. `exec` runs nvidia-smi (the default); `nvml` is "+
 				"experimental and reads the driver library (libnvidia-ml) directly, without "+
 				"nvidia-smi. The nvml backend requires Linux and a build with the backend "+
-				"compiled in, and exposes the same metrics as the exec backend.").
+				"compiled in. It exposes every metric the exec backend exposes, plus "+
+				"NVML-only extras (see the docs).").
 			Default(DefaultBackend).Enum("exec", "nvml")
 		collectInterval = app.Flag("collect.interval",
-			"Interval at which nvidia-smi runs in the background, with scrapes serving the most "+
-				"recent result. When 0, nvidia-smi runs synchronously on each scrape instead.").
+			"Interval at which the collection runs in the background, with scrapes serving "+
+				"the most recent result. When 0, the collection runs synchronously on each "+
+				"scrape instead.").
 			Default("0").Duration()
 		collectTimeout = app.Flag("collect.timeout",
-			"Maximum duration a single collection cycle may take, including all nvidia-smi runs "+
-				"within it and the runs at startup. 0 disables the bound.").
+			"Maximum duration a single collection cycle may take, including all the work "+
+				"within it (e.g. the nvidia-smi runs) and the runs at startup. 0 disables "+
+				"the bound.").
 			Default("10s").Duration()
 		collectComputeApps = app.Flag("collect.compute-apps",
-			"Also export per-process GPU metrics from `nvidia-smi --query-compute-apps`. "+
-				"Adds one nvidia-smi run per collection cycle. When the exporter runs in a "+
+			"Also export per-process GPU metrics (from `nvidia-smi --query-compute-apps`, "+
+				"or the equivalent NVML calls in nvml mode). When the exporter runs in a "+
 				"container, seeing other workloads' processes requires sharing the host PID "+
 				"namespace (hostPID in Kubernetes, --pid=host in Docker).").
+			Default("false").Bool()
+		collectPcieThroughput = app.Flag("collect.pcie-throughput",
+			"Also export the PCIe TX/RX throughput per GPU (requires --collect.backend=nvml). "+
+				"Each direction is sampled over a separate 20ms driver counter window, adding "+
+				"roughly 40ms per GPU to every collection cycle (~320ms on an 8-GPU node); "+
+				"pairing it with --collect.interval keeps scrapes unaffected.").
 			Default("false").Bool()
 		shutdownOnErr = app.Flag("shutdown-on-error",
 			"Shut down the exporter if there is a fatal collection error "+
@@ -181,10 +190,8 @@ func Run(ctx context.Context, args []string, opts Options) error {
 		return err
 	}
 
-	if *collectBackend == backendNVML && *nvidiaSmiCommand != nvidiasmi.DefaultCommand {
-		// a custom command signals intent (ssh wrappers, sudo) the nvml
-		// backend cannot honor, so it is an error rather than a silent ignore
-		return errors.New("--nvidia-smi-command cannot be combined with --collect.backend=nvml")
+	if err := validateBackendFlags(*collectBackend, *nvidiaSmiCommand, *collectPcieThroughput); err != nil {
+		return err
 	}
 
 	ctx, serverCancel := context.WithCancelCause(ctx)
@@ -205,6 +212,7 @@ func Run(ctx context.Context, args []string, opts Options) error {
 		interval:         *collectInterval,
 		timeout:          *collectTimeout,
 		computeApps:      *collectComputeApps,
+		pcieThroughput:   *collectPcieThroughput,
 		onFatal:          onFatal,
 	}
 
@@ -289,6 +297,23 @@ func serveHTTP(
 
 		return nil
 	})
+}
+
+// validateBackendFlags rejects flag combinations the chosen backend cannot
+// honor, as errors rather than silent ignores.
+func validateBackendFlags(backend, nvidiaSmiCommand string, pcieThroughput bool) error {
+	if backend == backendNVML && nvidiaSmiCommand != nvidiasmi.DefaultCommand {
+		// a custom command signals intent (ssh wrappers, sudo) the nvml
+		// backend cannot honor
+		return errors.New("--nvidia-smi-command cannot be combined with --collect.backend=nvml")
+	}
+
+	if backend != backendNVML && pcieThroughput {
+		// the throughput counters only exist in the driver library
+		return errors.New("--collect.pcie-throughput requires --collect.backend=nvml")
+	}
+
+	return nil
 }
 
 // validateCollectFlags rejects the flag values kingpin's types cannot.
@@ -392,6 +417,7 @@ type collectConfig struct {
 	interval         time.Duration
 	timeout          time.Duration
 	computeApps      bool
+	pcieThroughput   bool
 	onFatal          func(error)
 }
 
@@ -426,7 +452,14 @@ func setupExporter(
 		src = collect.NewLive(query, cfg.timeout, cfg.onFatal, logger)
 	}
 
-	exp := exporter.New(ctx, exporter.DefaultPrefix, resolved, src, cfg.computeApps, exitCodeMetric, logger)
+	features := exporter.Features{
+		ComputeApps: cfg.computeApps,
+		// the extras families exist only in the nvml backend
+		PCIeThroughput: cfg.pcieThroughput,
+		Energy:         cfg.backend == backendNVML,
+	}
+
+	exp := exporter.New(ctx, exporter.DefaultPrefix, resolved, src, features, exitCodeMetric, logger)
 
 	// the go and process collectors keep the exposed families identical to
 	// what the default registry used to serve
@@ -481,7 +514,13 @@ func setupBackend(
 			return nil
 		})
 
-		return resolved, backend.QueryFunc(resolved, cfg.computeApps), exporter.NVMLReturnCodeMetric, nil
+		opts := nvmlnative.CollectOptions{
+			ComputeApps:    cfg.computeApps,
+			PCIeThroughput: cfg.pcieThroughput,
+			Energy:         true,
+		}
+
+		return resolved, backend.QueryFunc(resolved, opts), exporter.NVMLReturnCodeMetric, nil
 	}
 
 	resolved, err := nvidiasmi.ResolveFields(
@@ -498,7 +537,13 @@ func setupBackend(
 			fmt.Errorf("failed to resolve query fields: %w", err)
 	}
 
-	return resolved, buildQueryFunc(cfg, resolved, logger), exporter.ExecExitCodeMetric, nil
+	// the CUDA version is not a query field and is effectively constant for
+	// the process lifetime (it changes with the driver, which requires the
+	// GPUs to be idle), so it is read once at startup, never per scrape
+	cudaVersion := nvidiasmi.QueryCudaVersion(
+		ctx, cfg.nvidiaSmiCommand, cfg.timeout, nvidiasmi.DefaultRunFunc, logger)
+
+	return resolved, buildQueryFunc(cfg, resolved, cudaVersion, logger), exporter.ExecExitCodeMetric, nil
 }
 
 // buildQueryFunc builds the collection cycle: the GPU query, plus the
@@ -508,6 +553,7 @@ func setupBackend(
 func buildQueryFunc(
 	cfg collectConfig,
 	resolved nvidiasmi.ResolvedFields,
+	cudaVersion string,
 	logger *slog.Logger,
 ) collect.QueryFunc {
 	return func(queryCtx context.Context) (collect.Reading, int, error) {
@@ -518,6 +564,7 @@ func buildQueryFunc(
 		}
 
 		reading := collect.Reading{Table: table}
+		reading.Extras.CUDAVersion = cudaVersion
 
 		if cfg.computeApps {
 			reading.AppsAttempted = true

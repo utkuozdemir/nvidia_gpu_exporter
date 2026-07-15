@@ -48,9 +48,10 @@ func (f *fakeAPI) api() nvmlAPI {
 
 			return f.devices[i], nvml.SUCCESS
 		},
-		driverVersion:   func() (string, nvml.Return) { return "590.48.01", nvml.SUCCESS },
-		processName:     func(int) (string, nvml.Return) { return "/usr/bin/burn", nvml.SUCCESS },
-		validateInforom: func(nvml.Device) nvml.Return { return nvml.SUCCESS },
+		driverVersion:     func() (string, nvml.Return) { return "590.48.01", nvml.SUCCESS },
+		cudaDriverVersion: func() (int, nvml.Return) { return 13010, nvml.SUCCESS },
+		processName:       func(int) (string, nvml.Return) { return "/usr/bin/burn", nvml.SUCCESS },
+		validateInforom:   func(nvml.Device) nvml.Return { return nvml.SUCCESS },
 	}
 }
 
@@ -115,7 +116,7 @@ func TestCollectHappyPath(t *testing.T) {
 	fake := &fakeAPI{devices: []nvml.Device{dev}}
 	backend := newTestBackend(t, fake)
 
-	reading, code, err := backend.QueryFunc(resolveFields(t, "power.draw"), false)(t.Context())
+	reading, code, err := backend.QueryFunc(resolveFields(t, "power.draw"), CollectOptions{})(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, 0, code)
 	assert.Equal(t, "12.34 W", cellValue(t, reading.Table, "power.draw"))
@@ -133,7 +134,7 @@ func TestNotSupportedBecomesAbsentToken(t *testing.T) {
 	fake := &fakeAPI{devices: []nvml.Device{dev}}
 	backend := newTestBackend(t, fake)
 
-	reading, _, err := backend.QueryFunc(resolveFields(t, "power.draw"), false)(t.Context())
+	reading, _, err := backend.QueryFunc(resolveFields(t, "power.draw"), CollectOptions{})(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, "[N/A]", cellValue(t, reading.Table, "power.draw"))
 }
@@ -153,7 +154,7 @@ func TestLifecycleErrorFailsCollectionAndReinitializes(t *testing.T) {
 
 	fake := &fakeAPI{devices: []nvml.Device{dev}}
 	backend := newTestBackend(t, fake)
-	query := backend.QueryFunc(resolveFields(t, "power.draw"), false)
+	query := backend.QueryFunc(resolveFields(t, "power.draw"), CollectOptions{})
 
 	_, code, err := query(t.Context())
 	require.Error(t, err)
@@ -179,7 +180,7 @@ func TestZeroDevicesIsAFailedCollection(t *testing.T) {
 	fake := &fakeAPI{}
 	backend := newTestBackend(t, fake)
 
-	_, _, err := backend.QueryFunc(resolveFields(t, "power.draw"), false)(t.Context())
+	_, _, err := backend.QueryFunc(resolveFields(t, "power.draw"), CollectOptions{})(t.Context())
 	require.ErrorContains(t, err, "no NVML devices")
 
 	var fatal *collect.FatalError
@@ -203,7 +204,7 @@ func TestUnknownFieldValueTypeDoesNotPanic(t *testing.T) {
 	fake := &fakeAPI{devices: []nvml.Device{dev}}
 	backend := newTestBackend(t, fake)
 
-	reading, _, err := backend.QueryFunc(resolveFields(t, "power.draw.average"), false)(t.Context())
+	reading, _, err := backend.QueryFunc(resolveFields(t, "power.draw.average"), CollectOptions{})(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, "[N/A]", cellValue(t, reading.Table, "power.draw.average"))
 }
@@ -220,7 +221,12 @@ func TestComputeAppsFailSoftlyButMarkLifecycle(t *testing.T) {
 	fake := &fakeAPI{devices: []nvml.Device{dev}}
 	backend := newTestBackend(t, fake)
 
-	reading, code, err := backend.QueryFunc(resolveFields(t, "power.draw"), true)(t.Context())
+	reading, code, err := backend.QueryFunc(
+		resolveFields(t, "power.draw"),
+		CollectOptions{ComputeApps: true},
+	)(
+		t.Context(),
+	)
 	require.NoError(t, err, "per-process failures must not fail the collection")
 	assert.Equal(t, 0, code)
 	assert.True(t, reading.AppsAttempted)
@@ -241,7 +247,7 @@ func TestComputeAppsHappyPath(t *testing.T) {
 	fake := &fakeAPI{devices: []nvml.Device{dev}}
 	backend := newTestBackend(t, fake)
 
-	reading, _, err := backend.QueryFunc(resolveFields(t, "power.draw"), true)(t.Context())
+	reading, _, err := backend.QueryFunc(resolveFields(t, "power.draw"), CollectOptions{ComputeApps: true})(t.Context())
 	require.NoError(t, err)
 	require.Len(t, reading.Apps, 1)
 	assert.Equal(t, "4242", reading.Apps[0].PID)
@@ -263,7 +269,7 @@ func TestAbandonedCollectionFailsFastAndRecovers(t *testing.T) {
 
 	fake := &fakeAPI{devices: []nvml.Device{dev}}
 	backend := newTestBackend(t, fake)
-	query := backend.QueryFunc(resolveFields(t, "power.draw"), false)
+	query := backend.QueryFunc(resolveFields(t, "power.draw"), CollectOptions{})
 
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
@@ -311,7 +317,7 @@ func TestCloseSkipsWhenCollectionHoldsTheDriver(t *testing.T) {
 
 	fake := &fakeAPI{devices: []nvml.Device{dev}}
 	backend := newTestBackend(t, fake)
-	query := backend.QueryFunc(resolveFields(t, "power.draw"), false)
+	query := backend.QueryFunc(resolveFields(t, "power.draw"), CollectOptions{})
 
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
@@ -347,7 +353,7 @@ func TestFunctionNotFoundIsLoggedOnce(t *testing.T) {
 	backend, err := newWithAPI(fake.api(), slog.New(handler))
 	require.NoError(t, err)
 
-	query := backend.QueryFunc(resolveFields(t, "power.draw"), false)
+	query := backend.QueryFunc(resolveFields(t, "power.draw"), CollectOptions{})
 
 	reading, _, err := query(t.Context())
 	require.NoError(t, err, "a missing optional function must not fail the collection")
@@ -360,4 +366,248 @@ func TestFunctionNotFoundIsLoggedOnce(t *testing.T) {
 	handler.AssertMessage("required NVML functions are unavailable in this driver; " +
 		"the affected fields will be absent - please report this on the project's issue tracker")
 	handler.AssertEmpty()
+}
+
+func TestExtrasCudaVersionRetainedAcrossTransientFailure(t *testing.T) {
+	t.Parallel()
+
+	dev := identityDevice()
+	dev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 12340, nvml.SUCCESS }
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+
+	failing := false
+	api := fake.api()
+	api.cudaDriverVersion = func() (int, nvml.Return) {
+		if failing {
+			return 0, nvml.ERROR_UNKNOWN
+		}
+
+		return 13010, nvml.SUCCESS
+	}
+
+	backend, err := newWithAPI(api, slogt.New(t))
+	require.NoError(t, err)
+
+	query := backend.QueryFunc(resolveFields(t, "power.draw"), CollectOptions{})
+
+	reading, _, err := query(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "13.1", reading.Extras.CUDAVersion)
+
+	// a transient failure must not flap the label to empty
+	failing = true
+
+	reading, _, err = query(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "13.1", reading.Extras.CUDAVersion)
+}
+
+func TestExtrasCudaVersionUnavailable(t *testing.T) {
+	t.Parallel()
+
+	dev := identityDevice()
+	dev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 12340, nvml.SUCCESS }
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+
+	api := fake.api()
+	api.cudaDriverVersion = func() (int, nvml.Return) { return 0, nvml.ERROR_FUNCTION_NOT_FOUND }
+
+	backend, err := newWithAPI(api, slogt.New(t))
+	require.NoError(t, err)
+
+	reading, _, err := backend.QueryFunc(resolveFields(t, "power.draw"), CollectOptions{})(t.Context())
+	require.NoError(t, err, "an unreadable CUDA version must not fail the collection")
+	assert.Empty(t, reading.Extras.CUDAVersion)
+}
+
+func TestExtrasEnergyCounter(t *testing.T) {
+	t.Parallel()
+
+	dev := identityDevice()
+	dev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 12340, nvml.SUCCESS }
+	dev.GetTotalEnergyConsumptionFunc = func() (uint64, nvml.Return) { return 12345678, nvml.SUCCESS }
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
+
+	opts := CollectOptions{Energy: true}
+
+	reading, code, err := backend.QueryFunc(resolveFields(t, "power.draw"), opts)(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, 0, code)
+
+	require.Len(t, reading.Extras.Energy, 1)
+	assert.Equal(t, "11111111-2222-3333-4444-555555555555", reading.Extras.Energy[0].UUID)
+	assert.InDelta(t, 12345.678, reading.Extras.Energy[0].Joules, 1e-9)
+	// the pcie getter has no stub: reaching it would have panicked, so this
+	// test also proves the disabled extras are never collected
+}
+
+func TestExtrasEnergyNotSupportedSkipsDevice(t *testing.T) {
+	t.Parallel()
+
+	dev := identityDevice()
+	dev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 12340, nvml.SUCCESS }
+	dev.GetTotalEnergyConsumptionFunc = func() (uint64, nvml.Return) {
+		return 0, nvml.ERROR_NOT_SUPPORTED
+	}
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
+
+	reading, _, err := backend.QueryFunc(resolveFields(t, "power.draw"), CollectOptions{Energy: true})(t.Context())
+	require.NoError(t, err, "a pre-Volta GPU must not fail the collection")
+	assert.Empty(t, reading.Extras.Energy)
+}
+
+func TestExtrasPcieThroughput(t *testing.T) {
+	t.Parallel()
+
+	dev := identityDevice()
+	dev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 12340, nvml.SUCCESS }
+	dev.GetPcieThroughputFunc = func(counter nvml.PcieUtilCounter) (uint32, nvml.Return) {
+		if counter == nvml.PCIE_UTIL_TX_BYTES {
+			return 100, nvml.SUCCESS
+		}
+
+		return 200, nvml.SUCCESS
+	}
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
+
+	opts := CollectOptions{PCIeThroughput: true}
+
+	reading, _, err := backend.QueryFunc(resolveFields(t, "power.draw"), opts)(t.Context())
+	require.NoError(t, err)
+
+	require.Len(t, reading.Extras.PCIe, 1)
+	assert.Equal(t, "11111111-2222-3333-4444-555555555555", reading.Extras.PCIe[0].UUID)
+	assert.InDelta(t, 100000, reading.Extras.PCIe[0].TXBytesPerSecond, 1e-9)
+	assert.InDelta(t, 200000, reading.Extras.PCIe[0].RXBytesPerSecond, 1e-9)
+}
+
+func TestExtrasLifecycleErrorStaysSoftAndMarksLost(t *testing.T) {
+	t.Parallel()
+
+	lost := true
+	dev := identityDevice()
+	dev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 12340, nvml.SUCCESS }
+	dev.GetTotalEnergyConsumptionFunc = func() (uint64, nvml.Return) {
+		if lost {
+			return 0, nvml.ERROR_GPU_IS_LOST
+		}
+
+		return 1000, nvml.SUCCESS
+	}
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
+	query := backend.QueryFunc(resolveFields(t, "power.draw"), CollectOptions{Energy: true})
+
+	// the cycle stays green: extras never fail the collection, but the
+	// lifecycle-class return still marks the backend for re-initialization
+	reading, code, err := query(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, 0, code)
+	assert.Empty(t, reading.Extras.Energy)
+	assert.Equal(t, "12.34 W", cellValue(t, reading.Table, "power.draw"))
+
+	lost = false
+
+	reading, _, err = query(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, 2, fake.inits, "the next cycle must re-initialize NVML")
+	require.Len(t, reading.Extras.Energy, 1)
+}
+
+func TestExtrasNonLifecycleFailureSkipsOnlyThatDevice(t *testing.T) {
+	t.Parallel()
+
+	// device 0's uuid reads fine during the table pass but fails with a
+	// non-lifecycle error during the extras pass: only that device's extras
+	// may be dropped, device 1 must still report
+	dev0 := identityDevice()
+	dev0.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 12340, nvml.SUCCESS }
+
+	uuidCalls := 0
+	dev0.GetUUIDFunc = func() (string, nvml.Return) {
+		uuidCalls++
+		if uuidCalls > 1 {
+			return "", nvml.ERROR_UNKNOWN
+		}
+
+		return "GPU-11111111-2222-3333-4444-555555555555", nvml.SUCCESS
+	}
+
+	dev1 := identityDevice()
+	dev1.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 12340, nvml.SUCCESS }
+	dev1.GetUUIDFunc = func() (string, nvml.Return) {
+		return "GPU-99999999-2222-3333-4444-555555555555", nvml.SUCCESS
+	}
+	dev1.GetTotalEnergyConsumptionFunc = func() (uint64, nvml.Return) { return 2000, nvml.SUCCESS }
+
+	fake := &fakeAPI{devices: []nvml.Device{dev0, dev1}}
+	backend := newTestBackend(t, fake)
+
+	reading, _, err := backend.QueryFunc(resolveFields(t, "power.draw"), CollectOptions{Energy: true})(t.Context())
+	require.NoError(t, err)
+
+	require.Len(t, reading.Extras.Energy, 1, "device 1 must survive device 0's non-lifecycle failure")
+	assert.Equal(t, "99999999-2222-3333-4444-555555555555", reading.Extras.Energy[0].UUID)
+	assert.Equal(t, 0, fake.shutdowns, "a non-lifecycle failure must not tear NVML down")
+}
+
+func TestExtrasLifecycleAbortsRemainingDevices(t *testing.T) {
+	t.Parallel()
+
+	// device 0's energy read hits a lifecycle error with PCIe also enabled:
+	// device 0's pcie getter and device 1's energy getter have no stubs, so
+	// reaching either would panic, proving the abort covers the rest of the
+	// device and all later devices
+	dev0 := identityDevice()
+	dev0.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 12340, nvml.SUCCESS }
+	dev0.GetTotalEnergyConsumptionFunc = func() (uint64, nvml.Return) {
+		return 0, nvml.ERROR_GPU_IS_LOST
+	}
+
+	dev1 := identityDevice()
+	dev1.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 12340, nvml.SUCCESS }
+	dev1.GetUUIDFunc = func() (string, nvml.Return) {
+		return "GPU-99999999-2222-3333-4444-555555555555", nvml.SUCCESS
+	}
+
+	fake := &fakeAPI{devices: []nvml.Device{dev0, dev1}}
+	backend := newTestBackend(t, fake)
+
+	opts := CollectOptions{Energy: true, PCIeThroughput: true}
+
+	reading, code, err := backend.QueryFunc(resolveFields(t, "power.draw"), opts)(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, 0, code)
+	assert.Empty(t, reading.Extras.Energy)
+	assert.Empty(t, reading.Extras.PCIe)
+	assert.Equal(t, 1, fake.shutdowns, "the lifecycle error must mark the backend for re-init")
+}
+
+func TestExtrasPcieNotSupportedSkipsDevice(t *testing.T) {
+	t.Parallel()
+
+	dev := identityDevice()
+	dev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 12340, nvml.SUCCESS }
+	dev.GetPcieThroughputFunc = func(nvml.PcieUtilCounter) (uint32, nvml.Return) {
+		return 0, nvml.ERROR_NOT_SUPPORTED
+	}
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
+
+	opts := CollectOptions{PCIeThroughput: true}
+
+	reading, _, err := backend.QueryFunc(resolveFields(t, "power.draw"), opts)(t.Context())
+	require.NoError(t, err, "an unsupported PCIe counter must not fail the collection")
+	assert.Empty(t, reading.Extras.PCIe)
+	assert.Equal(t, 0, fake.shutdowns, "NOT_SUPPORTED is not a lifecycle error")
 }

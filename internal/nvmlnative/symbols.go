@@ -27,7 +27,22 @@ var nvmlSymbolRequirements = []symbolRequirement{
 		serves: "device enumeration",
 	},
 	{goCall: "driverVersion", anyOf: []string{"nvmlSystemGetDriverVersion"}, serves: "driver_version"},
+	{
+		goCall: "cudaDriverVersion",
+		anyOf:  []string{"nvmlSystemGetCudaDriverVersion"},
+		serves: "gpu_info cuda_version label",
+	},
 	{goCall: "processName", anyOf: []string{"nvmlSystemGetProcessName"}, serves: "per-process metrics"},
+	{
+		goCall: "GetTotalEnergyConsumption",
+		anyOf:  []string{"nvmlDeviceGetTotalEnergyConsumption"},
+		serves: "energy_joules_total",
+	},
+	{
+		goCall: "GetPcieThroughput",
+		anyOf:  []string{"nvmlDeviceGetPcieThroughput"},
+		serves: "pcie_throughput_*_bytes_per_second",
+	},
 	{goCall: "validateInforom", anyOf: []string{"nvmlDeviceValidateInforom"}, serves: "inforom.checksum_validation"},
 	{
 		goCall: "GetName",

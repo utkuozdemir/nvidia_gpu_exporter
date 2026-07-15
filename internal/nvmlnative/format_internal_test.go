@@ -69,3 +69,13 @@ func TestUUIDBytes(t *testing.T) {
 	assert.Equal(t, "01020304-0506-0708-090a-0b0c0d0e0f10",
 		uuidBytes([16]uint8{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}))
 }
+
+func TestCudaVersionStr(t *testing.T) {
+	t.Parallel()
+
+	// 13010 is the encoded form of the capture-verified "13.1" (driver 590)
+	assert.Equal(t, "13.1", cudaVersionStr(13010))
+	assert.Equal(t, "13.3", cudaVersionStr(13030))
+	assert.Equal(t, "12.8", cudaVersionStr(12080))
+	assert.Equal(t, "0.0", cudaVersionStr(0))
+}
