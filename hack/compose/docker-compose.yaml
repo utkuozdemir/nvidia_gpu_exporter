@@ -1,78 +1,69 @@
 name: nvidia-gpu-exporter-dev
 
-# Local dev stack, two flavors side by side (see README.md):
-#   exec flavor: node1/node2 run the exporter against a fake nvidia-smi
-#     binary, scraped by `prometheus` (:9090)
-#   demo flavor: demo1/demo2 run the exporter's demo backend (the
-#     nvml-superset surface - MIG, XID, energy, PCIe - synthesized
-#     in-process), scraped by `prometheus-demo` (:9091)
-# Grafana carries both Prometheuses as data sources; the dashboards'
-# data source dropdown flips between the two worlds.
+# Local dev stack: two simulated machines, each served through BOTH backend
+# flavors, so the Grafana data source dropdown compares the same machine's
+# exec surface against its NVML surface and every visible difference is a
+# real surface difference (see README.md):
+#   machine "consumer" (machines/consumer.yaml): eight consumer cards, one sick
+#   machine "datacenter" (machines/datacenter.yaml): two H200s with MIG and XID history
+#   exec flavor:  exec-consumer / exec-datacenter -> scraped by `prometheus` (:9090)
+#   nvml flavor:  nvml-consumer / nvml-datacenter -> scraped by `prometheus-demo` (:9091)
+# Both Prometheuses relabel the same machine to the same instance name
+# ("consumer", "datacenter"), so switching the data source keeps the node selection.
 
 services:
-  # first "node": eight consumer cards incl. one deliberately sick, fake.yaml
-  node1:
+  exec-consumer:
     build:
       context: ../..
       dockerfile: hack/compose/Dockerfile
     command:
-      - "--nvidia-smi-command=/usr/local/bin/fake-nvidia-smi --config /etc/fake/fake.yaml"
+      - "--nvidia-smi-command=/usr/local/bin/fake-nvidia-smi --config /etc/machines/consumer.yaml"
       - "--collect.compute-apps"
     volumes:
       # mount the directory, not the file: editors replace the file via
       # atomic rename, which breaks a single-file bind mount (stale inode).
       # git operations that rewrite this directory (rebase, checkout) break
       # even the directory mount the same way - restart this service then.
-      - ./fake:/etc/fake:ro
+      - ./machines:/etc/machines:ro
     ports:
       - "9835:9835"
 
-  # second "node": same exporter image, different fake (passive L40S cards,
-  # fake2.yaml), so the dashboards can prove per-node filtering, joins and
-  # links do not bleed across instances. See fake/fake2.yaml.
-  node2:
+  exec-datacenter:
     build:
       context: ../..
       dockerfile: hack/compose/Dockerfile
     command:
-      - "--nvidia-smi-command=/usr/local/bin/fake-nvidia-smi --config /etc/fake/fake2.yaml"
+      - "--nvidia-smi-command=/usr/local/bin/fake-nvidia-smi --config /etc/machines/datacenter.yaml"
       - "--collect.compute-apps"
     volumes:
-      - ./fake:/etc/fake:ro
+      - ./machines:/etc/machines:ro
     ports:
       - "9836:9835"
 
-  # third and fourth "nodes": the demo backend, serving the nvml-superset
-  # families (mig_*, xid_*, energy, pcie) with synthetic data and no fake
-  # binary involved. demo1 is the rich one: MIG topology with a multi-CI GPU
-  # instance (the live probe for dashboard join cardinality), XID history and
-  # ongoing events. demo2 is a plain consumer card, proving per-node
-  # filtering and the dashboards' handling of absent NVML families. Both
-  # re-read their config file on every collection cycle: edit, save, scrape.
-  demo1:
+  nvml-consumer:
     build:
       context: ../..
       dockerfile: hack/compose/Dockerfile
     command:
       - "--collect.backend=demo"
-      - "--demo-config=/etc/demo/demo1.yaml"
+      - "--demo-config=/etc/machines/consumer.yaml"
       - "--collect.compute-apps"
-      - "--collect.compute-apps-mig"
     volumes:
-      - ./demo:/etc/demo:ro
+      - ./machines:/etc/machines:ro
     ports:
       - "9837:9835"
 
-  demo2:
+  nvml-datacenter:
     build:
       context: ../..
       dockerfile: hack/compose/Dockerfile
     command:
       - "--collect.backend=demo"
-      - "--demo-config=/etc/demo/demo2.yaml"
+      - "--demo-config=/etc/machines/datacenter.yaml"
       - "--collect.compute-apps"
+      - "--collect.compute-apps-mig"
     volumes:
-      - ./demo:/etc/demo:ro
+      - ./machines:/etc/machines:ro
     ports:
       - "9838:9835"
 
@@ -84,8 +75,8 @@ services:
       - ./prometheus/config:/etc/prometheus
       - prometheus-data:/prometheus
     depends_on:
-      - node1
-      - node2
+      - exec-consumer
+      - exec-datacenter
 
   prometheus-demo:
     image: prom/prometheus:v3.13.1
@@ -95,8 +86,8 @@ services:
       - ./prometheus/config-demo:/etc/prometheus
       - prometheus-demo-data:/prometheus
     depends_on:
-      - demo1
-      - demo2
+      - nvml-consumer
+      - nvml-datacenter
 
   grafana:
     image: grafana/grafana:13.1.0

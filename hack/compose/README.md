@@ -1,22 +1,28 @@
 # Local dev stack
 
-A one-command stack for developing the exporter and its Grafana dashboards on a
-machine with **no GPU**. It runs two flavors side by side:
+A one-command stack for developing the exporter and its Grafana dashboards on
+a machine with **no GPU**. It simulates two machines and serves each through
+**both** backend flavors, so the dashboards can compare the same machine's
+exec surface against its NVML surface and every visible difference is a real
+surface difference, not a different-simulated-hardware artifact:
 
-- **exec flavor** — the real exporter against the fake nvidia-smi binary
-  (`cmd/fake-nvidia-smi`): `node1` (an eight-GPU consumer box on `fake.yaml`,
-  one card deliberately sick) and `node2` (a two-GPU passive L40S box on
-  `fake2.yaml`), scraped by `prometheus` (:9090).
-- **demo flavor** — the exporter's built-in demo backend
-  (`--collect.backend=demo`), which serves the NVML-superset surface (MIG
-  instances, XID error counters, energy, PCIe throughput) with synthetic
-  data: `demo1` (two H200s with a MIG topology and XID history, `demo1.yaml`)
-  and `demo2` (a single consumer card, `demo2.yaml`), scraped by
-  `prometheus-demo` (:9091).
+- **machine "consumer"** (`machines/consumer.yaml`): an eight-GPU consumer inference
+  box, one card deliberately sick (health banner, throttle timeline,
+  temperature alerts).
+- **machine "datacenter"** (`machines/datacenter.yaml`): two healthy H200s with a MIG
+  topology (one GPU instance deliberately hosting two compute instances, the
+  live probe for dashboard join cardinality) and an XID error history.
 
-Grafana carries both Prometheuses as data sources, so the dashboards' data
-source dropdown flips between the two worlds. The provisioned dev dashboards
-preselect the demo flavor, the richer surface where dashboard work happens.
+Flavors: `exec-consumer`/`exec-datacenter` run the real exec pipeline against the fake
+nvidia-smi binary, scraped by `prometheus` (:9090); `nvml-consumer`/`nvml-datacenter` run
+the demo backend, which serves the NVML surface (MIG, XID, energy, PCIe) on
+top of the same table, scraped by `prometheus-demo` (:9091). Both
+Prometheuses label the same machine with the same instance name (`consumer`,
+`datacenter`), so flipping the Grafana data source dropdown keeps the node selection
+pointed at the same machine.
+
+The provisioned dev dashboards preselect the NVML data source, the richer
+surface where dashboard work happens.
 
 ## Run
 
@@ -28,12 +34,13 @@ preselect the demo flavor, the richer surface where dashboard work happens.
 Then open:
 
 - Grafana: <http://localhost:3000> (anonymous admin, no login) — the **Nvidia GPU
-  Metrics** and **Nvidia GPU Overview** dashboards are provisioned, pointed at
-  the demo Prometheus; switch the *Data source* dropdown for the exec flavor.
-- Prometheus (exec): <http://localhost:9090>, (demo): <http://localhost:9091>
-- Exporter metrics: <http://localhost:9835/metrics> (node1),
-  <http://localhost:9836/metrics> (node2), <http://localhost:9837/metrics>
-  (demo1), <http://localhost:9838/metrics> (demo2)
+  Metrics** and **Nvidia GPU Overview** dashboards are provisioned; switch the
+  *Data source* dropdown between "Prometheus - NVML" and "Prometheus - Exec"
+  to compare the two surfaces of the selected machine.
+- Prometheus (exec): <http://localhost:9090>, (NVML): <http://localhost:9091>
+- Exporter metrics: <http://localhost:9835/metrics> (exec-consumer),
+  <http://localhost:9836/metrics> (exec-datacenter), <http://localhost:9837/metrics>
+  (nvml-consumer), <http://localhost:9838/metrics> (nvml-datacenter)
 
 Stop and wipe the throwaway state (Prometheus/Grafana volumes):
 
@@ -41,28 +48,44 @@ Stop and wipe the throwaway state (Prometheus/Grafana volumes):
 cd hack/compose && docker compose down -v
 ```
 
-The compose code, provisioning, and the fake/demo configs are committed and
+The compose code, provisioning and the machine configs are committed and
 maintained; the running containers and their data volumes are disposable.
-The data sources are named after the flavor they serve (Prometheus - Exec,
-Prometheus - NVML). Volumes created before these names existed make Grafana
-fail provisioning at startup; run `docker compose down -v` once to reset the
-throwaway state.
+Volumes created by earlier revisions of this stack (different data source or
+service names) make Grafana or Prometheus trip over stale state; run
+`docker compose down -v` once to reset.
 
 `render-dashboard.sh` (run by `up.sh`) needs `python3` on the host, in
 addition to Docker.
 
+## What "same machine, two surfaces" means (and its limits)
+
+Both flavors of a machine read the same YAML file: same capture, same GPU
+identities (the generated uuids are derived from the GPU index, identically
+in both flavors), same overrides, same jitter bands. Values still jitter
+independently per flavor (each invocation draws its own randomness), so the
+two data sources show the same machine under the same conditions, not
+tick-identical numbers. Structural differences that remain are real:
+
+- The NVML flavor serves the extras families (`mig_*`, `xid_*`,
+  `energy_joules_total`, `pcie_throughput_*`) and `nvml_return_code`; the
+  exec flavor serves `command_exit_code` and no extras. That is the honest
+  difference between the surfaces.
+- The NVML flavor synthesizes the extras (the demo backend approximates the
+  real nvml backend's surface); the sick-GPU drama and the whole table are
+  identical in kind on both sides.
+
 ## Make the data interesting
 
-### exec flavor
-
-`fake/fake.yaml` drives the fake. `fluctuate: true` jitters everything that
-naturally moves (utilization, temperature, power, clocks, fan, memory) around
-the captured values, `gpus:` simulates eight cards from the single-GPU capture
-(the last one deliberately sick, to preview the health states in the GPU
-dropdown), and `overrides:` drive the states the jitter does not cover, like
-the throttle flags. The fake is invoked fresh on every scrape, so **editing
-`fake/fake.yaml` changes the next scrape with no restart** (give it one scrape
-interval). To preview a specific panel state, pin a field:
+`machines/*.yaml` drive everything. `fluctuate: true` jitters what naturally
+moves (utilization, temperature, power, clocks, fan, memory) around the
+captured values, `gpus:` replicates the capture into several cards with
+stable identities and per-GPU overrides (consumer's last card carries the sick
+overrides), and `overrides:` pin the states jitter does not cover. Both
+flavors re-read the file on every scrape/collection cycle, so **editing a
+machine file changes the next scrape of both its flavors, no restart** (give
+it one scrape interval; an edit resets the NVML flavor's synthesized
+counters, like a driver reload). To preview a specific panel state, pin a
+field:
 
 ```yaml
 overrides:
@@ -70,22 +93,12 @@ overrides:
   temperature.gpu: 95            # drive the temperature threshold color
 ```
 
-Field names are nvidia-smi query fields; see `internal/captures/README.md`. To
-drive a different card, change `capture:` to any embedded capture name.
-`fake2.yaml` drives the second exporter the same way; its passive L40S cards
-report no fan speed, which exercises the "metric absent" paths on the
-dashboards.
-
-### demo flavor
-
-`demo/demo1.yaml` and `demo/demo2.yaml` use the same format plus a
-demo-specific `extras:` block (MIG topology, XID events, PCIe ranges; the
-full reference is the demo mode section in `docs/CONFIGURE.md`). The demo
-backend re-reads its file on every collection cycle, so edits apply live
-here too; an edit resets the synthesized counters, like a driver reload.
-demo1's MIG topology deliberately hosts two compute instances on one GPU
-instance: any dashboard join that forgets to pre-aggregate `mig_info` per
-GPU instance shows doubled values here before it ships.
+Field names are nvidia-smi query fields; see `internal/captures/README.md`.
+To drive a different card, change `capture:` to any embedded capture name
+(the demo backend embeds the H200 and RTX 4080 SUPER captures; the fake
+binary embeds the full corpus). The `extras:` block (MIG topology, XID
+events, PCIe ranges) is read by the demo backend and ignored by the fake —
+the full reference is the demo mode section in `docs/CONFIGURE.md`.
 
 ## Iterate on the dashboards
 
@@ -94,10 +107,10 @@ The dashboards are authored in the Grafana UI and exported to
 `docs/grafana/dashboard-overview.json` (multi-GPU comparison). Those files
 select their data source through a template variable; `render-dashboard.sh`
 copies them into the provisioning directory, flipping `editable` on and
-preselecting the demo data source (the published artifacts themselves stay
+preselecting the NVML data source (the published artifacts themselves stay
 data-source-neutral).
 
 Loop: edit the JSON under `docs/grafana/` (or edit in the UI and export it
-there), run `./hack/compose/render-dashboard.sh`, and Grafana reloads within a
-few seconds. Keep each `docs/grafana/*.json` and its copy under
+there), run `./hack/compose/render-dashboard.sh`, and Grafana reloads within
+a few seconds. Keep each `docs/grafana/*.json` and its copy under
 `charts/nvidia-gpu-exporter/dashboards/` byte-identical.

@@ -16,6 +16,11 @@ set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 
+# the output directory is render output, nothing else: clear it first so a
+# stale file from an older revision of the stack cannot linger as a ghost
+# dashboard in Grafana
+rm -f "$here/grafana/dashboards/"*.json
+
 render() {
   local src="$here/../../docs/grafana/$1"
   local dst="$here/grafana/dashboards/$2"

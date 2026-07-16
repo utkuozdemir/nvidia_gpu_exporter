@@ -1,0 +1,23 @@
+# Machine "datacenter": two healthy H200s, a MIG topology on GPU 0 whose first GPU
+# instance hosts two compute instances (the live probe for dashboard join
+# cardinality), a pre-seeded XID history and slow ongoing XID events. Served
+# by BOTH dev-stack flavors: exec-datacenter replays the table through the fake
+# nvidia-smi (which ignores the extras block - the exec surface honestly has
+# no MIG/XID/energy families), nvml-datacenter serves the full surface through the
+# demo backend. Both re-read this file on every scrape/collection cycle; a
+# demo-side edit resets the synthesized counters, like a driver reload.
+capture: linux-x86_64__nvidia-h200__590.48.01
+state: load
+fluctuate: true
+gpus: 2
+extras:
+  mig:
+    - gpu: 0
+      instances:
+        - {gi: 2, profile: 3g.71gb, cis: 2, busy: true}
+        - {gi: 7, profile: 1g.18gb}
+  xids:
+    initial:
+      - {gpu: 1, xid: 79, count: 2}
+      - {gpu: 0, xid: 13, count: 1}
+    interval: 5m
