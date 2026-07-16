@@ -4,7 +4,9 @@ package nvmlnative
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,7 +25,8 @@ import (
 // devices panic on any method without a stub, so these tests double as proof
 // that unrequested getters are never called (the collection plan).
 type fakeAPI struct {
-	inits, shutdowns int
+	// atomics: the XID watcher drives init/shutdown from its own goroutine
+	inits, shutdowns atomic.Int64
 	devices          []nvml.Device
 	initRet          nvml.Return
 }
@@ -31,12 +34,12 @@ type fakeAPI struct {
 func (f *fakeAPI) api() nvmlAPI {
 	return nvmlAPI{
 		init: func() nvml.Return {
-			f.inits++
+			f.inits.Add(1)
 
 			return f.initRet
 		},
 		shutdown: func() nvml.Return {
-			f.shutdowns++
+			f.shutdowns.Add(1)
 
 			return nvml.SUCCESS
 		},
@@ -51,6 +54,7 @@ func (f *fakeAPI) api() nvmlAPI {
 		driverVersion:     func() (string, nvml.Return) { return "590.48.01", nvml.SUCCESS },
 		cudaDriverVersion: func() (int, nvml.Return) { return 13010, nvml.SUCCESS },
 		processName:       func(int) (string, nvml.Return) { return "/usr/bin/burn", nvml.SUCCESS },
+		lookupSymbol:      func(string) error { return nil },
 		validateInforom:   func(nvml.Device) nvml.Return { return nvml.SUCCESS },
 	}
 }
@@ -163,7 +167,7 @@ func TestLifecycleErrorFailsCollectionAndReinitializes(t *testing.T) {
 	var fatal *collect.FatalError
 
 	require.ErrorAs(t, err, &fatal, "lifecycle errors must drive shutdown-on-error")
-	assert.Equal(t, 1, fake.shutdowns, "backend must tear NVML down after a lifecycle error")
+	assert.Equal(t, int64(1), fake.shutdowns.Load(), "backend must tear NVML down after a lifecycle error")
 
 	// recovery: the next cycle re-initializes and succeeds
 	lost = false
@@ -171,7 +175,7 @@ func TestLifecycleErrorFailsCollectionAndReinitializes(t *testing.T) {
 	_, code, err = query(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, 0, code)
-	assert.Equal(t, 2, fake.inits, "the recovery cycle must re-initialize NVML")
+	assert.Equal(t, int64(2), fake.inits.Load(), "the recovery cycle must re-initialize NVML")
 }
 
 func TestZeroDevicesIsAFailedCollection(t *testing.T) {
@@ -232,7 +236,12 @@ func TestComputeAppsFailSoftlyButMarkLifecycle(t *testing.T) {
 	assert.True(t, reading.AppsAttempted)
 	assert.False(t, reading.AppsSuccess)
 	require.Error(t, reading.AppsErr)
-	assert.Equal(t, 1, fake.shutdowns, "a lost GPU during per-process collection must still mark for re-init")
+	assert.Equal(
+		t,
+		int64(1),
+		fake.shutdowns.Load(),
+		"a lost GPU during per-process collection must still mark for re-init",
+	)
 }
 
 func TestComputeAppsHappyPath(t *testing.T) {
@@ -301,7 +310,7 @@ func TestCloseShutsDownOnce(t *testing.T) {
 	backend.Close()
 	backend.Close() // idempotent
 
-	assert.Equal(t, 1, fake.shutdowns)
+	assert.Equal(t, int64(1), fake.shutdowns.Load())
 }
 
 func TestCloseSkipsWhenCollectionHoldsTheDriver(t *testing.T) {
@@ -338,7 +347,7 @@ func TestCloseSkipsWhenCollectionHoldsTheDriver(t *testing.T) {
 		t.Fatal("Close hung behind a wedged driver call")
 	}
 
-	assert.Equal(t, 0, fake.shutdowns, "Close must skip shutdown while the driver is held")
+	assert.Equal(t, int64(0), fake.shutdowns.Load(), "Close must skip shutdown while the driver is held")
 	close(release)
 }
 
@@ -519,7 +528,7 @@ func TestExtrasLifecycleErrorStaysSoftAndMarksLost(t *testing.T) {
 
 	reading, _, err = query(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, 2, fake.inits, "the next cycle must re-initialize NVML")
+	assert.Equal(t, int64(2), fake.inits.Load(), "the next cycle must re-initialize NVML")
 	require.Len(t, reading.Extras.Energy, 1)
 }
 
@@ -557,7 +566,7 @@ func TestExtrasNonLifecycleFailureSkipsOnlyThatDevice(t *testing.T) {
 
 	require.Len(t, reading.Extras.Energy, 1, "device 1 must survive device 0's non-lifecycle failure")
 	assert.Equal(t, "99999999-2222-3333-4444-555555555555", reading.Extras.Energy[0].UUID)
-	assert.Equal(t, 0, fake.shutdowns, "a non-lifecycle failure must not tear NVML down")
+	assert.Equal(t, int64(0), fake.shutdowns.Load(), "a non-lifecycle failure must not tear NVML down")
 }
 
 func TestExtrasLifecycleAbortsRemainingDevices(t *testing.T) {
@@ -589,7 +598,7 @@ func TestExtrasLifecycleAbortsRemainingDevices(t *testing.T) {
 	assert.Equal(t, 0, code)
 	assert.Empty(t, reading.Extras.Energy)
 	assert.Empty(t, reading.Extras.PCIe)
-	assert.Equal(t, 1, fake.shutdowns, "the lifecycle error must mark the backend for re-init")
+	assert.Equal(t, int64(1), fake.shutdowns.Load(), "the lifecycle error must mark the backend for re-init")
 }
 
 func TestExtrasPcieNotSupportedSkipsDevice(t *testing.T) {
@@ -609,5 +618,83 @@ func TestExtrasPcieNotSupportedSkipsDevice(t *testing.T) {
 	reading, _, err := backend.QueryFunc(resolveFields(t, "power.draw"), opts)(t.Context())
 	require.NoError(t, err, "an unsupported PCIe counter must not fail the collection")
 	assert.Empty(t, reading.Extras.PCIe)
-	assert.Equal(t, 0, fake.shutdowns, "NOT_SUPPORTED is not a lifecycle error")
+	assert.Equal(t, int64(0), fake.shutdowns.Load(), "NOT_SUPPORTED is not a lifecycle error")
+}
+
+func TestRemappedRowsInactiveFields(t *testing.T) {
+	t.Parallel()
+
+	dev := identityDevice()
+	dev.GetRemappedRows_v2Func = func() (nvml.RemappedRowsInfo_v2, nvml.Return) {
+		return nvml.RemappedRowsInfo_v2{CorrInactiveRemaps: 3, UncInactiveRemaps: 7}, nvml.SUCCESS
+	}
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
+
+	fields := resolveFields(t, "remapped_rows.correctable_inactive,remapped_rows.uncorrectable_inactive")
+
+	reading, _, err := backend.QueryFunc(fields, CollectOptions{})(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "3", cellValue(t, reading.Table, "remapped_rows.correctable_inactive"))
+	assert.Equal(t, "7", cellValue(t, reading.Table, "remapped_rows.uncorrectable_inactive"))
+}
+
+func TestRemappedRowsInactiveAbsentOnOldDrivers(t *testing.T) {
+	t.Parallel()
+
+	// a driver without the newer entry point: the classic four fields keep
+	// coming from the unversioned call, only the inactive pair reads absent
+	dev := identityDevice()
+	dev.GetRemappedRows_v2Func = func() (nvml.RemappedRowsInfo_v2, nvml.Return) {
+		return nvml.RemappedRowsInfo_v2{}, nvml.ERROR_FUNCTION_NOT_FOUND
+	}
+	dev.GetRemappedRowsFunc = func() (int, int, bool, bool, nvml.Return) {
+		return 5, 1, false, false, nvml.SUCCESS
+	}
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
+
+	fields := resolveFields(t,
+		"remapped_rows.correctable,remapped_rows.correctable_inactive,"+
+			"remapped_rows.uncorrectable,remapped_rows.uncorrectable_inactive")
+
+	reading, _, err := backend.QueryFunc(fields, CollectOptions{})(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "5", cellValue(t, reading.Table, "remapped_rows.correctable"))
+	assert.Equal(t, "1", cellValue(t, reading.Table, "remapped_rows.uncorrectable"))
+	assert.Equal(t, "[Function Not Found]", cellValue(t, reading.Table, "remapped_rows.correctable_inactive"))
+	assert.Equal(t, "[Function Not Found]", cellValue(t, reading.Table, "remapped_rows.uncorrectable_inactive"))
+}
+
+func TestRemappedRowsInactiveAbsentWhenSymbolMissing(t *testing.T) {
+	t.Parallel()
+
+	// a driver library that ships no v2 export at all: the getter must not
+	// even be called (a missing export crashes at call time, it does not
+	// return an error), so the device has no stub for it
+	dev := identityDevice()
+	dev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 12340, nvml.SUCCESS }
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+
+	api := fake.api()
+	api.lookupSymbol = func(name string) error {
+		if name == "nvmlDeviceGetRemappedRows_v2" {
+			return errors.New("symbol not found")
+		}
+
+		return nil
+	}
+
+	backend, err := newWithAPI(api, slogt.New(t))
+	require.NoError(t, err)
+
+	fields := resolveFields(t, "power.draw,remapped_rows.correctable_inactive")
+
+	reading, _, err := backend.QueryFunc(fields, CollectOptions{})(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "[Function Not Found]", cellValue(t, reading.Table, "remapped_rows.correctable_inactive"))
+	assert.Equal(t, "12.34 W", cellValue(t, reading.Table, "power.draw"))
 }

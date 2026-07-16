@@ -161,7 +161,7 @@ func TestMIGNotSupportedIsSilent(t *testing.T) {
 	reading, _, err := backend.QueryFunc(resolveFields(t, "power.draw"), migOpts())(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, reading.Extras.MIG)
-	assert.Equal(t, 0, fake.shutdowns)
+	assert.Equal(t, int64(0), fake.shutdowns.Load())
 }
 
 func TestMIGGPMCrossCycle(t *testing.T) {
@@ -477,7 +477,7 @@ func TestMIGGPMMetricsFailureRotatesAndRecovers(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, reading.Extras.MIG[0].Utilization)
 	assert.Equal(t, 1, gpm.live())
-	assert.Equal(t, 0, fake.shutdowns)
+	assert.Equal(t, int64(0), fake.shutdowns.Load())
 
 	// and it heals on the next cycle
 	gpm.metricsRet = nvml.SUCCESS
@@ -505,7 +505,7 @@ func TestMIGGPMSampleGetLifecycleAborts(t *testing.T) {
 	reading, _, err := backend.QueryFunc(resolveFields(t, "power.draw"), migOpts())(t.Context())
 	require.NoError(t, err, "extras must never fail the collection")
 	assert.Nil(t, reading.Extras.MIG[0].Utilization)
-	assert.Equal(t, 1, fake.shutdowns, "the lifecycle error must mark the backend for re-init")
+	assert.Equal(t, int64(1), fake.shutdowns.Load(), "the lifecycle error must mark the backend for re-init")
 	assert.Equal(t, 0, gpm.live(), "no sample may leak through the abort")
 }
 
@@ -526,7 +526,7 @@ func TestMIGLifecycleOnHandleLookupAborts(t *testing.T) {
 	reading, _, err := backend.QueryFunc(resolveFields(t, "power.draw"), migOpts())(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, reading.Extras.MIG)
-	assert.Equal(t, 1, fake.shutdowns, "a lost GPU during MIG enumeration must mark for re-init")
+	assert.Equal(t, int64(1), fake.shutdowns.Load(), "a lost GPU during MIG enumeration must mark for re-init")
 }
 
 func TestCloseFreesGPMSamples(t *testing.T) {
@@ -550,7 +550,7 @@ func TestCloseFreesGPMSamples(t *testing.T) {
 	backend.Close()
 
 	assert.Equal(t, 0, gpm.live(), "Close must free every retained sample before shutdown")
-	assert.Equal(t, 1, fake.shutdowns)
+	assert.Equal(t, int64(1), fake.shutdowns.Load())
 }
 
 func TestMIGGPMFingerprintProfileChange(t *testing.T) {

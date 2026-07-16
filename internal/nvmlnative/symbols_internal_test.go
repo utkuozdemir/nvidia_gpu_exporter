@@ -167,19 +167,30 @@ func TestSymbolManifestCoversCollectorCallSites(t *testing.T) {
 	}
 }
 
+// collectSeamFields records the nvmlAPI seam field names: every field is a
+// core requirement, except the symbol prober, which is not a symbol itself.
+func collectSeamFields(structType *ast.StructType, seen map[string]bool) {
+	for _, field := range structType.Fields.List {
+		for _, fieldName := range field.Names {
+			// lookupSymbol probes exports, it is not one itself
+			if fieldName.Name == "lookupSymbol" {
+				continue
+			}
+
+			seen[fieldName.Name] = true
+		}
+	}
+}
+
 // collectCallSites records device getter calls and nvmlAPI seam field names.
 //
 //nolint:cyclop // one linear AST walk over the two call-site shapes
 func collectCallSites(file *ast.File, seen map[string]bool) {
 	ast.Inspect(file, func(node ast.Node) bool {
-		// the seam struct type: every field is a core requirement
+		// the seam struct type
 		if typeSpec, ok := node.(*ast.TypeSpec); ok && typeSpec.Name.Name == "nvmlAPI" {
 			if structType, isStruct := typeSpec.Type.(*ast.StructType); isStruct {
-				for _, field := range structType.Fields.List {
-					for _, fieldName := range field.Names {
-						seen[fieldName.Name] = true
-					}
-				}
+				collectSeamFields(structType, seen)
 			}
 
 			return true
@@ -196,7 +207,8 @@ func collectCallSites(file *ast.File, seen map[string]bool) {
 		}
 
 		method := selector.Sel.Name
-		if strings.HasPrefix(method, "Get") || strings.HasPrefix(method, "Gpm") || method == "ValidateInforom" {
+		if strings.HasPrefix(method, "Get") || strings.HasPrefix(method, "Gpm") ||
+			method == "ValidateInforom" || method == "RegisterEvents" {
 			// skip go-nvml package-level helpers reached through the seam
 			if ident, isIdent := selector.X.(*ast.Ident); isIdent && ident.Name == "nvml" {
 				return true

@@ -450,6 +450,10 @@ var nvmlOnlyFamilyPrefixes = []string{
 	"nvidia_smi_mig_sm_occupancy_ratio",
 	"nvidia_smi_mig_tensor_activity_ratio",
 	"nvidia_smi_mig_pcie_throughput_",
+	// xid series appear only after an event is observed, so their presence
+	// is asserted by the GPU-box runbook (which triggers a real XID), not
+	// here
+	"nvidia_smi_xid_",
 }
 
 func isNVMLOnlyFamily(family string) bool {

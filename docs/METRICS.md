@@ -72,6 +72,29 @@ generous privileges (the exporter container may need to run privileged with
 `NVIDIA_MIG_MONITOR_DEVICES=all` and share the host PID namespace); MIG
 inventory and memory worked unprivileged in testing.
 
+The NVML backend also watches for XID errors, the driver's numbered error
+events (a stuck kernel, an ECC failure, a fallen-off-the-bus GPU). These are
+invisible to `nvidia-smi` and to the query-field metrics, they only surface
+through driver events or the kernel log:
+
+- `nvidia_smi_xid_errors_total{uuid, xid}` (counter): XID error events
+  observed since the exporter started. A series appears when its first
+  event arrives; history from before the exporter started cannot be
+  replayed. The counters live outside the collection pipeline, so they stay
+  visible while collections fail, which is exactly when XIDs happen.
+- `nvidia_smi_xid_last_timestamp_seconds{uuid, xid}` (gauge): when the most
+  recent event was received by the exporter (the driver events carry no
+  timestamp of their own).
+
+For alerting, prefer the timestamp:
+`time() - nvidia_smi_xid_last_timestamp_seconds < 300` fires for any XID in
+the last five minutes, including a series' very first event. A rate-based
+expression like `increase(nvidia_smi_xid_errors_total[5m]) > 0` misses that
+first event, because Prometheus never observed the zero before it.
+
+Nothing needs configuring; on setups where the driver does not support
+event registration the families simply stay empty.
+
 Both backends also stamp the CUDA version the installed driver supports onto
 `nvidia_smi_gpu_info` as the `cuda_version` label. This is the version of
 the CUDA API the driver carries, not an installed CUDA toolkit. The default

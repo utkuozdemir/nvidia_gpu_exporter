@@ -343,6 +343,7 @@ What each backend can do:
 | PCIe throughput (`--collect.pcie-throughput`) | no | yes |
 | Per-MIG-instance metrics (`mig_info`, `mig_memory_*`, `mig_*_ratio`) | no | yes |
 | Per-process MIG attribution (`--collect.compute-apps-mig`) | no | yes |
+| XID error counters (`xid_errors_total`) | no | yes |
 
 The NVML-only families are documented in [METRICS.md](METRICS.md). The PCIe
 throughput family is opt-in via `--collect.pcie-throughput` because of its

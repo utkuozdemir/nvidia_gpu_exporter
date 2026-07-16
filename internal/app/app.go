@@ -47,6 +47,10 @@ const scrapeTimeoutHeader = "X-Prometheus-Scrape-Timeout-Seconds"
 // conversion), so they are treated like a missing header.
 const maxScrapeTimeoutSeconds = 24 * 60 * 60
 
+// xidWatcherExitGrace is how long shutdown waits for the XID watcher's
+// bounded driver call to return before abandoning the goroutine.
+const xidWatcherExitGrace = 3 * time.Second
+
 // Options carries what the callers inject into a run beyond the command-line
 // arguments.
 type Options struct {
@@ -469,7 +473,7 @@ func setupExporter(
 	registry *prometheus.Registry,
 	logger *slog.Logger,
 ) (*exporter.GPUExporter, error) {
-	resolved, query, exitCodeMetric, err := setupBackend(ctx, eg, cfg, logger)
+	resolved, query, xids, exitCodeMetric, err := setupBackend(ctx, eg, cfg, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -494,9 +498,10 @@ func setupExporter(
 		PCIeThroughput: cfg.pcieThroughput,
 		Energy:         cfg.backend == backendNVML,
 		MIG:            cfg.backend == backendNVML,
+		XIDEvents:      cfg.backend == backendNVML,
 	}
 
-	exp := exporter.New(ctx, exporter.DefaultPrefix, resolved, src, features, exitCodeMetric, logger)
+	exp := exporter.New(ctx, exporter.DefaultPrefix, resolved, src, features, xids, exitCodeMetric, logger)
 
 	// the go and process collectors keep the exposed families identical to
 	// what the default registry used to serve
@@ -518,16 +523,18 @@ func setupExporter(
 // nvidia-smi; the nvml backend resolves against its compiled catalog and
 // reports collection status as an NVML return code under its own metric
 // name.
+//
+//nolint:ireturn // the exec backend has no XID source, a nil interface is the point
 func setupBackend(
 	ctx context.Context,
 	eg *errgroup.Group,
 	cfg collectConfig,
 	logger *slog.Logger,
-) (nvidiasmi.ResolvedFields, collect.QueryFunc, exporter.ExitCodeMetric, error) {
+) (nvidiasmi.ResolvedFields, collect.QueryFunc, exporter.XIDSource, exporter.ExitCodeMetric, error) {
 	if cfg.backend == backendNVML {
 		backend, err := nvmlnative.New(logger)
 		if err != nil {
-			return nvidiasmi.ResolvedFields{}, nil, exporter.ExitCodeMetric{},
+			return nvidiasmi.ResolvedFields{}, nil, nil, exporter.ExitCodeMetric{},
 				fmt.Errorf("failed to set up the nvml backend: %w", err)
 		}
 
@@ -536,7 +543,7 @@ func setupBackend(
 		if err != nil {
 			backend.Close()
 
-			return nvidiasmi.ResolvedFields{}, nil, exporter.ExitCodeMetric{},
+			return nvidiasmi.ResolvedFields{}, nil, nil, exporter.ExitCodeMetric{},
 				fmt.Errorf("failed to resolve query fields: %w", err)
 		}
 
@@ -551,6 +558,8 @@ func setupBackend(
 			return nil
 		})
 
+		superviseXIDWatcher(ctx, eg, backend, logger)
+
 		opts := nvmlnative.CollectOptions{
 			ComputeApps:    cfg.computeApps,
 			PCIeThroughput: cfg.pcieThroughput,
@@ -558,7 +567,7 @@ func setupBackend(
 			MIG:            true,
 		}
 
-		return resolved, backend.QueryFunc(resolved, opts), exporter.NVMLReturnCodeMetric, nil
+		return resolved, backend.QueryFunc(resolved, opts), backend, exporter.NVMLReturnCodeMetric, nil
 	}
 
 	resolved, err := nvidiasmi.ResolveFields(
@@ -571,7 +580,7 @@ func setupBackend(
 		logger,
 	)
 	if err != nil {
-		return nvidiasmi.ResolvedFields{}, nil, exporter.ExitCodeMetric{},
+		return nvidiasmi.ResolvedFields{}, nil, nil, exporter.ExitCodeMetric{},
 			fmt.Errorf("failed to resolve query fields: %w", err)
 	}
 
@@ -581,7 +590,43 @@ func setupBackend(
 	cudaVersion := nvidiasmi.QueryCudaVersion(
 		ctx, cfg.nvidiaSmiCommand, cfg.timeout, nvidiasmi.DefaultRunFunc, logger)
 
-	return resolved, buildQueryFunc(cfg, resolved, cudaVersion, logger), exporter.ExecExitCodeMetric, nil
+	return resolved, buildQueryFunc(cfg, resolved, cudaVersion, logger), nil, exporter.ExecExitCodeMetric, nil
+}
+
+// superviseXIDWatcher runs the XID watcher beside the collection cycles for
+// the whole application lifetime; it returns nil on shutdown and never fails
+// the group. The watcher is supervised rather than joined directly: a driver
+// call that ignores its own bound must not hang process exit, which is the
+// ultimate cleanup (same rule as the shutdown handling).
+func superviseXIDWatcher(
+	ctx context.Context,
+	eg *errgroup.Group,
+	backend *nvmlnative.Backend,
+	logger *slog.Logger,
+) {
+	eg.Go(func() error {
+		done := make(chan struct{})
+
+		go func() {
+			defer close(done)
+
+			_ = backend.RunXIDWatcher(ctx)
+		}()
+
+		select {
+		case <-done:
+			return nil
+		case <-ctx.Done():
+		}
+
+		select {
+		case <-done:
+		case <-time.After(xidWatcherExitGrace):
+			logger.Warn("abandoning the XID watcher: stuck inside the driver")
+		}
+
+		return nil
+	})
 }
 
 // buildQueryFunc builds the collection cycle: the GPU query, plus the

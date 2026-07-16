@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -64,6 +65,17 @@ type Features struct {
 	Energy bool
 	// MIG enables the per-MIG-instance metric families (nvml backend).
 	MIG bool
+	// XIDEvents enables the XID error counter families (nvml backend). The
+	// values come from the XIDSource passed to New, not from the snapshot.
+	XIDEvents bool
+}
+
+// XIDSource serves the cumulative XID error counts. It is read at scrape
+// time, independently of the collection pipeline, so the counters stay
+// visible while collections fail (which is exactly when XIDs happen). The
+// implementation must be safe for concurrent use.
+type XIDSource interface {
+	XIDCounts() []collect.XIDCounter
 }
 
 // GPUExporter renders the latest collection as Prometheus metrics. It is
@@ -89,6 +101,9 @@ type GPUExporter struct {
 	energyDesc            *prometheus.Desc
 	migDescs              *migDescs
 	appMIGLabels          bool
+	xids                  XIDSource
+	xidCountDesc          *prometheus.Desc
+	xidTimestampDesc      *prometheus.Desc
 	logger                *slog.Logger
 	ctx                   context.Context //nolint:containedctx
 }
@@ -126,6 +141,7 @@ func New(
 	fields nvidiasmi.ResolvedFields,
 	source collect.Source,
 	features Features,
+	xids XIDSource,
 	exitCodeMetric ExitCodeMetric,
 	logger *slog.Logger,
 ) *GPUExporter {
@@ -160,6 +176,7 @@ func New(
 		energyDesc:            newEnergyDesc(prefix, features.Energy),
 		migDescs:              newMIGDescs(prefix, features.MIG),
 		appMIGLabels:          features.ComputeAppMIGLabels,
+		xids:                  xids,
 		logger:                logger,
 		gpuInfoDesc: prometheus.NewDesc(
 			prometheus.BuildFQName(prefix, "", "gpu_info"),
@@ -170,8 +187,30 @@ func New(
 	}
 
 	addHealthDescs(exp, prefix, exitCodeMetric)
+	addXIDDescs(exp, prefix, features.XIDEvents)
 
 	return exp
+}
+
+// addXIDDescs builds the XID error counter descriptors, left nil when the
+// feature is disabled.
+func addXIDDescs(exp *GPUExporter, prefix string, enabled bool) {
+	if !enabled {
+		return
+	}
+
+	exp.xidCountDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(prefix, "", "xid_errors_total"),
+		"Number of XID errors observed on the GPU since the exporter started. "+
+			"A series appears when its first event arrives; earlier history cannot be replayed.",
+		[]string{uuidLabel, "xid"},
+		nil)
+	exp.xidTimestampDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(prefix, "", "xid_last_timestamp_seconds"),
+		"Unix timestamp of the most recently observed XID error, as received by the exporter "+
+			"(the driver events carry no timestamp of their own).",
+		[]string{uuidLabel, "xid"},
+		nil)
 }
 
 // addHealthDescs builds the collection health descriptors.
@@ -382,6 +421,11 @@ func (e *GPUExporter) Describe(descCh chan<- *prometheus.Desc) {
 			e.sendDesc(descCh, desc)
 		}
 	}
+
+	if e.xidCountDesc != nil {
+		e.sendDesc(descCh, e.xidCountDesc)
+		e.sendDesc(descCh, e.xidTimestampDesc)
+	}
 }
 
 // Collect fetches the latest reading from the source and delivers it as
@@ -390,6 +434,11 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 	snapshot := e.source.Latest(e.ctx)
 
 	e.renderHealth(metricCh, snapshot)
+
+	// the XID counters render before the no-data return below: a GPU
+	// throwing XIDs typically also fails collections, and that is exactly
+	// when these series must stay visible
+	e.renderXIDs(metricCh)
 
 	if snapshot.Table == nil {
 		return
@@ -401,6 +450,41 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 
 	e.renderApps(metricCh, snapshot)
 	e.renderExtras(metricCh, snapshot)
+}
+
+// renderXIDs emits the XID error counters from the dedicated source. Unlike
+// every other family they do not come from the snapshot: the counts are
+// event-driven, cumulative in-process state served fresh on every scrape.
+func (e *GPUExporter) renderXIDs(metricCh chan<- prometheus.Metric) {
+	if e.xidCountDesc == nil || e.xids == nil {
+		return
+	}
+
+	for _, counter := range e.xids.XIDCounts() {
+		xid := strconv.FormatUint(counter.XID, 10)
+
+		e.sendLabeledCounter(metricCh, e.xidCountDesc, float64(counter.Count), counter.UUID, xid)
+		e.sendLabeledGauge(metricCh, e.xidTimestampDesc,
+			float64(counter.LastSeen.UnixNano())/1e9, counter.UUID, xid)
+	}
+}
+
+// sendLabeledCounter emits one constant counter with the given label values,
+// logging instead of failing if it cannot be built.
+func (e *GPUExporter) sendLabeledCounter(
+	metricCh chan<- prometheus.Metric,
+	desc *prometheus.Desc,
+	value float64,
+	labelValues ...string,
+) {
+	metric, err := prometheus.NewConstMetric(desc, prometheus.CounterValue, value, labelValues...)
+	if err != nil {
+		e.logger.Error("failed to create metric", "err", err, "desc", desc.String())
+
+		return
+	}
+
+	e.sendMetric(metricCh, metric)
 }
 
 // renderExtras emits the backend-specific families carried outside the

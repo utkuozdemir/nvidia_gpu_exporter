@@ -208,7 +208,7 @@ func newTestExporter(
 
 	source := collect.NewLive(query, 0, nil, logger)
 
-	return exporter.New(ctx, prefix, resolved, source, exporter.Features{}, exporter.ExecExitCodeMetric, logger)
+	return exporter.New(ctx, prefix, resolved, source, exporter.Features{}, nil, exporter.ExecExitCodeMetric, logger)
 }
 
 // staticSource serves a fixed snapshot, for driving the render paths directly.
@@ -237,6 +237,7 @@ func newAppsExporter(t *testing.T, snapshot collect.Snapshot) *exporter.GPUExpor
 		resolved,
 		&staticSource{snapshot: snapshot},
 		exporter.Features{ComputeApps: true},
+		nil,
 		exporter.ExecExitCodeMetric,
 		logger,
 	)
@@ -259,6 +260,7 @@ func newExtrasExporter(t *testing.T, features exporter.Features, snapshot collec
 		resolved,
 		&staticSource{snapshot: snapshot},
 		features,
+		nil,
 		exporter.ExecExitCodeMetric,
 		logger,
 	)
@@ -473,7 +475,7 @@ func TestCollectDeliversMetricsOnFatalError(t *testing.T) {
 	}
 
 	source := collect.NewLive(query, 0, func(fatalErr error) { cancel(fatalErr) }, logger)
-	exp := exporter.New(ctx, "aaa", resolved, source, exporter.Features{}, exporter.ExecExitCodeMetric, logger)
+	exp := exporter.New(ctx, "aaa", resolved, source, exporter.Features{}, nil, exporter.ExecExitCodeMetric, logger)
 
 	families := gatherFamilies(t, exp)
 
@@ -574,7 +576,16 @@ func TestCollectComputeAppsDisabled(t *testing.T) {
 	// the feature is off
 	apps := []nvidiasmi.ComputeApp{{GPUUUID: "abc", PID: "42", ProcessName: "x", UsedMemory: "1 MiB"}}
 	source := &staticSource{snapshot: appsSnapshot(gpuTable("GPU-ABC"), apps, true)}
-	exp := exporter.New(t.Context(), "aaa", resolved, source, exporter.Features{}, exporter.ExecExitCodeMetric, logger)
+	exp := exporter.New(
+		t.Context(),
+		"aaa",
+		resolved,
+		source,
+		exporter.Features{},
+		nil,
+		exporter.ExecExitCodeMetric,
+		logger,
+	)
 
 	families := gatherFamilies(t, exp)
 
@@ -801,4 +812,83 @@ func TestComputeAppMIGLabels(t *testing.T) {
 	info, ok = families["aaa_compute_app_info"]
 	require.True(t, ok)
 	require.Len(t, info.GetMetric()[0].GetLabel(), 3)
+}
+
+// staticXIDs is a canned XIDSource.
+type staticXIDs struct {
+	counters []collect.XIDCounter
+}
+
+func (s *staticXIDs) XIDCounts() []collect.XIDCounter { return s.counters }
+
+func TestXIDsRenderEvenWhenCollectionFails(t *testing.T) {
+	t.Parallel()
+
+	logger := slogt.New(t)
+
+	resolved, err := nvidiasmi.ResolveFields(
+		t.Context(), "bbb", "fan.speed", "", 0, nvidiasmi.DefaultRunFunc, logger)
+	require.NoError(t, err)
+
+	xids := &staticXIDs{counters: []collect.XIDCounter{
+		{UUID: "abc", XID: 79, Count: 3, LastSeen: time.Unix(1700000000, 0)},
+	}}
+
+	// a failed collection: no table at all, which is exactly when the XID
+	// counters must stay visible
+	failed := collect.Snapshot{Attempted: true, Success: false, Failures: 1}
+
+	exp := exporter.New(
+		t.Context(),
+		"aaa",
+		resolved,
+		&staticSource{snapshot: failed},
+		exporter.Features{XIDEvents: true},
+		xids,
+		exporter.ExecExitCodeMetric,
+		logger,
+	)
+
+	families := gatherFamilies(t, exp)
+
+	counts, ok := families["aaa_xid_errors_total"]
+	require.True(t, ok, "xid counters must render without a table")
+	assert.Equal(t, dto.MetricType_COUNTER, counts.GetType())
+	assertFloat(t, 3, counts.GetMetric()[0].GetCounter().GetValue())
+	assert.Equal(t, "abc", labelValue(t, counts.GetMetric()[0], "uuid"))
+	assert.Equal(t, "79", labelValue(t, counts.GetMetric()[0], "xid"))
+
+	stamps, ok := families["aaa_xid_last_timestamp_seconds"]
+	require.True(t, ok)
+	assertFloat(t, 1700000000, stamps.GetMetric()[0].GetGauge().GetValue())
+}
+
+func TestXIDsSuppressedWhenOff(t *testing.T) {
+	t.Parallel()
+
+	logger := slogt.New(t)
+
+	resolved, err := nvidiasmi.ResolveFields(
+		t.Context(), "bbb", "fan.speed", "", 0, nvidiasmi.DefaultRunFunc, logger)
+	require.NoError(t, err)
+
+	// a live, populated source: the feature gate alone must suppress the
+	// families
+	xids := &staticXIDs{counters: []collect.XIDCounter{{UUID: "abc", XID: 79, Count: 3}}}
+
+	exp := exporter.New(
+		t.Context(),
+		"aaa",
+		resolved,
+		&staticSource{snapshot: extrasSnapshot(gpuTable("GPU-ABC"), collect.Extras{})},
+		exporter.Features{},
+		xids,
+		exporter.ExecExitCodeMetric,
+		logger,
+	)
+
+	families := gatherFamilies(t, exp)
+
+	assert.NotContains(t, families, "aaa_xid_errors_total")
+	assert.NotContains(t, families, "aaa_xid_last_timestamp_seconds")
 }

@@ -3,6 +3,7 @@
 package nvmlnative
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 
@@ -36,5 +37,15 @@ func (b *Backend) DriverVersion() string { return "" }
 
 // QueryFunc is never reachable: New always fails first.
 func (b *Backend) QueryFunc(_ nvidiasmi.ResolvedFields, _ CollectOptions) collect.QueryFunc {
+	panic("nvml backend is not available in this build")
+}
+
+// RunXIDWatcher is never reachable: New always fails first.
+func (b *Backend) RunXIDWatcher(_ context.Context) error {
+	panic("nvml backend is not available in this build")
+}
+
+// XIDCounts is never reachable: New always fails first.
+func (b *Backend) XIDCounts() []collect.XIDCounter {
 	panic("nvml backend is not available in this build")
 }

@@ -1,5 +1,7 @@
 package collect
 
+import "time"
+
 // Extras carries backend-specific readings that are outside the nvidia-smi
 // query-field schema. Every family follows the Apps contract: it fails
 // softly, so a family the backend cannot serve is nil/empty and never fails
@@ -39,6 +41,23 @@ type EnergyCounter struct {
 	// Joules counts since the driver was last loaded. It resets when the
 	// driver reloads or the GPU is reset, both outside this process.
 	Joules float64
+}
+
+// XIDCounter is one (GPU, XID code) pair's cumulative error-event count.
+// XID state deliberately does NOT ride Extras: it is owned by a long-lived
+// watcher and read at scrape time, so the counters stay visible during the
+// exact driver incidents that make collections fail.
+type XIDCounter struct {
+	// UUID is the GPU uuid, normalized like every uuid label, cached at
+	// event registration time (the GPU may be unreadable once it errors).
+	UUID string
+	// XID is the numeric XID error code.
+	XID uint64
+	// Count is the number of events observed since the exporter started.
+	Count uint64
+	// LastSeen is when the most recent event was received by the exporter
+	// (NVML events carry no timestamp of their own).
+	LastSeen time.Time
 }
 
 // MIGInstance is one MIG device: a compute instance inside a GPU instance of

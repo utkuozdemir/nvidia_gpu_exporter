@@ -153,7 +153,9 @@ var fieldOrder = []nvidiasmi.QField{
 	"retired_pages.double_bit.count",
 	"retired_pages.pending",
 	"remapped_rows.correctable",
+	"remapped_rows.correctable_inactive",
 	"remapped_rows.uncorrectable",
+	"remapped_rows.uncorrectable_inactive",
 	"remapped_rows.pending",
 	"remapped_rows.failure",
 	"remapped_rows.histogram.max",
@@ -336,7 +338,9 @@ var catalogRFields = map[nvidiasmi.QField]nvidiasmi.RField{
 	"retired_pages.double_bit.count":                          "retired_pages.double_bit.count",
 	"retired_pages.pending":                                   "retired_pages.pending",
 	"remapped_rows.correctable":                               "remapped_rows.correctable",
+	"remapped_rows.correctable_inactive":                      "remapped_rows.correctable_inactive",
 	"remapped_rows.uncorrectable":                             "remapped_rows.uncorrectable",
+	"remapped_rows.uncorrectable_inactive":                    "remapped_rows.uncorrectable_inactive",
 	"remapped_rows.pending":                                   "remapped_rows.pending",
 	"remapped_rows.failure":                                   "remapped_rows.failure",
 	"remapped_rows.histogram.max":                             "remapped_rows.histogram.max",
@@ -513,10 +517,8 @@ const deprecatedFieldsMinDriverMajor = 590
 // newest capture and it is not listed here; adding a field here is the
 // explicit "defer" decision, adding it to the catalog is the fix.
 var deferredFields = map[nvidiasmi.QField]bool{
-	"kmd_version":                          true,
-	"pcie.link.gen.hostmax":                true,
-	"remapped_rows.correctable_inactive":   true,
-	"remapped_rows.uncorrectable_inactive": true,
+	"kmd_version":           true,
+	"pcie.link.gen.hostmax": true,
 }
 
 // deferredFieldPrefixes covers whole deferred families (vGPU capabilities,

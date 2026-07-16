@@ -13,8 +13,8 @@ To try the experimental NVML backend, which reads the driver library
 directly instead of running `nvidia-smi`, set the image tag to a `-nvml`
 variant (for example `1.7.0-nvml`). It exports a superset of the default
 backend's metrics: the same core set plus NVML-only extras like the GPU
-energy counter, per-MIG-instance metrics and opt-in PCIe throughput. The
-`-nvml` images are built for
+energy counter, per-MIG-instance metrics, XID error counters and opt-in
+PCIe throughput. The `-nvml` images are built for
 linux/amd64 only, so on mixed-architecture clusters add
 `kubernetes.io/arch: amd64` to `nodeSelector`.
 

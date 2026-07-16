@@ -84,6 +84,40 @@ var nvmlSymbolRequirements = []symbolRequirement{
 		serves: "mig_*_ratio, mig_pcie_throughput_*",
 	},
 	{
+		goCall: "eventSetCreate",
+		anyOf:  []string{"nvmlEventSetCreate"},
+		serves: "xid_errors_total",
+	},
+	{
+		goCall: "RegisterEvents",
+		anyOf:  []string{"nvmlDeviceRegisterEvents"},
+		serves: "xid_errors_total",
+	},
+	{
+		// reached as interface methods on the event set (not scannable call
+		// shapes); listed so the inventory check still proves the driver
+		// carries them
+		goCall: "eventSetWait",
+		anyOf:  []string{"nvmlEventSetWait_v2", "nvmlEventSetWait"},
+		serves: "xid_errors_total",
+	},
+	{
+		goCall: "eventSetFree",
+		anyOf:  []string{"nvmlEventSetFree"},
+		serves: "xid_errors_total",
+	},
+	{
+		// the unversioned symbol is accepted as an alternative because the
+		// 590 driver library genuinely ships no v2 export (verified live on
+		// an H200: the recorded capture inventory of 405 symbols matches
+		// the library exactly). The call site probes the export first and
+		// leaves the inactive fields absent when it is missing, so the
+		// requirement the inventory must prove is only the classic call.
+		goCall: "GetRemappedRows_v2",
+		anyOf:  []string{"nvmlDeviceGetRemappedRows_v2", "nvmlDeviceGetRemappedRows"},
+		serves: "remapped_rows.*_inactive",
+	},
+	{
 		goCall: "GetPcieThroughput",
 		anyOf:  []string{"nvmlDeviceGetPcieThroughput"},
 		serves: "pcie_throughput_*_bytes_per_second",

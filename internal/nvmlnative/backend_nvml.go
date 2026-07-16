@@ -11,6 +11,7 @@ import (
 	"math"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
@@ -41,6 +42,15 @@ type nvmlAPI struct {
 	gpmSampleFree   func(nvml.GpmSample) nvml.Return
 	gpmMigSampleGet func(nvml.Device, int, nvml.GpmSample) nvml.Return
 	gpmMetricsGet   func(*nvml.GpmMetricsGetType) nvml.Return
+	// eventSetCreate is package-level in go-nvml, hence on the seam; the
+	// set's Wait/Free are interface methods and mock naturally
+	eventSetCreate func() (nvml.EventSet, nvml.Return)
+	// lookupSymbol probes whether the driver library exports a symbol. A
+	// getter whose export is missing entirely does NOT answer with a polite
+	// FUNCTION_NOT_FOUND return: the lazily bound call crashes the process
+	// (observed live on driver 590 with the v2 remapped-rows entry point),
+	// so maybe-absent direct getters must be probed before the first call.
+	lookupSymbol func(string) error
 }
 
 func realNVML() nvmlAPI {
@@ -61,6 +71,8 @@ func realNVML() nvmlAPI {
 		gpmSampleFree:     nvml.GpmSampleFree,
 		gpmMigSampleGet:   nvml.GpmMigSampleGet,
 		gpmMetricsGet:     nvml.GpmMetricsGet,
+		eventSetCreate:    nvml.EventSetCreate,
+		lookupSymbol:      func(name string) error { return nvml.Extensions().LookupSymbol(name) },
 	}
 }
 
@@ -81,13 +93,34 @@ type Backend struct {
 	// extrasWarned makes a persistent extras failure visible exactly once
 	// per family, mirroring permLogged/fnfLogged.
 	extrasWarned map[string]bool
+	// symbolsPresent caches driver-library symbol probes (constant for the
+	// process lifetime). Guarded by mu like the rest of the cycle state.
+	symbolsPresent map[string]bool
 	// gpm retains one activity sample per GPU instance across cycles, so
 	// utilization can be computed over the inter-collection window. Guarded
 	// by mu like the rest of the cycle state; every sample is freed before
 	// any NVML shutdown.
 	gpm map[string]*gpmState
 	// now is the clock, injectable so the GPM window guards are testable.
-	now    func() time.Time
+	// Set once at construction, immutable afterwards (the XID watcher reads
+	// it without the cycle lock).
+	now func() time.Time
+	// lifecycleMu is the barrier between NVML shutdown and the XID
+	// watcher's in-flight driver calls: the watcher holds it shared around
+	// every NVML operation, shutdown takes it exclusively (bounded, so a
+	// wedged watcher call cannot hang a collection forever). Lock ordering:
+	// mu before lifecycleMu, never the reverse.
+	lifecycleMu sync.RWMutex
+	// generation counts successful NVML initializations and genLive tells
+	// whether the current generation is usable. Atomics: the watcher reads
+	// them without the cycle lock, and shutdown must be able to flip
+	// genLive even when the exclusive lifecycle lock cannot be acquired.
+	generation atomic.Uint64
+	genLive    atomic.Bool
+	// xids accumulates the XID error events observed by the watcher. It
+	// has its own lock and is read at scrape time, outside the snapshot
+	// pipeline.
+	xids   xidAccumulator
 	logger *slog.Logger
 }
 
@@ -104,6 +137,8 @@ func newWithAPI(api nvmlAPI, logger *slog.Logger) (*Backend, error) {
 	}
 
 	backend.initialized = true
+	backend.generation.Store(1)
+	backend.genLive.Store(true)
 
 	return backend, nil
 }
@@ -131,12 +166,23 @@ func (b *Backend) Close() {
 	}
 	defer b.mu.Unlock()
 
-	if b.initialized {
-		b.freeGPMSamples()
-
-		_ = b.api.shutdown()
-		b.initialized = false
+	if !b.initialized {
+		return
 	}
+
+	b.freeGPMSamples()
+
+	b.initialized = false
+	b.genLive.Store(false)
+
+	if !b.tryLifecycleLock() {
+		b.logger.Warn("skipping NVML shutdown: the XID watcher is stuck inside the driver")
+
+		return
+	}
+	defer b.lifecycleMu.Unlock()
+
+	_ = b.api.shutdown()
 }
 
 // lifecycleErrors are NVML returns that mean the driver/GPU state is gone,
@@ -272,6 +318,8 @@ func (b *Backend) collectTable(
 		b.logger.Info("re-initialized NVML after a lifecycle error")
 
 		b.initialized = true
+		b.generation.Add(1)
+		b.genLive.Store(true)
 	}
 
 	count, ret := b.api.deviceCount()
@@ -366,15 +414,91 @@ func (b *Backend) lifecycle(ret nvml.Return, err error) error {
 
 // markLost flags the backend for re-initialization on the next cycle. The
 // retained GPM samples die with the NVML generation, so they are freed
-// (best-effort) before the shutdown.
+// (best-effort) before the shutdown, and the generation is declared dead
+// first so the XID watcher stops touching it even when the shutdown itself
+// has to be skipped behind a wedged watcher call.
 func (b *Backend) markLost() {
-	if b.initialized {
-		b.freeGPMSamples()
-
-		b.initialized = false
-
-		_ = b.api.shutdown()
+	if !b.initialized {
+		return
 	}
+
+	b.freeGPMSamples()
+
+	b.initialized = false
+	b.genLive.Store(false)
+
+	if !b.tryLifecycleLock() {
+		b.logger.Warn("skipping NVML shutdown: the XID watcher is stuck inside the driver")
+
+		return
+	}
+	defer b.lifecycleMu.Unlock()
+
+	_ = b.api.shutdown()
+}
+
+// lifecycleLockDeadline bounds how long a shutdown waits for the XID watcher
+// to leave the driver. The watcher's wait calls are themselves bounded to a
+// second, so the deadline only fires when a driver call is genuinely wedged.
+const lifecycleLockDeadline = 2 * time.Second
+
+// tryLifecycleLock acquires the exclusive lifecycle lock, bounded: process
+// health must never hang forever behind an unkillable driver call. The
+// acquisition must BLOCK (in a goroutine raced against the deadline) rather
+// than poll TryLock: only a pending blocking acquisition gets writer
+// priority over the watcher, which holds the shared lock for the full
+// duration of each bounded driver wait and releases it only momentarily
+// (verified empirically: a TryLock poll virtually never lands in that gap).
+func (b *Backend) tryLifecycleLock() bool {
+	acquired := make(chan struct{})
+
+	go func() {
+		b.lifecycleMu.Lock()
+		close(acquired)
+	}()
+
+	select {
+	case <-acquired:
+		return true
+	case <-time.After(lifecycleLockDeadline):
+		// the pending acquisition will land eventually (when the wedged
+		// call returns); it must release immediately then, or the watcher
+		// would starve forever afterwards
+		go func() {
+			<-acquired
+			b.lifecycleMu.Unlock()
+		}()
+
+		return false
+	}
+}
+
+// tryRecover is the watcher's scrape-independent recovery path: when event
+// registration fails because the driver generation died, waiting for a
+// scrape to re-initialize NVML would leave event collection deaf on an idle
+// exporter. It funnels through the same state transitions as a collection
+// cycle, best-effort: when a cycle holds the lock, that cycle handles the
+// recovery anyway.
+func (b *Backend) tryRecover() {
+	if !b.mu.TryLock() {
+		return
+	}
+	defer b.mu.Unlock()
+
+	if b.initialized {
+		// the generation died without the cycle path noticing yet
+		b.markLost()
+	}
+
+	if ret := b.api.init(); ret != nvml.SUCCESS {
+		return
+	}
+
+	b.logger.Info("re-initialized NVML after a lifecycle error (event watcher recovery)")
+
+	b.initialized = true
+	b.generation.Add(1)
+	b.genLive.Store(true)
 }
 
 // lifecycleRetError carries a lifecycle-class return code out of a device
@@ -787,6 +911,26 @@ func (b *Backend) collectDevice(
 	if reqs.want("retired_pages.pending") {
 		retiredPending, ret := dev.GetRetiredPagesPendingStatus()
 		coll.set("retired_pages.pending", ret, func() string { return yesNo(retiredPending == nvml.FEATURE_ENABLED) })
+	}
+
+	if reqs.want("remapped_rows.correctable_inactive", "remapped_rows.uncorrectable_inactive") {
+		// only the inactive counts come from the v2 call: the four classic
+		// fields stay on the unversioned call, so drivers without the v2
+		// entry point keep serving them (the inactive series just stay
+		// absent there). The export must be probed first: driver 590 ships
+		// no v2 symbol at all, and calling a missing export crashes the
+		// process instead of returning FUNCTION_NOT_FOUND (verified live).
+		var info nvml.RemappedRowsInfo_v2
+
+		ret := nvml.ERROR_FUNCTION_NOT_FOUND
+		if b.symbolPresent("nvmlDeviceGetRemappedRows_v2") {
+			info, ret = dev.GetRemappedRows_v2()
+		}
+
+		coll.set("remapped_rows.correctable_inactive", ret,
+			func() string { return strconv.FormatUint(uint64(info.CorrInactiveRemaps), 10) })
+		coll.set("remapped_rows.uncorrectable_inactive", ret,
+			func() string { return strconv.FormatUint(uint64(info.UncInactiveRemaps), 10) })
 	}
 
 	if reqs.want("remapped_rows.correctable", "remapped_rows.uncorrectable",
@@ -1465,6 +1609,29 @@ func (b *Backend) extrasFailure(family, msg string, ret nvml.Return) bool {
 	}
 
 	return true
+}
+
+// symbolPresent reports whether the driver library exports the symbol,
+// cached for the process lifetime. The caller holds the backend lock.
+func (b *Backend) symbolPresent(name string) bool {
+	present, ok := b.symbolsPresent[name]
+	if ok {
+		return present
+	}
+
+	if b.symbolsPresent == nil {
+		b.symbolsPresent = map[string]bool{}
+	}
+
+	present = b.api.lookupSymbol(name) == nil
+	b.symbolsPresent[name] = present
+
+	if !present {
+		b.logger.Info("driver library lacks an optional entry point, "+
+			"the fields it serves stay absent", "symbol", name)
+	}
+
+	return present
 }
 
 // warnOnce logs a warning the first time a family fails, so a persistent
