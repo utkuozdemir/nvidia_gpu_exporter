@@ -37,6 +37,10 @@ type fileConfig struct {
 	Delay     string                   `yaml:"delay"`
 	StderrMsg string                   `yaml:"stderr-msg"` //nolint:tagliatelle // matches the --stderr-msg flag
 	FailArg   string                   `yaml:"fail-arg"`   //nolint:tagliatelle // matches the --fail-arg flag
+	// Extras is reserved for the exporter's demo backend, which reads the
+	// same config file: the fake itself ignores the block, and it is
+	// declared here only so the strict decoder accepts shared configs.
+	Extras yaml.Node `yaml:"extras"`
 }
 
 // overrideEntry is one field's override in the config. It is either a fixed
@@ -103,12 +107,17 @@ func loadFileConfig(path string) (*fileConfig, error) {
 		return nil, fmt.Errorf("failed to read config %q: %w", path, err)
 	}
 
+	return parseFileConfig(data, path)
+}
+
+// parseFileConfig strictly decodes a config document.
+func parseFileConfig(data []byte, name string) (*fileConfig, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
 
 	var cfg fileConfig
 	if err := dec.Decode(&cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse config %q: %w", path, err)
+		return nil, fmt.Errorf("failed to parse config %q: %w", name, err)
 	}
 
 	return &cfg, nil

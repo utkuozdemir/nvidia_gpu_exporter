@@ -25,9 +25,12 @@ package main
 import (
 	"os"
 
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/captures"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/fakesmi"
 )
 
 func main() {
-	os.Exit(fakesmi.Run(os.Args[1:], os.Stdout, os.Stderr))
+	source := fakesmi.CaptureSource{FS: captures.FS, Default: captures.Default}
+
+	os.Exit(fakesmi.Run(source, os.Args[1:], os.Stdout, os.Stderr))
 }

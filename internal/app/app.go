@@ -31,7 +31,10 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/collect"
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/demo"
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/demodata"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/fakesmi"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvidiasmi"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvmlnative"
 )
@@ -135,8 +138,9 @@ func Run(ctx context.Context, args []string, opts Options) error {
 				"experimental and reads the driver library (libnvidia-ml) directly, without "+
 				"nvidia-smi. The nvml backend requires Linux and a build with the backend "+
 				"compiled in. It exposes every metric the exec backend exposes, plus "+
-				"NVML-only extras (see the docs).").
-			Default(DefaultBackend).Enum("exec", "nvml")
+				"NVML-only extras (see the docs). `demo` serves synthetic data mimicking "+
+				"the nvml surface, with no GPU or driver needed, on any platform.").
+			Default(DefaultBackend).Enum("exec", "nvml", "demo")
 		collectInterval = app.Flag("collect.interval",
 			"Interval at which the collection runs in the background, with scrapes serving "+
 				"the most recent result. When 0, the collection runs synchronously on each "+
@@ -153,14 +157,20 @@ func Run(ctx context.Context, args []string, opts Options) error {
 				"container, seeing other workloads' processes requires sharing the host PID "+
 				"namespace (hostPID in Kubernetes, --pid=host in Docker).").
 			Default("false").Bool()
+		demoConfig = app.Flag("demo-config",
+			"Path to the demo backend's config file (the fake-nvidia-smi YAML plus an "+
+				"extras block; see the docs). Only with --collect.backend=demo; the "+
+				"built-in demo setup is used when unset.").
+			Default("").String()
 		collectComputeAppsMIG = app.Flag("collect.compute-apps-mig",
 			"Add MIG attribution labels (gpu_instance_id, compute_instance_id) to the "+
-				"per-process metrics (requires --collect.compute-apps and "+
-				"--collect.backend=nvml). Opt-in because it changes the label set of the "+
+				"per-process metrics (requires --collect.compute-apps and the nvml or demo "+
+				"backend). Opt-in because it changes the label set of the "+
 				"per-process series.").
 			Default("false").Bool()
 		collectPcieThroughput = app.Flag("collect.pcie-throughput",
-			"Also export the PCIe TX/RX throughput per GPU (requires --collect.backend=nvml). "+
+			"Also export the PCIe TX/RX throughput per GPU (requires --collect.backend=nvml; "+
+				"the demo backend serves the family regardless). "+
 				"Each direction is sampled over a separate 20ms driver counter window, adding "+
 				"roughly 40ms per GPU to every collection cycle (~320ms on an 8-GPU node); "+
 				"pairing it with --collect.interval keeps scrapes unaffected.").
@@ -206,6 +216,7 @@ func Run(ctx context.Context, args []string, opts Options) error {
 		pcieThroughput:   *collectPcieThroughput,
 		computeApps:      *collectComputeApps,
 		computeAppsMIG:   *collectComputeAppsMIG,
+		demoConfig:       *demoConfig,
 	}
 
 	if err := validateBackendFlags(backendFlags); err != nil {
@@ -232,6 +243,7 @@ func Run(ctx context.Context, args []string, opts Options) error {
 		computeApps:      *collectComputeApps,
 		computeAppsMIG:   *collectComputeAppsMIG,
 		pcieThroughput:   *collectPcieThroughput,
+		demoConfig:       *demoConfig,
 		onFatal:          onFatal,
 	}
 
@@ -326,29 +338,38 @@ type backendFlagSet struct {
 	pcieThroughput   bool
 	computeApps      bool
 	computeAppsMIG   bool
+	demoConfig       string
 }
 
 // validateBackendFlags rejects flag combinations the chosen backend cannot
 // honor, as errors rather than silent ignores.
+//
+//nolint:cyclop // a flat rule list, one branch per combination
 func validateBackendFlags(flags backendFlagSet) error {
-	if flags.backend == backendNVML && flags.nvidiaSmiCommand != nvidiasmi.DefaultCommand {
-		// a custom command signals intent (ssh wrappers, sudo) the nvml
-		// backend cannot honor
-		return errors.New("--nvidia-smi-command cannot be combined with --collect.backend=nvml")
+	if flags.backend != backendExec && flags.nvidiaSmiCommand != nvidiasmi.DefaultCommand {
+		// a custom command signals intent (ssh wrappers, sudo) only the
+		// exec backend can honor
+		return fmt.Errorf("--nvidia-smi-command cannot be combined with --collect.backend=%s", flags.backend)
 	}
 
-	if flags.backend != backendNVML && flags.pcieThroughput {
-		// the throughput counters only exist in the driver library
+	if flags.backend == backendExec && flags.pcieThroughput {
+		// the throughput counters only exist in the driver library (the
+		// demo backend serves the family regardless and accepts the flag
+		// as a no-op)
 		return errors.New("--collect.pcie-throughput requires --collect.backend=nvml")
 	}
 
-	if flags.computeAppsMIG && flags.backend != backendNVML {
+	if flags.computeAppsMIG && flags.backend == backendExec {
 		// the per-process query output has no MIG attribution to parse
-		return errors.New("--collect.compute-apps-mig requires --collect.backend=nvml")
+		return errors.New("--collect.compute-apps-mig requires --collect.backend=nvml or demo")
 	}
 
 	if flags.computeAppsMIG && !flags.computeApps {
 		return errors.New("--collect.compute-apps-mig requires --collect.compute-apps")
+	}
+
+	if flags.demoConfig != "" && flags.backend != backendDemo {
+		return errors.New("--demo-config requires --collect.backend=demo")
 	}
 
 	return nil
@@ -433,10 +454,16 @@ func validateMetricsPathShape(metricsPath string) error {
 	}
 }
 
+// demoCommand is the placeholder executable name the demo backend's
+// in-process runner receives; it is never looked up on PATH (the runner
+// answers the prepared command without starting it).
+const demoCommand = "demo-nvidia-smi"
+
 // Collection backend names, the values of --collect.backend.
 const (
 	backendExec = "exec"
 	backendNVML = "nvml"
+	backendDemo = "demo"
 )
 
 // DefaultBackend is the default value of --collect.backend. The regular
@@ -457,6 +484,7 @@ type collectConfig struct {
 	computeApps      bool
 	computeAppsMIG   bool
 	pcieThroughput   bool
+	demoConfig       string
 	onFatal          func(error)
 }
 
@@ -491,14 +519,17 @@ func setupExporter(
 		src = collect.NewLive(query, cfg.timeout, cfg.onFatal, logger)
 	}
 
+	extrasCapable := cfg.backend == backendNVML || cfg.backend == backendDemo
+
 	features := exporter.Features{
 		ComputeApps:         cfg.computeApps,
 		ComputeAppMIGLabels: cfg.computeAppsMIG,
-		// the extras families exist only in the nvml backend
-		PCIeThroughput: cfg.pcieThroughput,
-		Energy:         cfg.backend == backendNVML,
-		MIG:            cfg.backend == backendNVML,
-		XIDEvents:      cfg.backend == backendNVML,
+		// the extras families exist in the nvml backend and its demo twin;
+		// the demo serves the PCIe family unconditionally
+		PCIeThroughput: cfg.pcieThroughput || cfg.backend == backendDemo,
+		Energy:         extrasCapable,
+		MIG:            extrasCapable,
+		XIDEvents:      extrasCapable,
 	}
 
 	exp := exporter.New(ctx, exporter.DefaultPrefix, resolved, src, features, xids, exitCodeMetric, logger)
@@ -532,42 +563,11 @@ func setupBackend(
 	logger *slog.Logger,
 ) (nvidiasmi.ResolvedFields, collect.QueryFunc, exporter.XIDSource, exporter.ExitCodeMetric, error) {
 	if cfg.backend == backendNVML {
-		backend, err := nvmlnative.New(logger)
-		if err != nil {
-			return nvidiasmi.ResolvedFields{}, nil, nil, exporter.ExitCodeMetric{},
-				fmt.Errorf("failed to set up the nvml backend: %w", err)
-		}
+		return setupNVMLBackend(ctx, eg, cfg, logger)
+	}
 
-		resolved, err := nvmlnative.Resolve(
-			cfg.qFieldsRaw, cfg.qFieldsExclude, backend.DriverVersion(), logger)
-		if err != nil {
-			backend.Close()
-
-			return nvidiasmi.ResolvedFields{}, nil, nil, exporter.ExitCodeMetric{},
-				fmt.Errorf("failed to resolve query fields: %w", err)
-		}
-
-		// tie NVML shutdown to the application lifetime, best-effort: a
-		// collection stuck inside the driver makes Close skip the shutdown
-		// call rather than delay process exit
-		eg.Go(func() error {
-			<-ctx.Done()
-
-			backend.Close()
-
-			return nil
-		})
-
-		superviseXIDWatcher(ctx, eg, backend, logger)
-
-		opts := nvmlnative.CollectOptions{
-			ComputeApps:    cfg.computeApps,
-			PCIeThroughput: cfg.pcieThroughput,
-			Energy:         true,
-			MIG:            true,
-		}
-
-		return resolved, backend.QueryFunc(resolved, opts), backend, exporter.NVMLReturnCodeMetric, nil
+	if cfg.backend == backendDemo {
+		return setupDemoBackend(ctx, cfg, logger)
 	}
 
 	resolved, err := nvidiasmi.ResolveFields(
@@ -590,7 +590,98 @@ func setupBackend(
 	cudaVersion := nvidiasmi.QueryCudaVersion(
 		ctx, cfg.nvidiaSmiCommand, cfg.timeout, nvidiasmi.DefaultRunFunc, logger)
 
-	return resolved, buildQueryFunc(cfg, resolved, cudaVersion, logger), nil, exporter.ExecExitCodeMetric, nil
+	query := buildQueryFunc(cfg, resolved, cudaVersion, nvidiasmi.DefaultRunFunc, logger)
+
+	return resolved, query, nil, exporter.ExecExitCodeMetric, nil
+}
+
+// setupNVMLBackend wires the nvml flavor: field resolution against the
+// compiled catalog, driver shutdown tied to the application lifetime, and the
+// XID watcher running beside the collection cycles.
+//
+//nolint:ireturn // the backend implements the XID source interface
+func setupNVMLBackend(
+	ctx context.Context,
+	eg *errgroup.Group,
+	cfg collectConfig,
+	logger *slog.Logger,
+) (nvidiasmi.ResolvedFields, collect.QueryFunc, exporter.XIDSource, exporter.ExitCodeMetric, error) {
+	backend, err := nvmlnative.New(logger)
+	if err != nil {
+		return nvidiasmi.ResolvedFields{}, nil, nil, exporter.ExitCodeMetric{},
+			fmt.Errorf("failed to set up the nvml backend: %w", err)
+	}
+
+	resolved, err := nvmlnative.Resolve(
+		cfg.qFieldsRaw, cfg.qFieldsExclude, backend.DriverVersion(), logger)
+	if err != nil {
+		backend.Close()
+
+		return nvidiasmi.ResolvedFields{}, nil, nil, exporter.ExitCodeMetric{},
+			fmt.Errorf("failed to resolve query fields: %w", err)
+	}
+
+	// tie NVML shutdown to the application lifetime, best-effort: a
+	// collection stuck inside the driver makes Close skip the shutdown
+	// call rather than delay process exit
+	eg.Go(func() error {
+		<-ctx.Done()
+
+		backend.Close()
+
+		return nil
+	})
+
+	superviseXIDWatcher(ctx, eg, backend, logger)
+
+	opts := nvmlnative.CollectOptions{
+		ComputeApps:    cfg.computeApps,
+		PCIeThroughput: cfg.pcieThroughput,
+		Energy:         true,
+		MIG:            true,
+	}
+
+	return resolved, backend.QueryFunc(resolved, opts), backend, exporter.NVMLReturnCodeMetric, nil
+}
+
+// setupDemoBackend wires the demo flavor: the exec pipeline running against
+// the in-process fake, wrapped so every cycle works from one immutable
+// configuration snapshot and carries the synthesized extras families. The
+// served surface mimics the nvml flavor.
+//
+//nolint:ireturn // the exec backend has no XID source, a nil interface is the point
+func setupDemoBackend(
+	ctx context.Context,
+	cfg collectConfig,
+	logger *slog.Logger,
+) (nvidiasmi.ResolvedFields, collect.QueryFunc, exporter.XIDSource, exporter.ExitCodeMetric, error) {
+	logger.Warn("demo mode: serving synthetic data, not a real GPU")
+
+	source := fakesmi.CaptureSource{FS: demodata.FS, Default: demodata.Default}
+
+	backend, err := demo.New(source, cfg.demoConfig, logger)
+	if err != nil {
+		return nvidiasmi.ResolvedFields{}, nil, nil, exporter.ExitCodeMetric{},
+			fmt.Errorf("failed to set up the demo backend: %w", err)
+	}
+
+	runFunc := backend.RunFunc()
+
+	resolved, err := nvidiasmi.ResolveFields(
+		ctx, demoCommand, cfg.qFieldsRaw, cfg.qFieldsExclude, cfg.timeout, runFunc, logger)
+	if err != nil {
+		return nvidiasmi.ResolvedFields{}, nil, nil, exporter.ExitCodeMetric{},
+			fmt.Errorf("failed to resolve query fields: %w", err)
+	}
+
+	cudaVersion := nvidiasmi.QueryCudaVersion(ctx, demoCommand, cfg.timeout, runFunc, logger)
+
+	demoCfg := cfg
+	demoCfg.nvidiaSmiCommand = demoCommand
+
+	query := backend.WrapQueryFunc(buildQueryFunc(demoCfg, resolved, cudaVersion, runFunc, logger))
+
+	return resolved, query, backend, exporter.NVMLReturnCodeMetric, nil
 }
 
 // superviseXIDWatcher runs the XID watcher beside the collection cycles for
@@ -637,11 +728,12 @@ func buildQueryFunc(
 	cfg collectConfig,
 	resolved nvidiasmi.ResolvedFields,
 	cudaVersion string,
+	runFunc nvidiasmi.RunFunc,
 	logger *slog.Logger,
 ) collect.QueryFunc {
 	return func(queryCtx context.Context) (collect.Reading, int, error) {
 		table, exitCode, err := nvidiasmi.Query(
-			queryCtx, cfg.nvidiaSmiCommand, resolved.Query, nvidiasmi.DefaultRunFunc)
+			queryCtx, cfg.nvidiaSmiCommand, resolved.Query, runFunc)
 		if err != nil {
 			return collect.Reading{}, exitCode, fmt.Errorf("failed to query gpus: %w", err)
 		}
@@ -653,7 +745,7 @@ func buildQueryFunc(
 			reading.AppsAttempted = true
 
 			apps, appsErr := nvidiasmi.QueryComputeApps(
-				queryCtx, cfg.nvidiaSmiCommand, nvidiasmi.DefaultRunFunc, logger)
+				queryCtx, cfg.nvidiaSmiCommand, runFunc, logger)
 			if appsErr != nil {
 				reading.AppsErr = appsErr
 			} else {

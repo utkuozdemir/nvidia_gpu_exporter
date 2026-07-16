@@ -16,12 +16,25 @@ import (
 	"strings"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/capture"
-	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/captures"
 )
 
 // DefaultState is the capture state replayed when none is given.
 const DefaultState = "idle"
+
+// CaptureSource supplies the embedded captures the fake resolves names
+// against. It is injected by the caller so this package pins no capture
+// corpus of its own: the fake-nvidia-smi binary carries the full test
+// corpus, while the exporter's demo backend carries a small curated set
+// (embedding the corpus into the exporter is forbidden by a guard test).
+type CaptureSource struct {
+	// FS holds the embedded capture files.
+	FS fs.FS
+	// Default is the capture name served when none is configured.
+	Default string
+}
 
 // usageExitCode reports a problem with the fake itself (bad flags, unreadable
 // capture, an invocation the capture has no section for), as opposed to a
@@ -56,17 +69,145 @@ type config struct {
 	fluct *fluctuator
 }
 
-// Run executes the fake: it parses the fake's own leading flags, loads the
-// capture, and answers the remaining arguments from it. The returned value is
-// the process exit code.
-func Run(args []string, stdout, stderr io.Writer) int {
-	cfg, rest, err := parseFlags(args)
+// Config is a pre-parsed configuration document, for in-process callers that
+// need one immutable configuration across several invocations of one
+// collection cycle (the exporter's demo backend): re-reading the file per
+// invocation could otherwise interleave an atomic config edit into a cycle.
+type Config struct {
+	fc fileConfig
+}
+
+// LoadConfig reads and strictly parses a config file once.
+func LoadConfig(path string) (*Config, error) {
+	fc, err := loadFileConfig(path)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Config{fc: *fc}, nil
+}
+
+// ParseConfig strictly parses a config document from memory (the demo
+// backend's built-in default configuration).
+func ParseConfig(data []byte) (*Config, error) {
+	fc, err := parseFileConfig(data, "<builtin>")
+	if err != nil {
+		return nil, err
+	}
+
+	return &Config{fc: *fc}, nil
+}
+
+// Extras exposes the raw extras block, which the fake itself ignores: the
+// demo backend decodes it with its own schema.
+func (c *Config) Extras() *yaml.Node {
+	if c.fc.Extras.IsZero() {
+		return nil
+	}
+
+	return &c.fc.Extras
+}
+
+// GPUCount reports how many GPUs the configuration simulates: the gpus
+// setting's count when present, otherwise the capture's single GPU.
+func (c *Config) GPUCount() int {
+	if c.fc.GPUs == nil {
+		return 1
+	}
+
+	if c.fc.GPUs.count > 0 {
+		return c.fc.GPUs.count
+	}
+
+	return len(c.fc.GPUs.entries)
+}
+
+// EnsureFieldOverride sets a fixed override for one field on the simulated
+// GPU at index, unless the configuration already overrides that field
+// (globally or for that GPU): an explicit user choice wins. The demo backend
+// uses this to keep the served table coherent with its synthesized extras
+// (e.g. the MIG mode flag on GPUs carrying a MIG topology). Without
+// multi-GPU simulation there is only GPU 0, and the override is global.
+func (c *Config) EnsureFieldOverride(index int, field, value string) error {
+	if _, exists := c.fc.Overrides[field]; exists {
+		return nil
+	}
+
+	if index < 0 || index >= c.GPUCount() {
+		return fmt.Errorf("gpu index %d is out of range: the config simulates %d GPU(s)", index, c.GPUCount())
+	}
+
+	if c.fc.GPUs == nil {
+		if c.fc.Overrides == nil {
+			c.fc.Overrides = map[string]overrideEntry{}
+		}
+
+		c.fc.Overrides[field] = overrideEntry{fixed: &value}
+
+		return nil
+	}
+
+	// identities are index-derived, so padding with empty entries changes
+	// nothing for the GPUs they describe
+	for len(c.fc.GPUs.entries) <= index {
+		c.fc.GPUs.entries = append(c.fc.GPUs.entries, gpuFileEntry{})
+	}
+
+	entry := &c.fc.GPUs.entries[index]
+	if _, exists := entry.overrides[field]; exists {
+		return nil
+	}
+
+	if entry.overrides == nil {
+		entry.overrides = map[string]overrideEntry{}
+	}
+
+	entry.overrides[field] = overrideEntry{fixed: &value}
+
+	return nil
+}
+
+// StripFailureInjection clears the failure-injection settings (exit code,
+// delay, stderr noise, per-argument failure): they exist to test the
+// exec pipeline's subprocess handling, which the demo backend's in-process
+// path deliberately does not reproduce.
+func (c *Config) StripFailureInjection() {
+	c.fc.Exit = nil
+	c.fc.Delay = ""
+	c.fc.StderrMsg = ""
+	c.fc.FailArg = ""
+}
+
+// RunWith executes one invocation against a pre-parsed configuration, with
+// no leading fake flags: args is the plain nvidia-smi invocation to answer.
+// The returned value is the process exit code equivalent.
+func RunWith(source CaptureSource, cfg *Config, args []string, stdout, stderr io.Writer) int {
+	merged, _, err := resolveMerged(source, rawFlags{}, &cfg.fc, nil)
 	if err != nil {
 		fmt.Fprintf(stderr, "fake-nvidia-smi: %v\n", err)
 
 		return usageExitCode
 	}
 
+	return run(source, merged, args, stdout, stderr)
+}
+
+// Run executes the fake: it parses the fake's own leading flags, loads the
+// capture, and answers the remaining arguments from it. The returned value is
+// the process exit code.
+func Run(source CaptureSource, args []string, stdout, stderr io.Writer) int {
+	cfg, rest, err := parseFlags(source, args)
+	if err != nil {
+		fmt.Fprintf(stderr, "fake-nvidia-smi: %v\n", err)
+
+		return usageExitCode
+	}
+
+	return run(source, cfg, rest, stdout, stderr)
+}
+
+// run answers one resolved invocation.
+func run(source CaptureSource, cfg config, rest []string, stdout, stderr io.Writer) int {
 	if cfg.delay > 0 {
 		time.Sleep(cfg.delay)
 	}
@@ -83,7 +224,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return errorExitCode
 	}
 
-	capt, err := loadCapture(cfg.capturePath)
+	capt, err := loadCapture(source, cfg.capturePath)
 	if err != nil {
 		fmt.Fprintf(stderr, "fake-nvidia-smi: %v\n", err)
 
@@ -95,9 +236,9 @@ func Run(args []string, stdout, stderr io.Writer) int {
 
 // loadCapture resolves the --capture value: a path (anything with a path
 // separator, or naming an existing file) loads from disk, and anything else
-// names an embedded capture from internal/captures, where the .txt suffix
+// names an embedded capture from the injected source, where the .txt suffix
 // may be omitted.
-func loadCapture(value string) (*capture.Capture, error) {
+func loadCapture(source CaptureSource, value string) (*capture.Capture, error) {
 	_, statErr := os.Stat(value)
 
 	if statErr == nil || strings.ContainsRune(value, '/') || strings.ContainsRune(value, os.PathSeparator) {
@@ -114,7 +255,7 @@ func loadCapture(value string) (*capture.Capture, error) {
 		name += ".txt"
 	}
 
-	data, err := fs.ReadFile(captures.FS, name)
+	data, err := fs.ReadFile(source.FS, name)
 	if err != nil {
 		return nil, fmt.Errorf("capture %q is neither a file on disk nor an embedded capture", value)
 	}
@@ -156,7 +297,7 @@ type rawFlags struct {
 // parseFlags consumes the fake's own flags from the front of args, then resolves
 // them against an optional --config base, returning the remaining arguments,
 // which form the nvidia-smi invocation to replay.
-func parseFlags(args []string) (config, []string, error) {
+func parseFlags(source CaptureSource, args []string) (config, []string, error) {
 	var raw rawFlags
 
 	for len(args) > 0 {
@@ -177,7 +318,7 @@ func parseFlags(args []string) (config, []string, error) {
 		case "--capture", "--state", "--stderr-msg", "--fail-arg", "--exit", "--delay",
 			"--set", "--set-range", "--config", "--seed", "--gpus":
 		default:
-			return resolve(raw, args)
+			return resolve(source, raw, args)
 		}
 
 		args = args[1:]
@@ -195,7 +336,7 @@ func parseFlags(args []string) (config, []string, error) {
 		}
 	}
 
-	return resolve(raw, nil)
+	return resolve(source, raw, nil)
 }
 
 // applyFlag records a single parsed flag into raw.
@@ -308,9 +449,7 @@ func applyFluctuateFlag(raw *rawFlags, value string, hasValue bool, rest []strin
 
 // resolve merges the parsed flags with an optional --config base into the final
 // config: the config supplies defaults, and any flag-set value wins per field.
-func resolve(raw rawFlags, rest []string) (config, []string, error) {
-	cfg := config{capturePath: captures.Default, state: DefaultState}
-
+func resolve(source CaptureSource, raw rawFlags, rest []string) (config, []string, error) {
 	var fc *fileConfig
 
 	if raw.configPath != "" {
@@ -321,6 +460,14 @@ func resolve(raw rawFlags, rest []string) (config, []string, error) {
 
 		fc = loaded
 	}
+
+	return resolveMerged(source, raw, fc, rest)
+}
+
+// resolveMerged merges already-loaded settings into the final config, shared
+// by the flag path and the pre-parsed-config path.
+func resolveMerged(source CaptureSource, raw rawFlags, fc *fileConfig, rest []string) (config, []string, error) {
+	cfg := config{capturePath: source.Default, state: DefaultState}
 
 	mergeBaseSettings(&cfg, raw, fc)
 

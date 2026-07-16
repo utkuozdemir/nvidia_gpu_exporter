@@ -37,9 +37,10 @@ type ComputeApp struct {
 	// "[Insufficient Permissions]" in restricted containers.
 	UsedMemory string
 	// GPUInstanceID and ComputeInstanceID attribute the process to a MIG
-	// instance. Only the nvml backend fills them, and only for processes on
-	// MIG-partitioned GPUs; they stay empty otherwise (this query's fixed
-	// field set predates MIG and is never extended, per the comment above).
+	// instance. The nvml backend fills them for processes on
+	// MIG-partitioned GPUs, and the demo backend for its configured
+	// topology; they stay empty otherwise (this query's fixed field set
+	// predates MIG and is never extended, per the comment above).
 	GPUInstanceID     string
 	ComputeInstanceID string
 }

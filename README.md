@@ -61,7 +61,21 @@ probably the better fit; this exporter aims at the cases above.
 - Auto-discovery of the metric fields `nvidia-smi` can expose (future-compatible)
 - Optional per-process GPU metrics: see which process uses how much GPU memory
 - Experimental NVML mode: reads the driver library directly instead of running `nvidia-smi`, and unlocks metrics `nvidia-smi` cannot provide (Linux)
+- Demo mode: realistic synthetic metrics on any machine, no GPU needed - try the exporter or build dashboards anywhere
 - Comes with its own [Grafana dashboard](https://grafana.com/grafana/dashboards/14574)
+
+## Try it without a GPU
+
+Demo mode serves realistic synthetic metrics, including the NVML-only
+families, with no GPU, driver or even Linux required:
+
+```bash
+nvidia_gpu_exporter --collect.backend demo
+```
+
+By default it simulates two H200 GPUs with fluctuating values, a MIG topology
+and an XID error history. The simulated setup is configurable; see
+[CONFIGURE.md](docs/CONFIGURE.md).
 
 ## Visualization
 

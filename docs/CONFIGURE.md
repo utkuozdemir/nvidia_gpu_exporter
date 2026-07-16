@@ -13,7 +13,7 @@ usage: nvidia_gpu_exporter [<flags>]
 Flags:
   -h, --[no-]help               Show context-sensitive help (also try
                                 --help-long and --help-man).
-      --web.listen-address=:9835 ...
+      --web.listen-address=:9835 ...  
                                 Addresses on which to expose metrics and web
                                 interface. Repeatable for multiple addresses.
                                 Examples: `:9100` or `[::1]:9100` for http,
@@ -25,21 +25,21 @@ Flags:
                                 (for listening on both stacks).
       --web.read-timeout=10s    Maximum duration before timing out read of the
                                 request.
-      --web.read-header-timeout=10s
+      --web.read-header-timeout=10s  
                                 Maximum duration before timing out read of the
                                 request headers.
       --web.write-timeout=15s   Maximum duration before timing out write of the
                                 response.
       --web.idle-timeout=60s    Maximum amount of time to wait for the next
                                 request when keep-alive is enabled.
-      --web.telemetry-path="/metrics"
+      --web.telemetry-path="/metrics"  
                                 Path under which to expose metrics.
       --web.max-requests=40     Maximum number of concurrent scrapes of the
                                 metrics endpoint. Requests beyond the limit
                                 are answered with a 503 immediately instead of
                                 queueing up behind a slow collection. 0 disables
                                 the limit.
-      --web.timeout-offset=500ms
+      --web.timeout-offset=500ms  
                                 Offset subtracted from the scrape
                                 timeout Prometheus advertises in the
                                 X-Prometheus-Scrape-Timeout-Seconds header,
@@ -47,7 +47,7 @@ Flags:
                                 Prometheus. The advertised timeout minus this
                                 offset bounds each scrape's collection, on top
                                 of --collect.timeout.
-      --nvidia-smi-command="nvidia-smi"
+      --nvidia-smi-command="nvidia-smi"  
                                 Path or command to be used for the nvidia-smi
                                 executable. Multiple words run the first as the
                                 executable with the rest as its arguments (e.g.
@@ -57,12 +57,12 @@ Flags:
                                 itself, not consumed by the shell you set the
                                 flag from: --nvidia-smi-command '"C:\Program
                                 Files\...\nvidia-smi.exe"'.
-      --query-field-names="AUTO"
+      --query-field-names="AUTO"  
                                 Comma-separated list of the query fields.
                                 You can find out possible fields by running
                                 `nvidia-smi --help-query-gpu`. The value `AUTO`
                                 will automatically detect the fields to query.
-      --query-field-names-exclude=""
+      --query-field-names-exclude=""  
                                 Comma-separated list of query fields to exclude
                                 from being queried. Names match literally, with
                                 `*` as a wildcard for any sequence of characters
@@ -76,7 +76,9 @@ Flags:
                                 requires Linux and a build with the backend
                                 compiled in. It exposes every metric the exec
                                 backend exposes, plus NVML-only extras (see the
-                                docs).
+                                docs). `demo` serves synthetic data mimicking
+                                the nvml surface, with no GPU or driver needed,
+                                on any platform.
       --collect.interval=0      Interval at which the collection runs in the
                                 background, with scrapes serving the most
                                 recent result. When 0, the collection runs
@@ -85,7 +87,7 @@ Flags:
                                 take, including all the work within it (e.g.
                                 the nvidia-smi runs) and the runs at startup.
                                 0 disables the bound.
-      --[no-]collect.compute-apps
+      --[no-]collect.compute-apps  
                                 Also export per-process GPU metrics
                                 (from `nvidia-smi --query-compute-apps`,
                                 or the equivalent NVML calls in nvml mode).
@@ -93,20 +95,25 @@ Flags:
                                 other workloads' processes requires sharing
                                 the host PID namespace (hostPID in Kubernetes,
                                 --pid=host in Docker).
-      --[no-]collect.compute-apps-mig
+      --demo-config=""          Path to the demo backend's config file (the
+                                fake-nvidia-smi YAML plus an extras block;
+                                see the docs). Only with --collect.backend=demo;
+                                the built-in demo setup is used when unset.
+      --[no-]collect.compute-apps-mig  
                                 Add MIG attribution labels (gpu_instance_id,
-                                compute_instance_id) to the per-process
-                                metrics (requires --collect.compute-apps and
-                                --collect.backend=nvml). Opt-in because it
-                                changes the label set of the per-process series.
-      --[no-]collect.pcie-throughput
+                                compute_instance_id) to the per-process metrics
+                                (requires --collect.compute-apps and the nvml
+                                or demo backend). Opt-in because it changes the
+                                label set of the per-process series.
+      --[no-]collect.pcie-throughput  
                                 Also export the PCIe TX/RX throughput per
-                                GPU (requires --collect.backend=nvml). Each
-                                direction is sampled over a separate 20ms driver
-                                counter window, adding roughly 40ms per GPU
-                                to every collection cycle (~320ms on an 8-GPU
-                                node); pairing it with --collect.interval keeps
-                                scrapes unaffected.
+                                GPU (requires --collect.backend=nvml;
+                                the demo backend serves the family regardless).
+                                Each direction is sampled over a separate 20ms
+                                driver counter window, adding roughly 40ms per
+                                GPU to every collection cycle (~320ms on an
+                                8-GPU node); pairing it with --collect.interval
+                                keeps scrapes unaffected.
       --[no-]shutdown-on-error  Shut down the exporter if there is a fatal
                                 collection error (a failing nvidia-smi run,
                                 or a lost GPU/driver in nvml mode). When false,
@@ -328,22 +335,23 @@ a superset of the default backend's: every metric derived from the
 field-by-field against live hardware), and on top of that shared core the
 nvml backend serves metric families only the driver library can provide.
 
-What each backend can do:
+What each backend can do (`demo` serves synthetic data, see
+[Demo mode](#demo-mode)):
 
-| Capability | exec | nvml |
-| --- | --- | --- |
-| Query-field metrics (identical names, labels, values) | yes | yes |
-| `gpu_info` with the `cuda_version` label | yes | yes |
-| Per-process metrics (`--collect.compute-apps`) | yes | yes |
-| Collection status metric | `command_exit_code` | `nvml_return_code` |
-| Custom command, remote scraping (`--nvidia-smi-command`, ssh, sudo) | yes | no |
-| Strongest isolation against a wedged driver (killable subprocess) | yes | no |
-| Brand-new driver fields before the catalog catches up (`AUTO`) | yes | no |
-| Total energy counter (`energy_joules_total`) | no | yes |
-| PCIe throughput (`--collect.pcie-throughput`) | no | yes |
-| Per-MIG-instance metrics (`mig_info`, `mig_memory_*`, `mig_*_ratio`) | no | yes |
-| Per-process MIG attribution (`--collect.compute-apps-mig`) | no | yes |
-| XID error counters (`xid_errors_total`) | no | yes |
+| Capability | exec | nvml | demo |
+| --- | --- | --- | --- |
+| Query-field metrics (identical names, labels, values) | yes | yes | synthetic |
+| `gpu_info` with the `cuda_version` label | yes | yes | yes |
+| Per-process metrics (`--collect.compute-apps`) | yes | yes | yes |
+| Collection status metric | `command_exit_code` | `nvml_return_code` | `nvml_return_code` |
+| Custom command, remote scraping (`--nvidia-smi-command`, ssh, sudo) | yes | no | no |
+| Strongest isolation against a wedged driver (killable subprocess) | yes | no | n/a |
+| Brand-new driver fields before the catalog catches up (`AUTO`) | yes | no | no |
+| Total energy counter (`energy_joules_total`) | no | yes | yes |
+| PCIe throughput (`--collect.pcie-throughput`) | no | yes | always on |
+| Per-MIG-instance metrics (`mig_info`, `mig_memory_*`, `mig_*_ratio`) | no | yes | yes |
+| Per-process MIG attribution (`--collect.compute-apps-mig`) | no | yes | yes |
+| XID error counters (`xid_errors_total`) | no | yes | yes |
 
 The NVML-only families are documented in [METRICS.md](METRICS.md). The PCIe
 throughput family is opt-in via `--collect.pcie-throughput` because of its
@@ -399,3 +407,82 @@ Current limits, while the backend is experimental:
 
 The `nvidia_smi_*` metric prefix stays as is in both backends: it names the
 data schema, not the collection mechanism.
+
+## Demo mode
+
+`--collect.backend=demo` serves synthetic data mimicking the nvml backend's
+full metric surface, with no GPU, no driver and no Linux required. It exists
+for trying the exporter out and for developing dashboards and alerts against
+realistic data. The exporter logs a warning at startup so a demo instance
+cannot be mistaken for a real one.
+
+```bash
+nvidia_gpu_exporter --collect.backend demo
+```
+
+The GPU metrics replay a real captured `nvidia-smi`, with values fluctuating
+between scrapes, and the NVML-only families are synthesized coherently on
+top: the energy counter integrates the power draw the table itself reports,
+MIG instances form a consistent topology where a busy instance runs hot and
+the rest idle, PCIe throughput jitters within configurable bounds, and XID
+error counters accumulate over time. Per-process metrics work too, including
+the MIG attribution labels (`--collect.compute-apps`,
+`--collect.compute-apps-mig`).
+
+The built-in setup simulates two H200 GPUs, a MIG topology on the first one
+and a pre-seeded XID history. `--demo-config` replaces it with your own
+scenario:
+
+```yaml
+# One of the two embedded captures:
+# linux-x86_64__nvidia-h200__590.48.01.txt
+# linux-x86_64__nvidia-geforce-rtx-4080-super__595.71.05.txt
+capture: linux-x86_64__nvidia-h200__590.48.01.txt
+state: load      # which captured state to serve: idle or load
+gpus: 4          # replicate the captured GPU into this many
+fluctuate: true  # jitter the naturally-moving values between scrapes
+extras:          # the demo-only part; every key is optional
+  seed: 42       # fix the randomness for reproducible values
+  energy-fallback-power-watts: 120  # used when the power field is excluded
+  pcie:
+    tx-bytes-per-second: {min: 0.2e9, max: 3e9}
+    rx-bytes-per-second: {min: 0.5e9, max: 8e9}
+  mig:
+    - gpu: 0     # index into the simulated GPU list
+      instances:
+        - {gi: 2, profile: 3g.71gb, cis: 2, busy: true}
+        - {gi: 7, profile: 1g.18gb}
+  xids:
+    initial: [{gpu: 1, xid: 79, count: 2}]  # pre-seeded error history
+    interval: 10m       # mean spacing of ongoing random events; omit to disable
+    codes: [13, 31, 79] # the pool ongoing events draw from
+```
+
+Everything above `extras` is the same configuration file the repository's
+fake `nvidia-smi` uses for development, so the full key reference lives with
+it in the repository. The fake's failure-injection keys (`exit`, `delay`,
+`stderr-msg`, `fail-arg`) are ignored in demo mode: they exist to test the
+subprocess handling the in-process demo path does not have. The file is
+re-read on every collection cycle: edits apply live without a restart, and a
+broken edit fails the collection (visible as
+`nvidia_smi_last_collect_success 0`) until fixed. An edit also resets the
+synthesized state (the energy and XID counters, the random sequence), like a
+driver reload would. One exception: the `cuda_version` label is read once at
+startup, so switching captures live keeps the old label until a restart.
+
+Details worth knowing when developing dashboards against demo data:
+
+- The mode is faithful to the real backend's quirks: GPUs carrying a MIG
+  topology report MIG mode enabled, `mig_*_ratio` utilization series are
+  absent on the first collection that sees a GPU instance (the real sampling
+  needs a pair of collections), and the energy counter starts at zero.
+- The PCIe throughput family is always on in demo mode but opt-in
+  (`--collect.pcie-throughput`) on the real nvml backend: a dashboard
+  validated against demo data shows empty PCIe panels on a default nvml
+  deployment unless the flag is set there.
+- The collection status metric is `nvml_return_code` for name parity with
+  the nvml backend; no driver library is involved.
+- For fully reproducible values, set `extras.seed` and leave `fluctuate`
+  off. The top-level `seed` key freezes the fake's jitter to one draw per
+  process instead (it mirrors the CLI fake's per-invocation behavior), so it
+  is not useful here.

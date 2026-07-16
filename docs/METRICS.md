@@ -9,7 +9,9 @@ The experimental NVML backend exports a superset of these metrics: every
 metric below is identical in both backends, except that the NVML backend
 reports `nvidia_smi_nvml_return_code` in place of
 `nvidia_smi_command_exit_code`. On top of that shared core it serves the
-NVML-only families described in the next section.
+NVML-only families described in the next section. The demo backend serves
+the same surface as the NVML backend, with synthetic data (see the demo
+mode section in [CONFIGURE.md](CONFIGURE.md)).
 
 ## NVML-only metrics
 

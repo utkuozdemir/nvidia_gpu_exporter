@@ -5,23 +5,28 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/capture"
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/captures"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/fakesmi"
 )
 
 const capturesDir = "../captures"
 
-// runFake runs the fake in-process, returning its exit code and outputs.
+// runFake runs the fake in-process with the full corpus as its capture
+// source (matching the fake-nvidia-smi binary), returning its exit code and
+// outputs.
 func runFake(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()
 
 	var stdout, stderr bytes.Buffer
 
-	code := fakesmi.Run(args, &stdout, &stderr)
+	source := fakesmi.CaptureSource{FS: captures.FS, Default: captures.Default}
+	code := fakesmi.Run(source, args, &stdout, &stderr)
 
 	return code, stdout.String(), stderr.String()
 }
@@ -384,4 +389,79 @@ func TestErrors(t *testing.T) {
 			assert.NotEmpty(t, stderr)
 		})
 	}
+}
+
+// TestConfigGPUCount pins the simulated-GPU accounting the demo backend's
+// validation relies on.
+func TestConfigGPUCount(t *testing.T) {
+	t.Parallel()
+
+	for doc, want := range map[string]int{
+		"state: idle\n": 1,
+		"gpus: 3\n":     3,
+		"gpus:\n  - uuid: GPU-11111111-1111-4111-8111-111111111111\n  - {}\n": 2,
+	} {
+		cfg, err := fakesmi.ParseConfig([]byte(doc))
+		require.NoError(t, err)
+		assert.Equal(t, want, cfg.GPUCount(), "config: %q", doc)
+	}
+}
+
+// TestConfigEnsureFieldOverride proves the demo backend's table
+// reconciliation seam: the override lands on exactly the addressed GPU, an
+// explicit user override wins, and an unservable index is an error.
+func TestConfigEnsureFieldOverride(t *testing.T) {
+	t.Parallel()
+
+	source := fakesmi.CaptureSource{FS: captures.FS, Default: captures.Default}
+
+	cfg, err := fakesmi.ParseConfig([]byte("gpus: 2\n"))
+	require.NoError(t, err)
+
+	require.NoError(t, cfg.EnsureFieldOverride(1, "temperature.gpu", "99"))
+	require.ErrorContains(t, cfg.EnsureFieldOverride(2, "temperature.gpu", "99"), "out of range")
+
+	var stdout, stderr bytes.Buffer
+
+	code := fakesmi.RunWith(source, cfg, []string{"--query-gpu=temperature.gpu", "--format=csv"}, &stdout, &stderr)
+	require.Zero(t, code, stderr.String())
+
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	require.Len(t, lines, 3)
+	assert.NotEqual(t, "99", strings.TrimSpace(lines[1]), "GPU 0 keeps the captured value")
+	assert.Equal(t, "99", strings.TrimSpace(lines[2]), "GPU 1 serves the injected override")
+
+	// an explicit user override is never displaced
+	cfg, err = fakesmi.ParseConfig([]byte("overrides:\n  temperature.gpu: \"55\"\n"))
+	require.NoError(t, err)
+	require.NoError(t, cfg.EnsureFieldOverride(0, "temperature.gpu", "99"))
+
+	stdout.Reset()
+
+	code = fakesmi.RunWith(source, cfg, []string{"--query-gpu=temperature.gpu", "--format=csv"}, &stdout, &stderr)
+	require.Zero(t, code, stderr.String())
+	assert.Contains(t, stdout.String(), "55")
+	assert.NotContains(t, stdout.String(), "99")
+}
+
+// TestConfigStripFailureInjection proves the demo backend's in-process path
+// can disarm the subprocess-oriented failure settings.
+func TestConfigStripFailureInjection(t *testing.T) {
+	t.Parallel()
+
+	source := fakesmi.CaptureSource{FS: captures.FS, Default: captures.Default}
+
+	cfg, err := fakesmi.ParseConfig([]byte("exit: 7\ndelay: 10s\n"))
+	require.NoError(t, err)
+
+	cfg.StripFailureInjection()
+
+	var stdout, stderr bytes.Buffer
+
+	start := time.Now()
+	code := fakesmi.RunWith(source, cfg, []string{"--query-gpu=uuid", "--format=csv"}, &stdout, &stderr)
+
+	assert.Zero(t, code, "the exit injection must be gone")
+	assert.Less(t, time.Since(start), 2*time.Second, "the delay must be gone")
+	assert.NotEmpty(t, stdout.String())
 }

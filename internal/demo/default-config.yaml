@@ -1,0 +1,18 @@
+# The demo backend's built-in configuration: a fluctuating two-GPU H200 box
+# with a MIG topology on the first card (mirroring a live-verified layout),
+# pre-seeded XID history and slow ongoing events, so every metric family
+# shows something out of the box. Pass --demo-config to replace it.
+capture: linux-x86_64__nvidia-h200__590.48.01
+state: load
+fluctuate: true
+gpus: 2
+extras:
+  mig:
+    - gpu: 0
+      instances:
+        - {gi: 2, profile: 3g.71gb, cis: 2, busy: true}
+        - {gi: 7, profile: 1g.18gb}
+  xids:
+    initial:
+      - {gpu: 1, xid: 79, count: 2}
+    interval: 10m

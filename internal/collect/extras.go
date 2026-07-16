@@ -13,14 +13,15 @@ type Extras struct {
 	// example "13.1"), empty when unknown. Both backends fill it; the
 	// exporter renders it as the cuda_version label on gpu_info.
 	CUDAVersion string
-	// PCIe holds per-GPU PCIe throughput samples. Only the nvml backend
-	// fills it, and only under --collect.pcie-throughput.
+	// PCIe holds per-GPU PCIe throughput samples. The nvml backend fills it
+	// under --collect.pcie-throughput; the demo backend always fills it.
 	PCIe []PCIeThroughput
-	// Energy holds per-GPU cumulative energy counters. Only the nvml
-	// backend fills it; devices that cannot report it are absent.
+	// Energy holds per-GPU cumulative energy counters. The nvml and demo
+	// backends fill it; devices that cannot report it are absent.
 	Energy []EnergyCounter
-	// MIG holds per-MIG-instance readings. Only the nvml backend fills it,
-	// and only for GPUs with MIG mode enabled.
+	// MIG holds per-MIG-instance readings. The nvml backend fills it for
+	// GPUs with MIG mode enabled; the demo backend synthesizes its
+	// configured topology.
 	MIG []MIGInstance
 }
 

@@ -24,4 +24,6 @@ func TestExporterDoesNotEmbedCaptures(t *testing.T) {
 
 	assert.NotContains(t, string(output), "internal/captures",
 		"the exporter binary must not import the capture corpus")
+	assert.Contains(t, string(output), "internal/demodata",
+		"the demo backend's curated captures are the one embedded corpus the binary may carry")
 }

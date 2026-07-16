@@ -1,0 +1,22 @@
+# Fully deterministic demo backend config for the golden integration test:
+# fixed seed, no fluctuation, no ongoing XID cadence. Any change to the demo
+# synthesizers shows up as a golden diff.
+capture: linux-x86_64__nvidia-h200__590.48.01.txt
+state: load
+gpus: 2
+extras:
+  seed: 42
+  mig:
+    - gpu: 0
+      instances:
+        - gi: 2
+          profile: 3g.71gb
+          cis: 2
+          busy: true
+        - gi: 7
+          profile: 1g.18gb
+  xids:
+    initial:
+      - gpu: 1
+        xid: 79
+        count: 2

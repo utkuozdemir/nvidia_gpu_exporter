@@ -37,6 +37,7 @@ const startupTimeout = 30 * time.Second
 var wallClockFamilies = map[string]bool{
 	"nvidia_smi_last_collect_duration_seconds":          true,
 	"nvidia_smi_last_collect_success_timestamp_seconds": true,
+	"nvidia_smi_xid_last_timestamp_seconds":             true,
 }
 
 // fakeBin is the fake nvidia-smi binary, built once for the whole suite.
@@ -280,12 +281,51 @@ func TestExpectedMetrics(t *testing.T) {
 	}
 }
 
+// demoExpectedFile holds the expected scrape output of the demo backend
+// driven by the committed deterministic config fixture.
+const demoExpectedFile = "demo__seeded.metrics"
+
+// TestDemoBackendExpectedMetrics runs the demo backend with a fully
+// deterministic config (fixed seed, no fluctuation, initial XID events only)
+// and compares the deterministic part of the scrape against the expected
+// output file, pinning the whole synthesized surface: the extras families,
+// the MIG topology and its deterministic uuids, the per-process MIG
+// attribution, and the seeded XID counts. Run with -update to regenerate.
+func TestDemoBackendExpectedMetrics(t *testing.T) {
+	t.Parallel()
+
+	baseURL := startExporter(t,
+		"--collect.backend=demo",
+		"--demo-config="+filepath.Join("testdata", "demo-config.yaml"),
+		"--collect.compute-apps",
+		"--collect.compute-apps-mig")
+
+	got := filterDeterministic(scrape(t, baseURL))
+	expectedPath := filepath.Join("testdata", demoExpectedFile)
+
+	if *update {
+		require.NoError(t, os.MkdirAll("testdata", 0o755))
+		require.NoError(t, os.WriteFile(expectedPath, []byte(got), 0o600))
+
+		return
+	}
+
+	want, err := os.ReadFile(expectedPath)
+	require.NoError(
+		t,
+		err,
+		"missing expected output for the demo backend? generate and review it with: go test ./internal/integration/ -update",
+	)
+
+	assert.Equal(t, string(want), got)
+}
+
 // TestNoStaleExpectedFiles fails when a committed expected output file corresponds to no
 // capture/state pair anymore, e.g. after a capture rename or removal.
 func TestNoStaleExpectedFiles(t *testing.T) {
 	t.Parallel()
 
-	expected := make(map[string]bool)
+	expected := map[string]bool{demoExpectedFile: true}
 	for _, testCase := range replayCases(t) {
 		expected[testCase.expectedFile] = true
 	}
@@ -939,6 +979,123 @@ func TestExecBackendRejectsPcieThroughput(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--collect.pcie-throughput requires --collect.backend=nvml")
+}
+
+// TestDemoBackendDefaultConfig proves the zero-config demo mode serves every
+// metric family out of the box: the qfield surface plus all the nvml-superset
+// extras, including the wall-clock XID timestamp the golden test excludes.
+// It also pins two real-hardware behaviors the demo mimics: MIG utilization
+// is absent on the first collection that sees a GPU instance (the real GPM
+// sampling needs a pair), and a GPU carrying a MIG topology reports MIG mode
+// enabled.
+func TestDemoBackendDefaultConfig(t *testing.T) {
+	t.Parallel()
+
+	baseURL := startExporter(t, "--collect.backend=demo", "--collect.compute-apps")
+
+	first := scrape(t, baseURL)
+	second := scrape(t, baseURL)
+
+	for _, family := range []string{
+		"nvidia_smi_gpu_info",
+		"nvidia_smi_compute_app_info",
+		"nvidia_smi_energy_joules_total",
+		"nvidia_smi_pcie_throughput_tx_bytes_per_second",
+		"nvidia_smi_mig_info",
+		"nvidia_smi_mig_memory_used_bytes",
+		"nvidia_smi_xid_errors_total",
+		"nvidia_smi_xid_last_timestamp_seconds",
+	} {
+		assert.Contains(t, first, family+"{", "family %s must be served by the built-in demo config", family)
+	}
+
+	assert.NotContains(t, first, "nvidia_smi_mig_sm_activity_ratio",
+		"MIG utilization needs a sample pair, like the real backend")
+	assert.Contains(t, second, "nvidia_smi_mig_sm_activity_ratio{",
+		"the second collection must serve MIG utilization")
+
+	assert.Regexp(t, `nvidia_smi_mig_mode_current\{[^}]*\} 1`, first,
+		"a GPU carrying a MIG topology must report the mode on")
+	assert.Regexp(t, `nvidia_smi_gpu_info\{[^}]*cuda_version="[0-9.]+"`, first)
+}
+
+// TestDemoBackendEnergyWithoutPowerField proves the energy counter does not
+// depend on the public field selection: with the power field excluded from
+// the metrics, the counter still integrates a power reading sampled from the
+// same configuration snapshot.
+func TestDemoBackendEnergyWithoutPowerField(t *testing.T) {
+	t.Parallel()
+
+	baseURL := startExporter(t,
+		"--collect.backend=demo",
+		"--query-field-names=uuid,name")
+
+	first := scrape(t, baseURL)
+	assert.NotContains(t, first, "nvidia_smi_power_draw", "the power family must really be excluded")
+	assert.Contains(t, first, "nvidia_smi_energy_joules_total{")
+
+	// the H200 capture draws hundreds of watts; the built-in fallback is
+	// 120W, so a between-scrapes joule gain far above fallback * elapsed
+	// proves the counter integrates the capture's own power reading
+	value := regexp.MustCompile(`nvidia_smi_energy_joules_total\{[^}]*\} ([0-9.e+]+)`)
+
+	match := value.FindStringSubmatch(scrape(t, baseURL))
+	require.NotNil(t, match)
+
+	joules, err := strconv.ParseFloat(match[1], 64)
+	require.NoError(t, err)
+	assert.Positive(t, joules, "the second collection must have integrated real power")
+}
+
+// TestDemoBackendRejectsCustomCommand pins the flag-validation contract: the
+// demo backend runs no external command, so a custom one must fail at startup.
+func TestDemoBackendRejectsCustomCommand(t *testing.T) {
+	t.Parallel()
+
+	err := app.Run(t.Context(), []string{
+		"--web.listen-address=127.0.0.1:0",
+		"--log.level=error",
+		"--collect.backend=demo",
+		"--nvidia-smi-command=" + fakeCommand(defaultCapture(t)),
+	}, app.Options{})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--nvidia-smi-command cannot be combined")
+}
+
+// TestDemoConfigRequiresDemoBackend pins the reverse rule: the demo config
+// flag is meaningless without the demo backend.
+func TestDemoConfigRequiresDemoBackend(t *testing.T) {
+	t.Parallel()
+
+	err := app.Run(t.Context(), []string{
+		"--web.listen-address=127.0.0.1:0",
+		"--log.level=error",
+		"--nvidia-smi-command=" + fakeCommand(defaultCapture(t)),
+		"--demo-config=" + filepath.Join("testdata", "demo-config.yaml"),
+	}, app.Options{})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--demo-config requires --collect.backend=demo")
+}
+
+// TestDemoBackendInvalidConfigFailsStartup proves a broken demo config is a
+// startup error, not a silently-degraded server.
+func TestDemoBackendInvalidConfigFailsStartup(t *testing.T) {
+	t.Parallel()
+
+	cfgPath := filepath.Join(t.TempDir(), "demo.yaml")
+	require.NoError(t, os.WriteFile(cfgPath, []byte("extras:\n  mig:\n    - gpu: 0\n"), 0o600))
+
+	err := app.Run(t.Context(), []string{
+		"--web.listen-address=127.0.0.1:0",
+		"--log.level=error",
+		"--collect.backend=demo",
+		"--demo-config=" + cfgPath,
+	}, app.Options{})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to set up the demo backend")
 }
 
 // TestNVMLBackendStartupFailureWithoutDriver pins the startup behavior on
