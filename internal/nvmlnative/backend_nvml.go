@@ -34,6 +34,13 @@ type nvmlAPI struct {
 	cudaDriverVersion func() (int, nvml.Return)
 	processName       func(int) (string, nvml.Return)
 	validateInforom   func(nvml.Device) nvml.Return
+	// the GPM entry points are package-level in go-nvml AND its sample
+	// mock cannot pass through the real metrics call (a private concrete
+	// type assertion), so they must live on the seam
+	gpmSampleAlloc  func() (nvml.GpmSample, nvml.Return)
+	gpmSampleFree   func(nvml.GpmSample) nvml.Return
+	gpmMigSampleGet func(nvml.Device, int, nvml.GpmSample) nvml.Return
+	gpmMetricsGet   func(*nvml.GpmMetricsGetType) nvml.Return
 }
 
 func realNVML() nvmlAPI {
@@ -50,6 +57,10 @@ func realNVML() nvmlAPI {
 		cudaDriverVersion: nvml.SystemGetCudaDriverVersion,
 		processName:       nvml.SystemGetProcessName,
 		validateInforom:   nvml.DeviceValidateInforom,
+		gpmSampleAlloc:    nvml.GpmSampleAlloc,
+		gpmSampleFree:     nvml.GpmSampleFree,
+		gpmMigSampleGet:   nvml.GpmMigSampleGet,
+		gpmMetricsGet:     nvml.GpmMetricsGet,
 	}
 }
 
@@ -70,7 +81,14 @@ type Backend struct {
 	// extrasWarned makes a persistent extras failure visible exactly once
 	// per family, mirroring permLogged/fnfLogged.
 	extrasWarned map[string]bool
-	logger       *slog.Logger
+	// gpm retains one activity sample per GPU instance across cycles, so
+	// utilization can be computed over the inter-collection window. Guarded
+	// by mu like the rest of the cycle state; every sample is freed before
+	// any NVML shutdown.
+	gpm map[string]*gpmState
+	// now is the clock, injectable so the GPM window guards are testable.
+	now    func() time.Time
+	logger *slog.Logger
 }
 
 // New dlopens and initializes NVML. Failure here is a startup error: the
@@ -80,7 +98,7 @@ func New(logger *slog.Logger) (*Backend, error) {
 }
 
 func newWithAPI(api nvmlAPI, logger *slog.Logger) (*Backend, error) {
-	backend := &Backend{api: api, logger: logger}
+	backend := &Backend{api: api, now: time.Now, logger: logger}
 	if ret := backend.api.init(); ret != nvml.SUCCESS {
 		return nil, fmt.Errorf("failed to initialize NVML: %s", ret.String())
 	}
@@ -114,6 +132,8 @@ func (b *Backend) Close() {
 	defer b.mu.Unlock()
 
 	if b.initialized {
+		b.freeGPMSamples()
+
 		_ = b.api.shutdown()
 		b.initialized = false
 	}
@@ -344,9 +364,13 @@ func (b *Backend) lifecycle(ret nvml.Return, err error) error {
 	return err
 }
 
-// markLost flags the backend for re-initialization on the next cycle.
+// markLost flags the backend for re-initialization on the next cycle. The
+// retained GPM samples die with the NVML generation, so they are freed
+// (best-effort) before the shutdown.
 func (b *Backend) markLost() {
 	if b.initialized {
+		b.freeGPMSamples()
+
 		b.initialized = false
 
 		_ = b.api.shutdown()
@@ -1244,10 +1268,12 @@ func (b *Backend) collectComputeApps(ctx context.Context) ([]nvidiasmi.ComputeAp
 			}
 
 			apps = append(apps, nvidiasmi.ComputeApp{
-				GPUUUID:     nvidiasmi.NormalizeUUID(uuid),
-				PID:         strconv.FormatUint(uint64(proc.Pid), 10),
-				ProcessName: name,
-				UsedMemory:  usedMemory,
+				GPUUUID:           nvidiasmi.NormalizeUUID(uuid),
+				PID:               strconv.FormatUint(uint64(proc.Pid), 10),
+				ProcessName:       name,
+				UsedMemory:        usedMemory,
+				GPUInstanceID:     migAppID(proc.GpuInstanceId),
+				ComputeInstanceID: migAppID(proc.ComputeInstanceId),
 			})
 		}
 	}
@@ -1303,7 +1329,7 @@ func (b *Backend) collectExtras(ctx context.Context, opts CollectOptions) collec
 		b.warnOnce("cuda-version", "cannot read the CUDA version", ret)
 	}
 
-	if !opts.Energy && !opts.PCIeThroughput {
+	if !opts.Energy && !opts.PCIeThroughput && !opts.MIG {
 		return extras
 	}
 
@@ -1314,14 +1340,22 @@ func (b *Backend) collectExtras(ctx context.Context, opts CollectOptions) collec
 		return extras
 	}
 
+	seenGIs := map[string]bool{}
+
 	for deviceIdx := range count {
 		if ctx.Err() != nil {
 			return extras
 		}
 
-		if !b.collectDeviceExtras(ctx, deviceIdx, opts, &extras) {
+		if !b.collectDeviceExtras(ctx, deviceIdx, opts, &extras, seenGIs) {
 			return extras
 		}
+	}
+
+	if opts.MIG {
+		// only after a complete pass: an aborted cycle must not mistake
+		// unvisited GPU instances for disappeared ones
+		b.dropOrphanGPMStates(seenGIs)
 	}
 
 	return extras
@@ -1335,6 +1369,7 @@ func (b *Backend) collectDeviceExtras(
 	deviceIdx int,
 	opts CollectOptions,
 	extras *collect.Extras,
+	seenGIs map[string]bool,
 ) bool {
 	dev, ret := b.api.deviceByIndex(deviceIdx)
 	if ret != nvml.SUCCESS {
@@ -1353,6 +1388,10 @@ func (b *Backend) collectDeviceExtras(
 	}
 
 	if opts.PCIeThroughput && !b.collectPcie(ctx, dev, uuid, extras) {
+		return false
+	}
+
+	if opts.MIG && !b.collectMIG(dev, uuid, extras, seenGIs) {
 		return false
 	}
 

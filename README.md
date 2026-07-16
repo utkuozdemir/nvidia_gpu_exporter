@@ -29,8 +29,8 @@ This makes it possible to run it on Windows and get GPU metrics while gaming - n
 It can also skip `nvidia-smi` and read the metrics straight from the NVIDIA
 Management Library (NVML), the C library `nvidia-smi` itself is built on. This
 mode is experimental and exports a superset of the default mode's metrics: the
-same core set plus NVML-only extras like the GPU energy counter and opt-in
-PCIe throughput; see [CONFIGURE.md](docs/CONFIGURE.md).
+same core set plus NVML-only extras like the GPU energy counter, per-MIG-instance
+metrics and opt-in PCIe throughput; see [CONFIGURE.md](docs/CONFIGURE.md).
 
 This project is based on [a0s/nvidia-smi-exporter](https://github.com/a0s/nvidia-smi-exporter).
 However, this one is written in Go to produce a single, static binary.

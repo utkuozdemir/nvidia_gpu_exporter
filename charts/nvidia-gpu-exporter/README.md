@@ -13,7 +13,8 @@ To try the experimental NVML backend, which reads the driver library
 directly instead of running `nvidia-smi`, set the image tag to a `-nvml`
 variant (for example `1.7.0-nvml`). It exports a superset of the default
 backend's metrics: the same core set plus NVML-only extras like the GPU
-energy counter and opt-in PCIe throughput. The `-nvml` images are built for
+energy counter, per-MIG-instance metrics and opt-in PCIe throughput. The
+`-nvml` images are built for
 linux/amd64 only, so on mixed-architecture clusters add
 `kubernetes.io/arch: amd64` to `nodeSelector`.
 
@@ -81,8 +82,14 @@ helm upgrade nvidia-gpu-exporter oci://ghcr.io/utkuozdemir/charts/nvidia-gpu-exp
 On MIG-enabled GPUs the requirements are steeper: the exporter container must
 run privileged with the `NVIDIA_MIG_MONITOR_DEVICES=all` environment variable
 (via `securityContext` and `extraEnv`) on top of `hostPID`, otherwise even
-GPU-level memory fields read `[Insufficient Permissions]`. Processes are
-attributed to the parent GPU's UUID, not to individual MIG instances.
+GPU-level memory fields read `[Insufficient Permissions]`. By default
+processes are attributed to the parent GPU's UUID, not to individual MIG
+instances; on the `-nvml` image the attribution labels can be added with
+
+```yaml
+extraArgs:
+  - --collect.compute-apps-mig
+```
 
 ## Scheduling on GPU nodes
 

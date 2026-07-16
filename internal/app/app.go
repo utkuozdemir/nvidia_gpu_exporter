@@ -149,6 +149,12 @@ func Run(ctx context.Context, args []string, opts Options) error {
 				"container, seeing other workloads' processes requires sharing the host PID "+
 				"namespace (hostPID in Kubernetes, --pid=host in Docker).").
 			Default("false").Bool()
+		collectComputeAppsMIG = app.Flag("collect.compute-apps-mig",
+			"Add MIG attribution labels (gpu_instance_id, compute_instance_id) to the "+
+				"per-process metrics (requires --collect.compute-apps and "+
+				"--collect.backend=nvml). Opt-in because it changes the label set of the "+
+				"per-process series.").
+			Default("false").Bool()
 		collectPcieThroughput = app.Flag("collect.pcie-throughput",
 			"Also export the PCIe TX/RX throughput per GPU (requires --collect.backend=nvml). "+
 				"Each direction is sampled over a separate 20ms driver counter window, adding "+
@@ -190,7 +196,15 @@ func Run(ctx context.Context, args []string, opts Options) error {
 		return err
 	}
 
-	if err := validateBackendFlags(*collectBackend, *nvidiaSmiCommand, *collectPcieThroughput); err != nil {
+	backendFlags := backendFlagSet{
+		backend:          *collectBackend,
+		nvidiaSmiCommand: *nvidiaSmiCommand,
+		pcieThroughput:   *collectPcieThroughput,
+		computeApps:      *collectComputeApps,
+		computeAppsMIG:   *collectComputeAppsMIG,
+	}
+
+	if err := validateBackendFlags(backendFlags); err != nil {
 		return err
 	}
 
@@ -212,6 +226,7 @@ func Run(ctx context.Context, args []string, opts Options) error {
 		interval:         *collectInterval,
 		timeout:          *collectTimeout,
 		computeApps:      *collectComputeApps,
+		computeAppsMIG:   *collectComputeAppsMIG,
 		pcieThroughput:   *collectPcieThroughput,
 		onFatal:          onFatal,
 	}
@@ -299,18 +314,37 @@ func serveHTTP(
 	})
 }
 
+// backendFlagSet carries the flags whose combinations depend on the chosen
+// backend.
+type backendFlagSet struct {
+	backend          string
+	nvidiaSmiCommand string
+	pcieThroughput   bool
+	computeApps      bool
+	computeAppsMIG   bool
+}
+
 // validateBackendFlags rejects flag combinations the chosen backend cannot
 // honor, as errors rather than silent ignores.
-func validateBackendFlags(backend, nvidiaSmiCommand string, pcieThroughput bool) error {
-	if backend == backendNVML && nvidiaSmiCommand != nvidiasmi.DefaultCommand {
+func validateBackendFlags(flags backendFlagSet) error {
+	if flags.backend == backendNVML && flags.nvidiaSmiCommand != nvidiasmi.DefaultCommand {
 		// a custom command signals intent (ssh wrappers, sudo) the nvml
 		// backend cannot honor
 		return errors.New("--nvidia-smi-command cannot be combined with --collect.backend=nvml")
 	}
 
-	if backend != backendNVML && pcieThroughput {
+	if flags.backend != backendNVML && flags.pcieThroughput {
 		// the throughput counters only exist in the driver library
 		return errors.New("--collect.pcie-throughput requires --collect.backend=nvml")
+	}
+
+	if flags.computeAppsMIG && flags.backend != backendNVML {
+		// the per-process query output has no MIG attribution to parse
+		return errors.New("--collect.compute-apps-mig requires --collect.backend=nvml")
+	}
+
+	if flags.computeAppsMIG && !flags.computeApps {
+		return errors.New("--collect.compute-apps-mig requires --collect.compute-apps")
 	}
 
 	return nil
@@ -417,6 +451,7 @@ type collectConfig struct {
 	interval         time.Duration
 	timeout          time.Duration
 	computeApps      bool
+	computeAppsMIG   bool
 	pcieThroughput   bool
 	onFatal          func(error)
 }
@@ -453,10 +488,12 @@ func setupExporter(
 	}
 
 	features := exporter.Features{
-		ComputeApps: cfg.computeApps,
+		ComputeApps:         cfg.computeApps,
+		ComputeAppMIGLabels: cfg.computeAppsMIG,
 		// the extras families exist only in the nvml backend
 		PCIeThroughput: cfg.pcieThroughput,
 		Energy:         cfg.backend == backendNVML,
+		MIG:            cfg.backend == backendNVML,
 	}
 
 	exp := exporter.New(ctx, exporter.DefaultPrefix, resolved, src, features, exitCodeMetric, logger)
@@ -518,6 +555,7 @@ func setupBackend(
 			ComputeApps:    cfg.computeApps,
 			PCIeThroughput: cfg.pcieThroughput,
 			Energy:         true,
+			MIG:            true,
 		}
 
 		return resolved, backend.QueryFunc(resolved, opts), exporter.NVMLReturnCodeMetric, nil

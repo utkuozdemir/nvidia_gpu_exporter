@@ -440,6 +440,16 @@ func TestBackendMetricFamilyParityOnRealGPU(t *testing.T) {
 var nvmlOnlyFamilyPrefixes = []string{
 	"nvidia_smi_energy_joules_total",
 	"nvidia_smi_pcie_throughput_",
+	// deliberately NOT a bare "nvidia_smi_mig_" prefix: the shared
+	// mig.mode.* query fields render as nvidia_smi_mig_mode_*, and those
+	// must stay under the parity requirement
+	"nvidia_smi_mig_info",
+	"nvidia_smi_mig_memory_",
+	"nvidia_smi_mig_graphics_activity_ratio",
+	"nvidia_smi_mig_sm_activity_ratio",
+	"nvidia_smi_mig_sm_occupancy_ratio",
+	"nvidia_smi_mig_tensor_activity_ratio",
+	"nvidia_smi_mig_pcie_throughput_",
 }
 
 func isNVMLOnlyFamily(family string) bool {

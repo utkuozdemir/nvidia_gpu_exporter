@@ -36,6 +36,12 @@ type ComputeApp struct {
 	// because it is not always a number: "[N/A]" on Windows WDDM,
 	// "[Insufficient Permissions]" in restricted containers.
 	UsedMemory string
+	// GPUInstanceID and ComputeInstanceID attribute the process to a MIG
+	// instance. Only the nvml backend fills them, and only for processes on
+	// MIG-partitioned GPUs; they stay empty otherwise (this query's fixed
+	// field set predates MIG and is never extended, per the comment above).
+	GPUInstanceID     string
+	ComputeInstanceID string
 }
 
 // QueryComputeApps runs nvidia-smi --query-compute-apps and parses the CSV
