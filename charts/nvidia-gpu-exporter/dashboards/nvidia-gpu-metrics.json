@@ -649,16 +649,18 @@
             "indexByName": {
               "name": 0,
               "driver_version": 1,
-              "vbios_version": 2,
-              "compute_cap": 3,
-              "pci_bus_id": 4
+              "cuda_version": 2,
+              "vbios_version": 3,
+              "compute_cap": 4,
+              "pci_bus_id": 5
             },
             "renameByName": {
               "name": "GPU",
               "driver_version": "Driver",
               "vbios_version": "VBIOS",
               "compute_cap": "Compute Cap",
-              "pci_bus_id": "PCI Bus"
+              "pci_bus_id": "PCI Bus",
+              "cuda_version": "CUDA"
             }
           }
         },
@@ -3261,6 +3263,845 @@
         }
       ],
       "title": "Datacenter Health",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "id": 53,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Total XID errors observed on this GPU since the exporter started (earlier history cannot be replayed, so a restart resets the count). Any value above zero deserves a look at the per-code panel next to this one. Served only by the nvml and demo backends; absent under the default exec backend.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "text"
+              },
+              "decimals": 0,
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "None",
+                      "color": "#56A64B",
+                      "index": 0
+                    }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6E7B8B",
+                    "value": null
+                  },
+                  {
+                    "color": "#E02F44",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "",
+              "noValue": "No data yet"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 4,
+            "x": 0,
+            "y": 31
+          },
+          "id": 54,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "percentChangeColorMode": "standard",
+            "reduceOptions": {
+              "calcs": [
+                "last"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "text": {},
+            "textMode": "value",
+            "wideLayout": true
+          },
+          "pluginVersion": "11.2.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum(nvidia_smi_xid_errors_total{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}) or sum(nvidia_smi_gpu_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}) * 0",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "XID Errors",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Seconds since the most recent XID error on this GPU. 'Never' means none were observed since the exporter started. This is the signal to alert on: unlike increase() on the error counter, it also sees each series' first event (see METRICS.md). Served only by the nvml and demo backends; absent under the default exec backend.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "text"
+              },
+              "decimals": 0,
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "-1": {
+                      "text": "Never",
+                      "color": "#56A64B",
+                      "index": 0
+                    }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#E02F44",
+                    "value": null
+                  },
+                  {
+                    "color": "#EAB839",
+                    "value": 3600
+                  },
+                  {
+                    "color": "#56A64B",
+                    "value": 86400
+                  }
+                ]
+              },
+              "unit": "s",
+              "noValue": "No data yet"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 4,
+            "x": 4,
+            "y": 31
+          },
+          "id": 61,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "percentChangeColorMode": "standard",
+            "reduceOptions": {
+              "calcs": [
+                "last"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "text": {},
+            "textMode": "value",
+            "wideLayout": true
+          },
+          "pluginVersion": "11.2.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "time() - max(nvidia_smi_xid_last_timestamp_seconds{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}) or (sum(nvidia_smi_gpu_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}) * 0 - 1)",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "Last XID",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Cumulative count per XID code since the exporter started. A series appears when its first event arrives, so an empty panel means no errors were observed yet. Do not alert on increase() of this counter: a series' first event is invisible to it, alert on the last-timestamp metric instead (see METRICS.md). Served only by the nvml and demo backends; absent under the default exec backend.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "yellow",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "none",
+              "decimals": 0
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 8,
+            "x": 8,
+            "y": 31
+          },
+          "id": 55,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "11.1.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "exemplar": true,
+              "expr": "nvidia_smi_xid_errors_total{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+              "interval": "",
+              "legendFormat": "XID {{xid}}",
+              "refId": "A"
+            }
+          ],
+          "title": "XID Errors by Code",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "PCIe throughput per direction, sampled by the driver over 20ms windows. Requires --collect.pcie-throughput on the nvml backend. Served only by the nvml and demo backends; absent under the default exec backend.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "yellow",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "Bps"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 8,
+            "x": 16,
+            "y": 31
+          },
+          "id": 57,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "11.1.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "exemplar": true,
+              "expr": "nvidia_smi_pcie_throughput_tx_bytes_per_second{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+              "interval": "",
+              "legendFormat": "TX",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "exemplar": true,
+              "expr": "nvidia_smi_pcie_throughput_rx_bytes_per_second{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+              "interval": "",
+              "legendFormat": "RX",
+              "refId": "B"
+            }
+          ],
+          "title": "PCIe Throughput",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Power averaged from the driver's cumulative energy counter, overlaid with the sampled power draw: the counter integrates everything between collections, the sample is one instant. Served only by the nvml and demo backends; absent under the default exec backend.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "yellow",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "watt"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 8,
+            "x": 0,
+            "y": 36
+          },
+          "id": 56,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "11.1.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "exemplar": true,
+              "expr": "rate(nvidia_smi_energy_joules_total{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}[$__rate_interval])",
+              "interval": "",
+              "legendFormat": "from energy counter",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "exemplar": true,
+              "expr": "nvidia_smi_power_draw_watts{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+              "interval": "",
+              "legendFormat": "sampled power draw",
+              "refId": "B"
+            }
+          ],
+          "title": "Power (energy counter vs sampled)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Energy the GPU consumed over the trailing 24 hours, from the driver's cumulative counter (consumption actually measured, not a projection of the current rate). Served only by the nvml and demo backends; absent under the default exec backend.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "text"
+              },
+              "decimals": 2,
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6E7B8B",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "kwatth",
+              "noValue": "No data yet"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 4,
+            "x": 8,
+            "y": 36
+          },
+          "id": 62,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "percentChangeColorMode": "standard",
+            "reduceOptions": {
+              "calcs": [
+                "last"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "text": {},
+            "textMode": "value",
+            "wideLayout": true
+          },
+          "pluginVersion": "11.2.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum(increase(nvidia_smi_energy_joules_total{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}[24h])) / 3.6e6",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "Energy (trailing 24h)",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Framebuffer memory used per MIG GPU instance (memory is a GPU-instance-level resource, shared by its compute instances). Served only by the nvml and demo backends; absent under the default exec backend.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "yellow",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 12,
+            "y": 36
+          },
+          "id": 60,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "11.1.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "exemplar": true,
+              "expr": "(nvidia_smi_mig_memory_used_bytes{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}) * on(uuid, gpu_instance_id) group_left(profile) (max by (uuid, gpu_instance_id, profile) (label_replace(nvidia_smi_mig_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}, \"profile\", \"$1\", \"profile\", \"^[0-9]+c\\\\.(.*)$\")))",
+              "interval": "",
+              "legendFormat": "GI {{gpu_instance_id}} ({{profile}})",
+              "refId": "A"
+            }
+          ],
+          "title": "MIG Memory Used",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "SM activity per MIG GPU instance. Empty on GPUs without MIG partitions; the first collection that sees an instance serves nothing (the sampling needs a pair of collections). Served only by the nvml and demo backends; absent under the default exec backend.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "yellow",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "percentunit"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 0,
+            "y": 42
+          },
+          "id": 58,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "11.1.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "exemplar": true,
+              "expr": "(nvidia_smi_mig_sm_activity_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}) * on(uuid, gpu_instance_id) group_left(profile) (max by (uuid, gpu_instance_id, profile) (label_replace(nvidia_smi_mig_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}, \"profile\", \"$1\", \"profile\", \"^[0-9]+c\\\\.(.*)$\")))",
+              "interval": "",
+              "legendFormat": "GI {{gpu_instance_id}} ({{profile}})",
+              "refId": "A"
+            }
+          ],
+          "title": "MIG SM Activity",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Tensor pipe activity per MIG GPU instance, the signal that shows whether an inference workload actually exercises the tensor cores. Served only by the nvml and demo backends; absent under the default exec backend.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "yellow",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "percentunit"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 12,
+            "y": 42
+          },
+          "id": 59,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "11.1.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "exemplar": true,
+              "expr": "(nvidia_smi_mig_tensor_activity_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}) * on(uuid, gpu_instance_id) group_left(profile) (max by (uuid, gpu_instance_id, profile) (label_replace(nvidia_smi_mig_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}, \"profile\", \"$1\", \"profile\", \"^[0-9]+c\\\\.(.*)$\")))",
+              "interval": "",
+              "legendFormat": "GI {{gpu_instance_id}} ({{profile}})",
+              "refId": "A"
+            }
+          ],
+          "title": "MIG Tensor Activity",
+          "type": "timeseries"
+        }
+      ],
+      "title": "XID / MIG / Power / PCIe (NVML mode only)",
       "type": "row"
     }
   ],
