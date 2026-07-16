@@ -1,0 +1,15 @@
+# Demo node 2: the counterpoint. A single consumer card, no MIG, no XID
+# history: proves per-node filtering and the dashboards' handling of absent
+# NVML families. PCIe idles low compared to demo1's datacenter box.
+capture: linux-x86_64__nvidia-geforce-rtx-4080-super__595.71.05
+state: load
+fluctuate: true
+# the capture's own uuid is scrubbed to zeros; give the card an explicit
+# stable identity (the generated ones are index-derived and would collide
+# with demo1's first GPU)
+gpus:
+  - uuid: GPU-8d2f6c3a-4b1e-4f7a-9c5d-2e8b7a1f6d40
+extras:
+  pcie:
+    tx-bytes-per-second: {min: 0.05e9, max: 0.8e9}
+    rx-bytes-per-second: {min: 0.1e9, max: 1.5e9}

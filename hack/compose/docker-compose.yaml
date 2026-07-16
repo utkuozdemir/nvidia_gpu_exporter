@@ -1,8 +1,13 @@
 name: nvidia-gpu-exporter-dev
 
-# Local dev stack: the exporter scraping a fake nvidia-smi (no GPU needed),
-# Prometheus scraping the exporter, and Grafana with the dashboard provisioned
-# and pointed at Prometheus. See README.md.
+# Local dev stack, two flavors side by side (see README.md):
+#   exec flavor: node1/node2 run the exporter against a fake nvidia-smi
+#     binary, scraped by `prometheus` (:9090)
+#   demo flavor: demo1/demo2 run the exporter's demo backend (the
+#     nvml-superset surface - MIG, XID, energy, PCIe - synthesized
+#     in-process), scraped by `prometheus-demo` (:9091)
+# Grafana carries both Prometheuses as data sources; the dashboards'
+# data source dropdown flips between the two worlds.
 
 services:
   # first "node": eight consumer cards incl. one deliberately sick, fake.yaml
@@ -37,6 +42,40 @@ services:
     ports:
       - "9836:9835"
 
+  # third and fourth "nodes": the demo backend, serving the nvml-superset
+  # families (mig_*, xid_*, energy, pcie) with synthetic data and no fake
+  # binary involved. demo1 is the rich one: MIG topology with a multi-CI GPU
+  # instance (the live probe for dashboard join cardinality), XID history and
+  # ongoing events. demo2 is a plain consumer card, proving per-node
+  # filtering and the dashboards' handling of absent NVML families. Both
+  # re-read their config file on every collection cycle: edit, save, scrape.
+  demo1:
+    build:
+      context: ../..
+      dockerfile: hack/compose/Dockerfile
+    command:
+      - "--collect.backend=demo"
+      - "--demo-config=/etc/demo/demo1.yaml"
+      - "--collect.compute-apps"
+      - "--collect.compute-apps-mig"
+    volumes:
+      - ./demo:/etc/demo:ro
+    ports:
+      - "9837:9835"
+
+  demo2:
+    build:
+      context: ../..
+      dockerfile: hack/compose/Dockerfile
+    command:
+      - "--collect.backend=demo"
+      - "--demo-config=/etc/demo/demo2.yaml"
+      - "--collect.compute-apps"
+    volumes:
+      - ./demo:/etc/demo:ro
+    ports:
+      - "9838:9835"
+
   prometheus:
     image: prom/prometheus:v3.13.1
     ports:
@@ -47,6 +86,17 @@ services:
     depends_on:
       - node1
       - node2
+
+  prometheus-demo:
+    image: prom/prometheus:v3.13.1
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./prometheus/config-demo:/etc/prometheus
+      - prometheus-demo-data:/prometheus
+    depends_on:
+      - demo1
+      - demo2
 
   grafana:
     image: grafana/grafana:13.1.0
@@ -64,7 +114,9 @@ services:
       - grafana-data:/var/lib/grafana
     depends_on:
       - prometheus
+      - prometheus-demo
 
 volumes:
   prometheus-data:
+  prometheus-demo-data:
   grafana-data:
