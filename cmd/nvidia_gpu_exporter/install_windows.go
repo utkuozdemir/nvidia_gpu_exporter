@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/eventlog"
 	"golang.org/x/sys/windows/svc/mgr"
 )
@@ -130,7 +132,10 @@ func composeBinaryPath(exePath string, args []string) string {
 	return builder.String()
 }
 
-// uninstallService removes the exporter service and its event log source.
+// uninstallService stops the exporter service if it is running, then removes
+// it and its event log source. Deleting a running service would only mark it
+// for deletion: it keeps running, the name stays claimed until it stops, and
+// a reinstall in that window fails with "marked for deletion".
 func uninstallService() error {
 	manager, err := mgr.Connect()
 	if err != nil {
@@ -142,11 +147,26 @@ func uninstallService() error {
 	if err != nil {
 		return fmt.Errorf("service %q is not installed: %w", serviceName, err)
 	}
-	defer service.Close()
 
-	if delErr := service.Delete(); delErr != nil {
+	if stopErr := stopService(service); stopErr != nil {
+		service.Close()
+
+		return fmt.Errorf("failed to stop service before removal: %w", stopErr)
+	}
+
+	// a service left marked for deletion by an earlier binary (which deleted
+	// without stopping) answers a repeated delete with "already marked";
+	// the stop above was the missing piece, so that is success, not failure
+	delErr := service.Delete()
+	// deletion only completes once the last open handle closes, and ours is
+	// one of them: close it before waiting for the entry to disappear
+	service.Close()
+
+	if delErr != nil && !errors.Is(delErr, windows.ERROR_SERVICE_MARKED_FOR_DELETE) {
 		return fmt.Errorf("failed to delete service: %w", delErr)
 	}
+
+	waitServiceGone(manager)
 
 	if logErr := eventlog.Remove(serviceName); logErr != nil {
 		slog.Warn("failed to remove event log source", "err", logErr)
@@ -155,4 +175,106 @@ func uninstallService() error {
 	slog.Info("service uninstalled", "name", serviceName)
 
 	return nil
+}
+
+// stopTimeout bounds how long an uninstall waits for the service to stop
+// before giving up.
+const stopTimeout = 30 * time.Second
+
+// stopPollInterval is the polling cadence while waiting on service state.
+const stopPollInterval = 300 * time.Millisecond
+
+// stopService drives a service to the stopped state, bounded by a timeout. A
+// stopped service is left alone; a starting or stopping one is waited for (a
+// service in a pending state rejects controls); anything else is sent the
+// stop control, tolerating the benign races Windows documents: the service
+// may stop on its own or enter a pending state between the query and the
+// control, which answers with not-active or cannot-accept-control and is
+// resolved by the next query, not a failure.
+func stopService(service *mgr.Service) error {
+	deadline := time.Now().Add(stopTimeout)
+	requested := false
+
+	for {
+		status, err := service.Query()
+		if err != nil {
+			return fmt.Errorf("failed to query service state: %w", err)
+		}
+
+		switch {
+		case status.State == svc.Stopped:
+			slog.Info("service is stopped", "name", serviceName)
+
+			return nil
+		case status.State == svc.StartPending || status.State == svc.StopPending:
+			// wait for a controllable or final state
+		case !requested:
+			// also covers the paused states: a paused service accepts stop
+			slog.Info("stopping the service", "name", serviceName, "state", status.State)
+
+			sent, sendErr := sendStop(service)
+			if sendErr != nil {
+				return sendErr
+			}
+
+			requested = sent
+		}
+
+		if time.Now().After(deadline) {
+			return fmt.Errorf("service did not stop within %s, last observed state: %d", stopTimeout, status.State)
+		}
+
+		time.Sleep(stopPollInterval)
+	}
+}
+
+// sendStop issues the stop control, tolerating the benign races Windows
+// documents: the service may stop on its own or enter a pending state
+// between the caller's query and this control, answering with not-active or
+// cannot-accept-control. Those resolve through the caller's next query, so
+// they report an unsent control rather than an error.
+func sendStop(service *mgr.Service) (bool, error) {
+	_, err := service.Control(svc.Stop)
+	if err == nil {
+		return true, nil
+	}
+
+	if errors.Is(err, windows.ERROR_SERVICE_NOT_ACTIVE) ||
+		errors.Is(err, windows.ERROR_SERVICE_CANNOT_ACCEPT_CTRL) {
+		return false, nil
+	}
+
+	return false, fmt.Errorf("failed to send the stop control: %w", err)
+}
+
+// goneTimeout bounds the best-effort wait for the deleted service to leave
+// the service database.
+const goneTimeout = 5 * time.Second
+
+// waitServiceGone waits, best-effort, for the deleted service's entry to
+// disappear: removal completes only when the last open handle closes, and a
+// lingering entry would fail an immediate reinstall. A handle held by
+// another process (an open Services console, a monitoring agent) is warned
+// about rather than failed on, since removal completes by itself the moment
+// that handle closes.
+func waitServiceGone(manager *mgr.Mgr) {
+	deadline := time.Now().Add(goneTimeout)
+
+	for {
+		service, err := manager.OpenService(serviceName)
+		if err != nil {
+			return
+		}
+
+		service.Close()
+
+		if time.Now().After(deadline) {
+			slog.Warn("service is still registered: another process holds a handle to it, "+
+				"removal completes when that handle closes", "name", serviceName)
+
+			return
+		}
+
+		time.Sleep(stopPollInterval)
+	}
 }
