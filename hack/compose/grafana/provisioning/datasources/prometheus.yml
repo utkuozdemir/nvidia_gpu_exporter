@@ -3,8 +3,11 @@ apiVersion: 1
 # Both flavors' Prometheuses, with stable uids: the dashboards' data source
 # variable stores the uid, and render-dashboard.sh stamps the dev copies to
 # preselect the demo one (the richer surface, where dashboard work happens).
+# The names spell the flavor: which surface a dashboard is looking at is the
+# whole point of having both. Renaming breaks the name-based upsert for
+# volumes created before the rename, so those need one `down -v`.
 datasources:
-  - name: Prometheus
+  - name: Prometheus - Exec
     type: prometheus
     uid: prometheus
     access: proxy
@@ -14,7 +17,7 @@ datasources:
     jsonData:
       timeInterval: 5s
 
-  - name: Prometheus (demo)
+  - name: Prometheus - NVML
     type: prometheus
     uid: prometheus-demo
     access: proxy

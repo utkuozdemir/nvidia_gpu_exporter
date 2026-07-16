@@ -43,10 +43,10 @@ cd hack/compose && docker compose down -v
 
 The compose code, provisioning, and the fake/demo configs are committed and
 maintained; the running containers and their data volumes are disposable.
-Existing volumes upgrade in place (the exec data source keeps its historical
-name and uid, so provisioning upserts it); if Grafana ever fails to start
-over a conflicting manually-added data source, `docker compose down -v`
-resets the throwaway state.
+The data sources are named after the flavor they serve (Prometheus - Exec,
+Prometheus - NVML). Volumes created before these names existed make Grafana
+fail provisioning at startup; run `docker compose down -v` once to reset the
+throwaway state.
 
 `render-dashboard.sh` (run by `up.sh`) needs `python3` on the host, in
 addition to Docker.

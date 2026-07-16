@@ -36,7 +36,7 @@ for variable in dashboard.get("templating", {}).get("list", []):
     if variable.get("type") == "datasource":
         variable["current"] = {
             "selected": True,
-            "text": "Prometheus (demo)",
+            "text": "Prometheus - NVML",
             "value": "prometheus-demo",
         }
 
