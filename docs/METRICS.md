@@ -29,6 +29,49 @@ interface, so only the NVML backend can export them:
   own 20ms counter window, so the two values are consecutive samples, not a
   simultaneous pair.
 
+On GPUs with MIG mode enabled, the NVML backend also exports per-MIG-instance
+metrics (nothing to configure, they appear when MIG instances exist):
+
+- `nvidia_smi_mig_info{uuid, mig_uuid, gpu_instance_id, compute_instance_id, profile}`
+  (constant `1`): the identity of each MIG device. `uuid` is the parent
+  GPU's, so MIG series join with all per-GPU series; `mig_uuid` is the MIG
+  device's own.
+- `nvidia_smi_mig_memory_{total,used,free,reserved}_bytes{uuid, gpu_instance_id}`
+  (gauges): the GPU instance's memory. The framebuffer belongs to the GPU
+  instance and is shared by its compute instances, so memory is reported
+  once per GPU instance (labeling it per MIG device would double-count on
+  instances hosting several compute slices).
+- `nvidia_smi_mig_{graphics_activity,sm_activity,sm_occupancy,tensor_activity}_ratio{uuid, gpu_instance_id}`
+  and `nvidia_smi_mig_pcie_throughput_{tx,rx}_bytes_per_second{uuid, gpu_instance_id}`
+  (gauges): the GPU instance's activity, computed over the window between
+  the two most recent collections. They appear from the second collection
+  that sees a GPU instance, and only on GPUs whose driver supports the GPM
+  interface (the Hopper generation and later; A100-class MIG gets inventory
+  and memory only). The window is guarded on both ends: collections less
+  than a second apart keep serving the previous values over the anchored
+  window, and after a gap longer than ten minutes the sampling reseeds (the
+  next collection emits nothing for that instance, like a first sight). The utilization is attributed per GPU instance, not per
+  MIG device: a GPU instance hosting several compute instances reports one
+  set of values, and joining `mig_info` on `(uuid, gpu_instance_id)` maps
+  them back to the MIG devices. With several independent scrapers the
+  window follows whoever collected last, so for stable windows pair this
+  with `--collect.interval`. Destroying a GPU instance and recreating a
+  different shape under the same numeric id is detected and reseeds the
+  activity sampling; recreating the exact same shape in the same placement
+  is indistinguishable (MIG uuids are deterministic), so the one window
+  spanning such a swap may blend the two instances before self-correcting.
+
+With `--collect.compute-apps-mig` (requires `--collect.compute-apps` and the
+NVML backend) the per-process metrics additionally carry `gpu_instance_id`
+and `compute_instance_id` labels attributing each process to its MIG
+instance (empty for processes on non-MIG GPUs). It is opt-in because it
+changes the label set of the per-process series.
+
+Container note: like the per-process metrics under MIG, full function needs
+generous privileges (the exporter container may need to run privileged with
+`NVIDIA_MIG_MONITOR_DEVICES=all` and share the host PID namespace); MIG
+inventory and memory worked unprivileged in testing.
+
 Both backends also stamp the CUDA version the installed driver supports onto
 `nvidia_smi_gpu_info` as the `cuda_version` label. This is the version of
 the CUDA API the driver carries, not an installed CUDA toolkit. The default

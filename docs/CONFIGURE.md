@@ -93,6 +93,12 @@ Flags:
                                 other workloads' processes requires sharing
                                 the host PID namespace (hostPID in Kubernetes,
                                 --pid=host in Docker).
+      --[no-]collect.compute-apps-mig
+                                Add MIG attribution labels (gpu_instance_id,
+                                compute_instance_id) to the per-process
+                                metrics (requires --collect.compute-apps and
+                                --collect.backend=nvml). Opt-in because it
+                                changes the label set of the per-process series.
       --[no-]collect.pcie-throughput
                                 Also export the PCIe TX/RX throughput per
                                 GPU (requires --collect.backend=nvml). Each
@@ -299,8 +305,11 @@ Things to keep in mind:
   manage the memory there, so `used_gpu_memory` is not available: the
   `compute_app_info` and `compute_apps` metrics still work, the
   `used_memory_bytes` metric is absent.
-- **MIG limits both attribution and container access.** Processes are
-  attributed to the parent GPU's UUID, not to MIG instances. A containerized
+- **MIG limits both attribution and container access.** By default (and
+  always with the exec backend) processes are attributed to the parent GPU's
+  UUID, not to MIG instances; the nvml backend can add per-instance
+  attribution labels via `--collect.compute-apps-mig` (see
+  [METRICS.md](METRICS.md)). A containerized
   exporter on a MIG-enabled GPU additionally needs to run privileged with the
   `NVIDIA_MIG_MONITOR_DEVICES=all` environment variable (plus host PID
   sharing), otherwise the per-process list and even some GPU-level fields
@@ -332,6 +341,8 @@ What each backend can do:
 | Brand-new driver fields before the catalog catches up (`AUTO`) | yes | no |
 | Total energy counter (`energy_joules_total`) | no | yes |
 | PCIe throughput (`--collect.pcie-throughput`) | no | yes |
+| Per-MIG-instance metrics (`mig_info`, `mig_memory_*`, `mig_*_ratio`) | no | yes |
+| Per-process MIG attribution (`--collect.compute-apps-mig`) | no | yes |
 
 The NVML-only families are documented in [METRICS.md](METRICS.md). The PCIe
 throughput family is opt-in via `--collect.pcie-throughput` because of its

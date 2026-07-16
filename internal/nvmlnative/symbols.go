@@ -39,6 +39,51 @@ var nvmlSymbolRequirements = []symbolRequirement{
 		serves: "energy_joules_total",
 	},
 	{
+		goCall: "GetMaxMigDeviceCount",
+		anyOf:  []string{"nvmlDeviceGetMaxMigDeviceCount"},
+		serves: "mig_* metrics",
+	},
+	{
+		goCall: "GetMigDeviceHandleByIndex",
+		anyOf:  []string{"nvmlDeviceGetMigDeviceHandleByIndex"},
+		serves: "mig_* metrics",
+	},
+	{
+		goCall: "GetGpuInstanceId",
+		anyOf:  []string{"nvmlDeviceGetGpuInstanceId"},
+		serves: "mig_* metrics, per-process MIG attribution",
+	},
+	{
+		goCall: "GetComputeInstanceId",
+		anyOf:  []string{"nvmlDeviceGetComputeInstanceId"},
+		serves: "mig_* metrics, per-process MIG attribution",
+	},
+	{
+		goCall: "GpmQueryDeviceSupport",
+		anyOf:  []string{"nvmlGpmQueryDeviceSupport"},
+		serves: "mig_*_ratio, mig_pcie_throughput_*",
+	},
+	{
+		goCall: "gpmSampleAlloc",
+		anyOf:  []string{"nvmlGpmSampleAlloc"},
+		serves: "mig_*_ratio, mig_pcie_throughput_*",
+	},
+	{
+		goCall: "gpmSampleFree",
+		anyOf:  []string{"nvmlGpmSampleFree"},
+		serves: "mig_*_ratio, mig_pcie_throughput_*",
+	},
+	{
+		goCall: "gpmMigSampleGet",
+		anyOf:  []string{"nvmlGpmMigSampleGet"},
+		serves: "mig_*_ratio, mig_pcie_throughput_*",
+	},
+	{
+		goCall: "gpmMetricsGet",
+		anyOf:  []string{"nvmlGpmMetricsGet"},
+		serves: "mig_*_ratio, mig_pcie_throughput_*",
+	},
+	{
 		goCall: "GetPcieThroughput",
 		anyOf:  []string{"nvmlDeviceGetPcieThroughput"},
 		serves: "pcie_throughput_*_bytes_per_second",

@@ -683,3 +683,122 @@ func TestCudaVersionLabelEmptyWhenUnknown(t *testing.T) {
 	require.True(t, ok)
 	assert.Empty(t, labelValue(t, info.GetMetric()[0], "cuda_version"))
 }
+
+func migExtras() collect.Extras {
+	util := func(v float64) *float64 { return &v }
+
+	shared := &collect.MIGUtilization{
+		GraphicsActivityRatio: util(0.5),
+		SMActivityRatio:       util(0.9),
+		// SMOccupancy deliberately nil: a per-metric gap must render nothing
+		TensorActivityRatio:  util(0.1),
+		PCIeTXBytesPerSecond: util(1048576),
+		PCIeRXBytesPerSecond: util(2097152),
+	}
+
+	return collect.Extras{
+		MIG: []collect.MIGInstance{
+			{
+				ParentUUID: "abc", UUID: "mig-a", GPUInstanceID: "1", ComputeInstanceID: "0",
+				Profile: "1g.10gb",
+				Memory:  &collect.MIGMemory{Total: 1000, Used: 100, Free: 900, Reserved: 50},
+				// two compute instances of the same GPU instance share the
+				// utilization values
+				Utilization: shared,
+			},
+			{
+				ParentUUID: "abc", UUID: "mig-b", GPUInstanceID: "1", ComputeInstanceID: "1",
+				Profile: "1g.10gb",
+				// same GPU instance: the framebuffer is shared, the values
+				// repeat (as on real hardware)
+				Memory:      &collect.MIGMemory{Total: 1000, Used: 100, Free: 900, Reserved: 50},
+				Utilization: shared,
+			},
+			{
+				ParentUUID: "abc", UUID: "mig-c", GPUInstanceID: "2", ComputeInstanceID: "0",
+				Profile: "2g.20gb",
+				// memory and utilization unreadable: only the info series
+			},
+		},
+	}
+}
+
+func TestMIGExtrasRendered(t *testing.T) {
+	t.Parallel()
+
+	exp := newExtrasExporter(t, exporter.Features{MIG: true}, extrasSnapshot(gpuTable("GPU-ABC"), migExtras()))
+
+	families := gatherFamilies(t, exp)
+
+	info, ok := families["aaa_mig_info"]
+	require.True(t, ok)
+	require.Len(t, info.GetMetric(), 3)
+
+	first := info.GetMetric()[0]
+	assert.Equal(t, "abc", labelValue(t, first, "uuid"))
+	assert.Equal(t, "mig-a", labelValue(t, first, "mig_uuid"))
+	assert.Equal(t, "1", labelValue(t, first, "gpu_instance_id"))
+	assert.Equal(t, "0", labelValue(t, first, "compute_instance_id"))
+	assert.Equal(t, "1g.10gb", labelValue(t, first, "profile"))
+
+	memUsed, ok := families["aaa_mig_memory_used_bytes"]
+	require.True(t, ok)
+	require.Len(t, memUsed.GetMetric(), 1,
+		"memory is per GPU instance: one series for the two-slice instance, none for the unreadable one")
+	assert.Equal(t, "1", labelValue(t, memUsed.GetMetric()[0], "gpu_instance_id"))
+	assertFloat(t, 100, memUsed.GetMetric()[0].GetGauge().GetValue())
+
+	smActivity, ok := families["aaa_mig_sm_activity_ratio"]
+	require.True(t, ok)
+	require.Len(t, smActivity.GetMetric(), 1,
+		"one GPU instance hosting two compute instances must emit its utilization once")
+	assert.Equal(t, "1", labelValue(t, smActivity.GetMetric()[0], "gpu_instance_id"))
+	assertFloat(t, 0.9, smActivity.GetMetric()[0].GetGauge().GetValue())
+
+	_, ok = families["aaa_mig_sm_occupancy_ratio"]
+	assert.False(t, ok, "a nil per-metric value must render nothing")
+
+	pcieTx, ok := families["aaa_mig_pcie_throughput_tx_bytes_per_second"]
+	require.True(t, ok)
+	assertFloat(t, 1048576, pcieTx.GetMetric()[0].GetGauge().GetValue())
+}
+
+func TestMIGSuppressedWhenOff(t *testing.T) {
+	t.Parallel()
+
+	exp := newExtrasExporter(t, exporter.Features{}, extrasSnapshot(gpuTable("GPU-ABC"), migExtras()))
+
+	families := gatherFamilies(t, exp)
+
+	for family := range families {
+		assert.NotContains(t, family, "mig_", "MIG families must not render when the feature is off")
+	}
+}
+
+func TestComputeAppMIGLabels(t *testing.T) {
+	t.Parallel()
+
+	apps := []nvidiasmi.ComputeApp{{
+		GPUUUID: "abc", PID: "42", ProcessName: "python",
+		UsedMemory: "1 MiB", GPUInstanceID: "3", ComputeInstanceID: "0",
+	}}
+
+	snapshot := appsSnapshot(gpuTable("GPU-ABC"), apps, true)
+
+	withLabels := newExtrasExporter(t,
+		exporter.Features{ComputeApps: true, ComputeAppMIGLabels: true}, snapshot)
+	families := gatherFamilies(t, withLabels)
+
+	info, ok := families["aaa_compute_app_info"]
+	require.True(t, ok)
+	assert.Equal(t, "3", labelValue(t, info.GetMetric()[0], "gpu_instance_id"))
+	assert.Equal(t, "0", labelValue(t, info.GetMetric()[0], "compute_instance_id"))
+
+	// without the opt-in, the label set stays the shipped 3-label one
+	withoutLabels := newExtrasExporter(t, exporter.Features{ComputeApps: true}, snapshot)
+	families = gatherFamilies(t, withoutLabels)
+
+	info, ok = families["aaa_compute_app_info"]
+	require.True(t, ok)
+	require.Len(t, info.GetMetric()[0].GetLabel(), 3)
+}

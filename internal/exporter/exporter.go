@@ -43,6 +43,10 @@ const uuidLabel = "uuid"
 // computeAppLabels is the label set on the per-process metrics.
 var computeAppLabels = []string{uuidLabel, "pid", "process_name"}
 
+// computeAppMIGLabels is the per-process label set with MIG attribution
+// (opt-in: adding labels changes the series identity of a shipped family).
+var computeAppMIGLabels = []string{uuidLabel, "pid", "process_name", "gpu_instance_id", "compute_instance_id"}
+
 // Features selects the conditionally-described metric families. Each one
 // follows the compute-apps precedent: its descriptors exist only when the
 // feature is enabled, so Describe and Collect stay consistent and a disabled
@@ -50,11 +54,16 @@ var computeAppLabels = []string{uuidLabel, "pid", "process_name"}
 type Features struct {
 	// ComputeApps enables the per-process metric families.
 	ComputeApps bool
+	// ComputeAppMIGLabels adds the MIG attribution labels to the
+	// per-process metrics (nvml backend, --collect.compute-apps-mig).
+	ComputeAppMIGLabels bool
 	// PCIeThroughput enables the per-GPU PCIe throughput gauges (nvml
 	// backend, --collect.pcie-throughput).
 	PCIeThroughput bool
 	// Energy enables the per-GPU cumulative energy counter (nvml backend).
 	Energy bool
+	// MIG enables the per-MIG-instance metric families (nvml backend).
+	MIG bool
 }
 
 // GPUExporter renders the latest collection as Prometheus metrics. It is
@@ -78,8 +87,35 @@ type GPUExporter struct {
 	pcieTxDesc            *prometheus.Desc
 	pcieRxDesc            *prometheus.Desc
 	energyDesc            *prometheus.Desc
+	migDescs              *migDescs
+	appMIGLabels          bool
 	logger                *slog.Logger
 	ctx                   context.Context //nolint:containedctx
+}
+
+// migDescs bundles the per-MIG-instance descriptors, nil as a whole when the
+// feature is off.
+type migDescs struct {
+	info             *prometheus.Desc
+	memTotal         *prometheus.Desc
+	memUsed          *prometheus.Desc
+	memFree          *prometheus.Desc
+	memReserved      *prometheus.Desc
+	graphicsActivity *prometheus.Desc
+	smActivity       *prometheus.Desc
+	smOccupancy      *prometheus.Desc
+	tensorActivity   *prometheus.Desc
+	pcieTx           *prometheus.Desc
+	pcieRx           *prometheus.Desc
+}
+
+// all lists the bundled descriptors, for Describe.
+func (m *migDescs) all() []*prometheus.Desc {
+	return []*prometheus.Desc{
+		m.info, m.memTotal, m.memUsed, m.memFree, m.memReserved,
+		m.graphicsActivity, m.smActivity, m.smOccupancy, m.tensorActivity,
+		m.pcieTx, m.pcieRx,
+	}
 }
 
 // New builds the exporter. A metric family whose feature is off in features
@@ -105,7 +141,8 @@ func New(
 
 	infoLabels = append(infoLabels, "cuda_version")
 
-	appInfoDesc, appMemoryDesc, appCountDesc, appsSuccessDesc := newComputeAppDescs(prefix, features.ComputeApps)
+	appInfoDesc, appMemoryDesc, appCountDesc, appsSuccessDesc := newComputeAppDescs(
+		prefix, features.ComputeApps, features.ComputeAppMIGLabels)
 	pcieTxDesc, pcieRxDesc := newPCIeDescs(prefix, features.PCIeThroughput)
 
 	exp := &GPUExporter{
@@ -121,6 +158,8 @@ func New(
 		pcieTxDesc:            pcieTxDesc,
 		pcieRxDesc:            pcieRxDesc,
 		energyDesc:            newEnergyDesc(prefix, features.Energy),
+		migDescs:              newMIGDescs(prefix, features.MIG),
+		appMIGLabels:          features.ComputeAppMIGLabels,
 		logger:                logger,
 		gpuInfoDesc: prometheus.NewDesc(
 			prometheus.BuildFQName(prefix, "", "gpu_info"),
@@ -169,20 +208,26 @@ func addHealthDescs(exp *GPUExporter, prefix string, exitCodeMetric ExitCodeMetr
 func newComputeAppDescs(
 	prefix string,
 	enabled bool,
+	migLabels bool,
 ) (*prometheus.Desc, *prometheus.Desc, *prometheus.Desc, *prometheus.Desc) {
 	if !enabled {
 		return nil, nil, nil, nil
 	}
 
+	labels := computeAppLabels
+	if migLabels {
+		labels = computeAppMIGLabels
+	}
+
 	info := prometheus.NewDesc(
 		prometheus.BuildFQName(prefix, "", "compute_app_info"),
 		"A metric with a constant '1' value labeled by the identity of a process with a compute context on a GPU.",
-		computeAppLabels,
+		labels,
 		nil)
 	memory := prometheus.NewDesc(
 		prometheus.BuildFQName(prefix, "", "compute_app_used_memory_bytes"),
 		"GPU memory used by the process. Absent when the driver cannot report it (e.g. Windows WDDM).",
-		computeAppLabels,
+		labels,
 		nil)
 	count := prometheus.NewDesc(
 		prometheus.BuildFQName(prefix, "", "compute_apps"),
@@ -234,6 +279,62 @@ func newEnergyDesc(prefix string, enabled bool) *prometheus.Desc {
 		nil)
 }
 
+// newMIGDescs builds the per-MIG-instance descriptors, nil when the feature
+// is disabled. Memory belongs to the MIG device (mig_uuid); utilization is
+// attributed per GPU instance, which may host several MIG devices.
+func newMIGDescs(prefix string, enabled bool) *migDescs {
+	if !enabled {
+		return nil
+	}
+
+	instanceLabels := []string{uuidLabel, "gpu_instance_id"}
+
+	memDesc := func(kind string) *prometheus.Desc {
+		return prometheus.NewDesc(
+			prometheus.BuildFQName(prefix, "", "mig_memory_"+kind+"_bytes"),
+			"Memory of the GPU instance ("+kind+"). The framebuffer belongs to the GPU "+
+				"instance and is shared by its compute instances (verified live: sibling "+
+				"compute instances report identical values).",
+			instanceLabels,
+			nil)
+	}
+
+	activityDesc := func(name, help string) *prometheus.Desc {
+		return prometheus.NewDesc(
+			prometheus.BuildFQName(prefix, "", name),
+			help+" Computed over the window between the two most recent collections; "+
+				"absent on the first collection that sees the GPU instance.",
+			instanceLabels,
+			nil)
+	}
+
+	return &migDescs{
+		info: prometheus.NewDesc(
+			prometheus.BuildFQName(prefix, "", "mig_info"),
+			"A metric with a constant '1' value labeled by the identity of a MIG device: "+
+				"the parent GPU's uuid, the MIG device's own uuid, its GPU instance and "+
+				"compute instance ids, and its profile.",
+			[]string{uuidLabel, "mig_uuid", "gpu_instance_id", "compute_instance_id", "profile"},
+			nil),
+		memTotal:    memDesc("total"),
+		memUsed:     memDesc("used"),
+		memFree:     memDesc("free"),
+		memReserved: memDesc("reserved"),
+		graphicsActivity: activityDesc("mig_graphics_activity_ratio",
+			"Fraction of time the GPU instance's graphics/compute engines were active."),
+		smActivity: activityDesc("mig_sm_activity_ratio",
+			"Fraction of time the GPU instance's SMs were active."),
+		smOccupancy: activityDesc("mig_sm_occupancy_ratio",
+			"Fraction of the GPU instance's resident warp slots that were occupied."),
+		tensorActivity: activityDesc("mig_tensor_activity_ratio",
+			"Fraction of time the GPU instance's tensor pipes were active."),
+		pcieTx: activityDesc("mig_pcie_throughput_tx_bytes_per_second",
+			"PCIe traffic transmitted by the GPU instance."),
+		pcieRx: activityDesc("mig_pcie_throughput_rx_bytes_per_second",
+			"PCIe traffic received by the GPU instance."),
+	}
+}
+
 // WithContext returns a collector that renders the same metrics but bounds
 // its collection by the given context. The HTTP handler uses it to bound each
 // scrape's collection by the scrape's own lifetime. The copy shares all
@@ -275,6 +376,12 @@ func (e *GPUExporter) Describe(descCh chan<- *prometheus.Desc) {
 	if e.energyDesc != nil {
 		e.sendDesc(descCh, e.energyDesc)
 	}
+
+	if e.migDescs != nil {
+		for _, desc := range e.migDescs.all() {
+			e.sendDesc(descCh, desc)
+		}
+	}
 }
 
 // Collect fetches the latest reading from the source and delivers it as
@@ -315,6 +422,86 @@ func (e *GPUExporter) renderExtras(metricCh chan<- prometheus.Metric, snapshot c
 				counter.Joules, counter.UUID)
 		}
 	}
+
+	if e.migDescs != nil {
+		// utilization is per GPU instance while the entries are per MIG
+		// device (compute instance): emit each GPU instance's series once
+		emittedGIs := map[string]bool{}
+
+		for _, instance := range snapshot.Extras.MIG {
+			e.renderMIGInstance(metricCh, instance, emittedGIs)
+		}
+	}
+}
+
+// renderMIGInstance emits one MIG device's info series, plus its GPU
+// instance's memory and utilization when the GPU instance was not rendered
+// yet this scrape: memory and activity belong to the GPU instance (its
+// compute instances share both), so one series per GPU instance.
+func (e *GPUExporter) renderMIGInstance(
+	metricCh chan<- prometheus.Metric,
+	instance collect.MIGInstance,
+	emittedGIs map[string]bool,
+) {
+	e.sendLabeledGauge(metricCh, e.migDescs.info, 1,
+		instance.ParentUUID, instance.UUID, instance.GPUInstanceID, instance.ComputeInstanceID, instance.Profile)
+
+	giKey := instance.ParentUUID + "/" + instance.GPUInstanceID
+	if emittedGIs[giKey] {
+		return
+	}
+
+	emittedGIs[giKey] = true
+
+	instanceLabels := []string{instance.ParentUUID, instance.GPUInstanceID}
+
+	if memory := instance.Memory; memory != nil {
+		e.sendLabeledGauge(metricCh, e.migDescs.memTotal, float64(memory.Total), instanceLabels...)
+		e.sendLabeledGauge(metricCh, e.migDescs.memUsed, float64(memory.Used), instanceLabels...)
+		e.sendLabeledGauge(metricCh, e.migDescs.memFree, float64(memory.Free), instanceLabels...)
+		e.sendLabeledGauge(metricCh, e.migDescs.memReserved, float64(memory.Reserved), instanceLabels...)
+	}
+
+	util := instance.Utilization
+	if util == nil {
+		return
+	}
+
+	for _, entry := range []struct {
+		desc  *prometheus.Desc
+		value *float64
+	}{
+		{e.migDescs.graphicsActivity, util.GraphicsActivityRatio},
+		{e.migDescs.smActivity, util.SMActivityRatio},
+		{e.migDescs.smOccupancy, util.SMOccupancyRatio},
+		{e.migDescs.tensorActivity, util.TensorActivityRatio},
+		{e.migDescs.pcieTx, util.PCIeTXBytesPerSecond},
+		{e.migDescs.pcieRx, util.PCIeRXBytesPerSecond},
+	} {
+		if entry.value == nil {
+			continue
+		}
+
+		e.sendLabeledGauge(metricCh, entry.desc, *entry.value, instanceLabels...)
+	}
+}
+
+// sendLabeledGauge emits one constant gauge with the given label values,
+// logging instead of failing if it cannot be built.
+func (e *GPUExporter) sendLabeledGauge(
+	metricCh chan<- prometheus.Metric,
+	desc *prometheus.Desc,
+	value float64,
+	labelValues ...string,
+) {
+	metric, err := prometheus.NewConstMetric(desc, prometheus.GaugeValue, value, labelValues...)
+	if err != nil {
+		e.logger.Error("failed to create metric", "err", err, "desc", desc.String())
+
+		return
+	}
+
+	e.sendMetric(metricCh, metric)
 }
 
 // sendConstWithUUID emits one constant metric carrying the uuid label,
@@ -411,8 +598,12 @@ func (e *GPUExporter) sendAppMetric(
 	value float64,
 	app nvidiasmi.ComputeApp,
 ) {
-	metric, err := prometheus.NewConstMetric(desc, prometheus.GaugeValue, value,
-		app.GPUUUID, app.PID, app.ProcessName)
+	labelValues := []string{app.GPUUUID, app.PID, app.ProcessName}
+	if e.appMIGLabels {
+		labelValues = append(labelValues, app.GPUInstanceID, app.ComputeInstanceID)
+	}
+
+	metric, err := prometheus.NewConstMetric(desc, prometheus.GaugeValue, value, labelValues...)
 	if err != nil {
 		e.logger.Error("failed to create per-process metric", "err", err, "pid", app.PID)
 

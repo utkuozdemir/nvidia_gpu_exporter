@@ -139,28 +139,56 @@ func TestScrapeContext(t *testing.T) {
 	}
 }
 
+//nolint:funlen // table-driven flag matrix
 func TestValidateBackendFlags(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name           string
-		backend        string
-		command        string
-		pcieThroughput bool
-		wantErr        string
+		name    string
+		flags   backendFlagSet
+		wantErr string
 	}{
-		{name: "exec defaults", backend: backendExec, command: "nvidia-smi"},
-		{name: "exec with custom command", backend: backendExec, command: "sudo nvidia-smi"},
-		{name: "nvml defaults", backend: backendNVML, command: "nvidia-smi"},
-		{name: "nvml with pcie throughput", backend: backendNVML, command: "nvidia-smi", pcieThroughput: true},
+		{name: "exec defaults", flags: backendFlagSet{backend: backendExec, nvidiaSmiCommand: "nvidia-smi"}},
 		{
-			name: "nvml rejects custom command", backend: backendNVML, command: "sudo nvidia-smi",
+			name:  "exec with custom command",
+			flags: backendFlagSet{backend: backendExec, nvidiaSmiCommand: "sudo nvidia-smi"},
+		},
+		{name: "nvml defaults", flags: backendFlagSet{backend: backendNVML, nvidiaSmiCommand: "nvidia-smi"}},
+		{
+			name:  "nvml with pcie throughput",
+			flags: backendFlagSet{backend: backendNVML, nvidiaSmiCommand: "nvidia-smi", pcieThroughput: true},
+		},
+		{
+			name: "nvml with compute apps mig",
+			flags: backendFlagSet{
+				backend: backendNVML, nvidiaSmiCommand: "nvidia-smi",
+				computeApps: true, computeAppsMIG: true,
+			},
+		},
+		{
+			name:    "nvml rejects custom command",
+			flags:   backendFlagSet{backend: backendNVML, nvidiaSmiCommand: "sudo nvidia-smi"},
 			wantErr: "--nvidia-smi-command cannot be combined",
 		},
 		{
-			name: "exec rejects pcie throughput", backend: backendExec, command: "nvidia-smi",
-			pcieThroughput: true,
-			wantErr:        "--collect.pcie-throughput requires --collect.backend=nvml",
+			name:    "exec rejects pcie throughput",
+			flags:   backendFlagSet{backend: backendExec, nvidiaSmiCommand: "nvidia-smi", pcieThroughput: true},
+			wantErr: "--collect.pcie-throughput requires --collect.backend=nvml",
+		},
+		{
+			name: "exec rejects compute apps mig",
+			flags: backendFlagSet{
+				backend: backendExec, nvidiaSmiCommand: "nvidia-smi",
+				computeApps: true, computeAppsMIG: true,
+			},
+			wantErr: "--collect.compute-apps-mig requires --collect.backend=nvml",
+		},
+		{
+			name: "compute apps mig requires compute apps",
+			flags: backendFlagSet{
+				backend: backendNVML, nvidiaSmiCommand: "nvidia-smi", computeAppsMIG: true,
+			},
+			wantErr: "--collect.compute-apps-mig requires --collect.compute-apps",
 		},
 	}
 
@@ -168,7 +196,7 @@ func TestValidateBackendFlags(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := validateBackendFlags(testCase.backend, testCase.command, testCase.pcieThroughput)
+			err := validateBackendFlags(testCase.flags)
 			if testCase.wantErr == "" {
 				assert.NoError(t, err)
 

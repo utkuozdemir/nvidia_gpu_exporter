@@ -196,7 +196,7 @@ func collectCallSites(file *ast.File, seen map[string]bool) {
 		}
 
 		method := selector.Sel.Name
-		if strings.HasPrefix(method, "Get") || method == "ValidateInforom" {
+		if strings.HasPrefix(method, "Get") || strings.HasPrefix(method, "Gpm") || method == "ValidateInforom" {
 			// skip go-nvml package-level helpers reached through the seam
 			if ident, isIdent := selector.X.(*ast.Ident); isIdent && ident.Name == "nvml" {
 				return true

@@ -13,4 +13,7 @@ type CollectOptions struct {
 	PCIeThroughput bool
 	// Energy enables the per-GPU cumulative energy counter.
 	Energy bool
+	// MIG enables the per-MIG-instance readings. GPUs without MIG mode
+	// enabled contribute nothing beyond one mode probe.
+	MIG bool
 }
