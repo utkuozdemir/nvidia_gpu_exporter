@@ -1,0 +1,54 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+annotations:
+  artifacthub.io/license: MIT
+  artifacthub.io/links: |
+    - name: Grafana dashboard
+      url: https://grafana.com/grafana/dashboards/14574
+    - name: Grafana dashboard (multi-GPU overview)
+      url: https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/docs/grafana/dashboard-overview.json
+  artifacthub.io/signKey: |
+    fingerprint: 93122B2C53431C2F60964EB7EAC49314A32B9205
+    url: https://utkuozdemir.github.io/nvidia_gpu_exporter/pubkey.asc
+apiVersion: v2
+appVersion: 1.12.0
+description: Nvidia GPU exporter for prometheus, using nvidia-smi binary to gather
+  metrics.
+home: https://github.com/utkuozdemir/nvidia_gpu_exporter
+icon: https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/docs/img/nvidia.png
+keywords:
+- - nvidia
+- - gpu
+- - exporter
+- - nvidia-smi
+- - prometheus
+maintainers:
+- - email: utkuozdemir@gmail.com
+  name: Utku Özdemir
+  url: https://utkuozdemir.org
+name: nvidia-gpu-exporter
+sources:
+- - https://github.com/utkuozdemir/nvidia_gpu_exporter
+type: application
+version: 2.12.0
+
+...
+files:
+  nvidia-gpu-exporter-2.12.0.tgz: sha256:9dcfb89306c64a4ddfa5d5d17fed0ccbeca2d202c051c07c9a4669d2efed7cde
+-----BEGIN PGP SIGNATURE-----
+
+wsFcBAEBCgAQBQJqWUtGCRDqxJMUoyuSBQAA4HkQAFHSacFUwe67nElwsRQosZhO
+J3Hh1wg5/yQ0eXLwh0Iwbtstv4wXOso+7R+EDo/zTuxjfrJvVE7tkq8cQOU1fGm8
+XTfz0/7evKoIgUAt5EQT3Ep9SEW6yDW76R/TLjXWiVTfAfSltQRLAPFRJnIRjcd4
+12pMusM/is8Y8HIPAUiS8jXWfwx0cX4/FIcAA35cEWgYUYd+RpUHH+qBwMSDCnmH
+2+3rLlA8ZqxrtKDttqHP7lFCOSlbUu8MomKKt2WAywNCUfvdoX2o7w7zJBjhyCp7
+xfQFrH6avjQEnslY0KguU3YMo7oiw/5or9pJgYIjP3hhuekRAiOYNMNhMFWupRBi
+E6chot6ItSszPRLAC1BQu3K+iLJX3/vmfA8Q37lo6dTqCe5ypKBlHMy5suwLQk2s
+MmSWhpjqZ/AXgx9BvKuENcLtOB/9BAmRwxyiG8J14Ty27goIHOvvw4ByQ1JFwI44
+lQYRz3RYM8VBHSBsWF1LpsDXo8fTDmJASreMIM4J827p44xXh+7s2QH78lg+/5o3
+qrbYQdTAf8NCGqZzonY6juJSng1v4r7mQgD6djDaKNvu59xsUilGeLdumLKLh2Lr
+uwXVZ/b6L6iGAHYl6Ee7he3ALZGsMXBUL8ae3duz0uR6rX7rvSASiVEi+FiJAWy9
+K2rEcFme4haawApox+IZ
+=M66n
+-----END PGP SIGNATURE-----

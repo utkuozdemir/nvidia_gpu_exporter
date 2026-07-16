@@ -12,8 +12,43 @@ entries:
         fingerprint: 93122B2C53431C2F60964EB7EAC49314A32B9205
         url: https://utkuozdemir.github.io/nvidia_gpu_exporter/pubkey.asc
     apiVersion: v2
+    appVersion: 1.12.0
+    created: "2026-07-16T21:21:18.744861475Z"
+    description: Nvidia GPU exporter for prometheus, using nvidia-smi binary to gather
+      metrics.
+    digest: 9dcfb89306c64a4ddfa5d5d17fed0ccbeca2d202c051c07c9a4669d2efed7cde
+    home: https://github.com/utkuozdemir/nvidia_gpu_exporter
+    icon: https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/docs/img/nvidia.png
+    keywords:
+    - nvidia
+    - gpu
+    - exporter
+    - nvidia-smi
+    - prometheus
+    maintainers:
+    - email: utkuozdemir@gmail.com
+      name: Utku Özdemir
+      url: https://utkuozdemir.org
+    name: nvidia-gpu-exporter
+    sources:
+    - https://github.com/utkuozdemir/nvidia_gpu_exporter
+    type: application
+    urls:
+    - https://utkuozdemir.github.io/nvidia_gpu_exporter/nvidia-gpu-exporter-2.12.0.tgz
+    version: 2.12.0
+  - annotations:
+      artifacthub.io/license: MIT
+      artifacthub.io/links: |
+        - name: Grafana dashboard
+          url: https://grafana.com/grafana/dashboards/14574
+        - name: Grafana dashboard (multi-GPU overview)
+          url: https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/docs/grafana/dashboard-overview.json
+      artifacthub.io/signKey: |
+        fingerprint: 93122B2C53431C2F60964EB7EAC49314A32B9205
+        url: https://utkuozdemir.github.io/nvidia_gpu_exporter/pubkey.asc
+    apiVersion: v2
     appVersion: 1.11.0
-    created: "2026-07-15T16:33:45.619353313Z"
+    created: "2026-07-16T21:21:18.74381937Z"
     description: Nvidia GPU exporter for prometheus, using nvidia-smi binary to gather
       metrics.
     digest: ee86fdce1c7e8cb52b2cc3990d558ba37c73f8e64bdbf81693bf39cbb0ed60c8
@@ -46,7 +81,7 @@ entries:
         url: https://utkuozdemir.github.io/nvidia_gpu_exporter/pubkey.asc
     apiVersion: v2
     appVersion: 1.10.0
-    created: "2026-07-15T16:33:45.618174148Z"
+    created: "2026-07-16T21:21:18.742951094Z"
     description: Nvidia GPU exporter for prometheus, using nvidia-smi binary to gather
       metrics.
     digest: 50fbc913c7bc86f04b1a18ba74d5751f0757457d61f4d944a7a1687c1e212b0d
@@ -76,7 +111,7 @@ entries:
           url: https://grafana.com/grafana/dashboards/14574
     apiVersion: v2
     appVersion: 1.9.1
-    created: "2026-07-15T16:33:45.622568034Z"
+    created: "2026-07-16T21:21:18.747147166Z"
     description: Nvidia GPU exporter for prometheus, using nvidia-smi binary to gather
       metrics.
     digest: b7aca1518a7cd2717a70073672f36ee955fc6ccc8a897c05e06f04cba3e47151
@@ -106,7 +141,7 @@ entries:
           url: https://grafana.com/grafana/dashboards/14574
     apiVersion: v2
     appVersion: 1.9.0
-    created: "2026-07-15T16:33:45.620885648Z"
+    created: "2026-07-16T21:21:18.746533841Z"
     description: Nvidia GPU exporter for prometheus, using nvidia-smi binary to gather
       metrics.
     digest: f594343e535c2f6752deaeffa70289250a979634e1b20087cf9a4494d608f28d
@@ -136,7 +171,7 @@ entries:
           url: https://grafana.com/grafana/dashboards/14574
     apiVersion: v2
     appVersion: 1.8.0
-    created: "2026-07-15T16:33:45.620127861Z"
+    created: "2026-07-16T21:21:18.745430104Z"
     description: Nvidia GPU exporter for prometheus, using nvidia-smi binary to gather
       metrics.
     digest: 8ae197d55e83e185346bcc04c37ea1701b1cf52b3880cddc849678e46438296b
@@ -159,4 +194,4 @@ entries:
     urls:
     - https://utkuozdemir.github.io/nvidia_gpu_exporter/nvidia-gpu-exporter-2.8.0.tgz
     version: 2.8.0
-generated: "2026-07-15T16:33:45.61724505Z"
+generated: "2026-07-16T21:21:18.741847767Z"
