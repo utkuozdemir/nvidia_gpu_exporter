@@ -46,7 +46,7 @@ jobs:
         uses: sigstore/cosign-installer@v4.1.2
         with:
           # renovate: depName=sigstore/cosign datasource=github-releases
-          cosign-release: v3.1.1
+          cosign-release: v3.1.2
       - name: Import the signing key
         # no xtrace: this step handles the private key
         shell: bash --noprofile --norc -euo pipefail {0}
@@ -121,7 +121,7 @@ jobs:
         uses: sigstore/cosign-installer@v4.1.2
         with:
           # renovate: depName=sigstore/cosign datasource=github-releases
-          cosign-release: v3.1.1
+          cosign-release: v3.1.2
       - name: Log in to GHCR
         # before importing the key, so no third-party action runs while the
         # private key material is present on disk
