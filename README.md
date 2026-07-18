@@ -19,19 +19,14 @@ Nvidia GPU exporter for prometheus, using `nvidia-smi` binary to gather metrics.
 
 ## Introduction
 
-There are many Nvidia GPU exporters out there however they have problems such as not being maintained,
-not providing pre-built binaries, having a dependency to Linux and/or Docker,
-targeting enterprise setups (DCGM) and so on.
-
-This is a simple exporter that uses `nvidia-smi(.exe)` binary to collect, parse and export metrics.
-This makes it possible to run it on Windows and get GPU metrics while gaming - no Docker or Linux required.
+This is a simple exporter that uses the `nvidia-smi(.exe)` binary to collect,
+parse and export metrics. Since it only needs `nvidia-smi`, it also works on
+Windows - no Docker or Linux required.
 
 It can also skip `nvidia-smi` and read the metrics straight from the NVIDIA
-Management Library (NVML), the C library `nvidia-smi` itself is built on. This
-mode is experimental and exports a superset of the default mode's metrics: the
-same core set plus NVML-only extras like the GPU energy counter, per-MIG-instance
-metrics, XID error counters and opt-in PCIe throughput; see
-[CONFIGURE.md](docs/CONFIGURE.md).
+Management Library (NVML). This mode is experimental and exposes some things
+`nvidia-smi` cannot provide, like per-MIG-instance metrics and XID error
+counters; see [CONFIGURE.md](docs/CONFIGURE.md).
 
 This project is based on [a0s/nvidia-smi-exporter](https://github.com/a0s/nvidia-smi-exporter).
 However, this one is written in Go to produce a single, static binary.
@@ -43,7 +38,7 @@ However, this one is written in Go to produce a single, static binary.
   utilization, memory, power and temperature
 - Small Kubernetes clusters, edge boxes and homelabs that want GPU metrics
   without installing the NVIDIA GPU Operator stack
-- Virtualized or restricted setups (vGPU guests, locked-down containers)
+- Virtualized or restricted setups (vGPU guests, MIG slices, locked-down containers)
   where the deeper GPU counters are not exposed but `nvidia-smi` still answers
 - Mixed fleets of old and new cards that need one exporter that behaves the
   same everywhere
@@ -57,11 +52,9 @@ probably the better fit; this exporter aims at the cases above.
 
 - Will work on any system that has `nvidia-smi(.exe)?` binary - Windows, Linux, MacOS... No C bindings required
 - Doesn't even need to run the monitored machine: can be configured to execute `nvidia-smi` command remotely
-- No need for a Docker or Kubernetes environment
 - Auto-discovery of the metric fields `nvidia-smi` can expose (future-compatible)
 - Optional per-process GPU metrics: see which process uses how much GPU memory
-- Experimental NVML mode: reads the driver library directly instead of running `nvidia-smi`, and unlocks metrics `nvidia-smi` cannot provide (Linux)
-- Demo mode: realistic synthetic metrics on any machine, no GPU needed - try the exporter or build dashboards anywhere
+- Optional background collection: run `nvidia-smi` on a timer instead of on every scrape
 - Comes with its own [Grafana dashboard](https://grafana.com/grafana/dashboards/14574)
 
 ## Try it without a GPU
@@ -82,7 +75,7 @@ and an XID error history. The simulated setup is configurable; see
 You can use the official [Grafana dashboard](https://grafana.com/grafana/dashboards/14574)
 to see your GPU metrics in a nicely visualized way.
 
-Here's how it looks like:
+Here's how it looks:
 ![Grafana dashboard](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/docs/grafana/dashboard.png)
 
 For machines with more than one GPU there is a companion
@@ -95,6 +88,8 @@ single-GPU dashboard above. Import it from the JSON file, or enable
 
 ## Installation
 
+You can install it from plain binaries, deb/rpm packages, winget, Docker
+images or the [Helm chart](charts/nvidia-gpu-exporter).
 See [INSTALL.md](docs/INSTALL.md) for details.
 
 ## Verifying releases
