@@ -67,12 +67,27 @@ services:
     ports:
       - "9838:9835"
 
+  # opt-in failure box for the exporter self-health alerts: nvidia-smi exits
+  # non-zero from boot. Start with: docker compose --profile broken up
+  exec-broken:
+    profiles: ["broken"]
+    build:
+      context: ../..
+      dockerfile: hack/compose/Dockerfile
+    command:
+      - "--nvidia-smi-command=/usr/local/bin/fake-nvidia-smi --config /etc/machines/consumer.yaml --exit 15 --stderr-msg 'Unable to determine the device handle for GPU 0000:01:00.0'"
+    volumes:
+      - ./machines:/etc/machines:ro
+    ports:
+      - "9839:9835"
+
   prometheus:
     image: prom/prometheus:v3.13.1
     ports:
       - "9090:9090"
     volumes:
       - ./prometheus/config:/etc/prometheus
+      - ./prometheus/rules:/etc/prometheus/rules:ro
       - prometheus-data:/prometheus
     depends_on:
       - exec-consumer
@@ -84,10 +99,20 @@ services:
       - "9091:9090"
     volumes:
       - ./prometheus/config-demo:/etc/prometheus
+      - ./prometheus/rules:/etc/prometheus/rules:ro
       - prometheus-demo-data:/prometheus
     depends_on:
       - nvml-consumer
       - nvml-datacenter
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager:/etc/alertmanager:ro
 
   grafana:
     image: grafana/grafana:13.1.0

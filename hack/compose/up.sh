@@ -6,6 +6,7 @@ set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 "$here/render-dashboard.sh"
+"$here/render-rules.sh"
 cd "$here"
 docker compose config --quiet
 exec docker compose up --build "$@"

@@ -185,12 +185,31 @@ What to do when upgrading:
 
 All optional resources are off by default. `serviceMonitor` and `podMonitor`
 require the Prometheus Operator CRDs (enable one of them, not both).
-`prometheusRule` adds alerts on the exporter's collection health metrics: if
-the exporter also runs on nodes without GPUs, restrict the DaemonSet to GPU
-nodes via `nodeSelector` or `affinity` before enabling it, otherwise the
-alerts fire for nodes that cannot collect GPU metrics by design. The alert
-expressions select all `nvidia_smi_*` series, so when installing multiple
-releases of this chart, enable the rules in only one of them.
+`prometheusRule` adds alerts on the exporter's collection health and on GPU
+health: driver-requested recovery actions, critical Xid errors, uncorrectable
+ECC errors, memory row-remap and page-retirement state, hardware thermal
+slowdown and power braking. Every alert's description says what to do about
+it. The defaults are deliberately conservative for consumer and homelab
+hardware; rules that depend on fleet knowledge (absolute temperature, GPU
+count) or that are normal on thermally-limited systems (software thermal
+slowdown) ship disabled, and each rule can be toggled individually. Some
+rules need the NVML backend (Xid) or specific query fields (ECC, remapped
+rows); where the metric is absent the rule simply never fires. When
+upgrading a release that already had `prometheusRule.enabled: true`, the new
+GPU health rules arrive enabled: review the list below and disable any you
+do not want. One real
+hardware fault can raise several of these alerts at once (for example an
+uncorrectable ECC error also produces an Xid and a recovery action); that
+overlap is deliberate, because no single signal exists on every backend,
+driver and GPU generation combination. Group them in your Alertmanager route
+by `instance` if you prefer one notification per node.
+
+If the exporter also runs on nodes without GPUs, restrict the DaemonSet to
+GPU nodes via `nodeSelector` or `affinity` before enabling `prometheusRule`,
+otherwise the collection alerts fire for nodes that cannot collect GPU
+metrics by design. The alert expressions select all `nvidia_smi_*` series, so
+when installing multiple releases of this chart, enable the rules in only one
+of them.
 `grafanaDashboard` ships the [Grafana dashboard](https://grafana.com/grafana/dashboards/14574)
 and its [multi-GPU overview companion](https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/docs/grafana/dashboard-overview.json)
 as a ConfigMap labeled for the Grafana sidecar.
@@ -264,10 +283,27 @@ grafanaDashboard:
 | prometheusRule.collectionFailing.enabled | bool | `true` | Alert when the most recent collection failed for some time |
 | prometheusRule.collectionFailing.for | string | `"10m"` | How long collection must be failing before the alert fires |
 | prometheusRule.collectionFailing.severity | string | `"warning"` | Severity label of the alert |
+| prometheusRule.collectionSlow.enabled | bool | `true` | Alert when collecting GPU metrics is slow for 10 minutes. Healthy nvidia-smi answers well under a second with the persistence daemon running; sustained slowness often precedes a wedged driver. |
+| prometheusRule.collectionSlow.thresholdSeconds | int | `5` | Collection duration in seconds above which the alert fires |
 | prometheusRule.collectionStale.enabled | bool | `true` | Alert when the last successful collection is too far in the past |
 | prometheusRule.collectionStale.severity | string | `"warning"` | Severity label of the alert |
 | prometheusRule.collectionStale.thresholdSeconds | int | `300` | Seconds since the last successful collection before the alert fires |
 | prometheusRule.enabled | bool | `false` | Create a Prometheus Operator PrometheusRule with default alerts (requires the Prometheus Operator CRDs). In clusters where the exporter also runs on nodes without GPUs, restrict the DaemonSet to GPU nodes via nodeSelector or affinity before enabling this, otherwise the alerts fire for nodes that cannot collect GPU metrics by design. |
+| prometheusRule.gpuMissing.enabled | bool | `false` | Alert when a machine reports fewer GPUs than its recent maximum while collection stays healthy, which catches GPUs that silently fall off the bus on the default backend. Off by default: it also fires for up to 6 hours after deliberately removing a GPU and needs a stable instance label across exporter restarts. |
+| prometheusRule.powerBrake.enabled | bool | `true` | Alert when an external hardware power brake throttles a GPU for 5 minutes: a power delivery problem (PSU, cables, rack power). The configured software power limit never raises this. |
+| prometheusRule.recoveryAction.enabled | bool | `true` | Alert when the driver itself requests a GPU recovery action (reset, reboot, drain). The most direct health signal there is; needs a recent driver (570+), silently absent on older ones. |
+| prometheusRule.retiredPagesPending.enabled | bool | `true` | Alert when a GPU memory page retirement waits for a reboot to take effect (pre-Ampere GPUs) |
+| prometheusRule.rowRemapFailure.enabled | bool | `true` | Alert when GPU memory row remapping failed, which is NVIDIA's stated RMA criterion |
+| prometheusRule.rowRemapPending.enabled | bool | `true` | Alert when a GPU memory row remap waits for a GPU reset to take effect |
+| prometheusRule.swThermalSlowdown.enabled | bool | `false` | Alert when the driver throttles a GPU at its temperature target for 30 minutes. Off by default: this is normal on thermally-limited consumer and laptop systems under sustained load. |
+| prometheusRule.temperatureHigh.enabled | bool | `false` | Alert when the GPU core temperature stays above the threshold for 10 minutes. Off by default: safe temperatures differ per GPU generation (a datacenter A100 throttles around 83C while laptop GPUs sit at 87C by design), so tune the threshold to your fleet before enabling. |
+| prometheusRule.temperatureHigh.thresholdCelsius | int | `85` | Core temperature in Celsius above which the alert fires |
+| prometheusRule.thermalSlowdown.enabled | bool | `true` | Alert when hardware thermal protection throttles a GPU for 5 minutes: cooling is failing at the hardware trip point. The driver applies the right per-model threshold, so this works across GPU generations. Disable if it fires routinely on thermally-limited mobile/small-form-factor systems. |
+| prometheusRule.uncorrectableEcc.enabled | bool | `true` | Alert when a GPU reports uncorrectable ECC memory errors since its last reset. Data may have been corrupted; a GPU reset repairs the memory on Ampere and newer. Corrected (single-bit) errors never alert. |
+| prometheusRule.xidCritical.codes | list | `[48,62,64,74,79,95,119,120]` | Xid codes treated as critical (reset/reboot class) |
+| prometheusRule.xidCritical.enabled | bool | `true` | Alert on Xid errors whose NVIDIA-recommended action is a GPU reset or node reboot. Needs the NVML backend; never fires on the default nvidia-smi backend. |
+| prometheusRule.xidWarning.codes | list | `[94]` | Xid codes treated as warning (restart-app class) |
+| prometheusRule.xidWarning.enabled | bool | `true` | Alert on Xid errors whose recommended action is an application restart. Explicit allowlist: application-caused Xids (13, 31, 43, ...) and informational ones (63, 92) deliberately never alert. |
 | queryFieldNames | list | `["AUTO"]` | `nvidia-smi` fields to be queried by the exporter. `AUTO` auto-detects them. |
 | queryFieldNamesExclude | list | `[]` | `nvidia-smi` fields to exclude from being queried. Names match literally, with `*` as a wildcard for any sequence of characters. |
 | readinessProbe | object | `{"httpGet":{"path":"/-/ready","port":"http"}}` | Readiness probe for the exporter container, process-level like the liveness probe. Set to `null` to disable the probe. |
@@ -295,7 +331,7 @@ grafanaDashboard:
 | telemetryPath | string | `"/metrics"` | The path to expose the metrics from |
 | test.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for the `helm test` pod |
 | test.image.repository | string | `"docker.io/library/busybox"` | Image repository for the `helm test` connection-check pod |
-| test.image.tag | string | `"1.37"` | Image tag for the `helm test` pod |
+| test.image.tag | string | `"1.38"` | Image tag for the `helm test` pod |
 | tolerations | list | `[]` | Tolerations for the pods. GPU node pools are often tainted (e.g. `nvidia.com/gpu=present:NoSchedule`) so that only GPU workloads land on them. This chart deliberately requests no GPU resource, so add a matching toleration here or the exporter will not schedule on those nodes. |
 | updateStrategy | object | `{"rollingUpdate":{"maxUnavailable":1},"type":"RollingUpdate"}` | Update strategy of the DaemonSet. Raise `rollingUpdate.maxUnavailable` (absolute or percentage) to roll out faster on large clusters, or use `type: OnDelete` for manually staged rollouts. |
 | volumeMounts | list | `[]` | Extra volume mounts for the exporter container |

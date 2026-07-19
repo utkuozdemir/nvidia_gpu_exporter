@@ -1,42 +1,274 @@
-{{- if .Values.prometheusRule.enabled }}
+{{- /*
+Rule subtrees may be absent when upgrading with --reuse-values from an older
+release, so every new subtree is read with dig and carries its default here.
+The two original rules keep their full knobs for compatibility.
+*/}}
+{{- $pr := .Values.prometheusRule }}
+{{- $on := dict
+  "collectionFailing" (dig "collectionFailing" "enabled" true $pr)
+  "collectionStale" (dig "collectionStale" "enabled" true $pr)
+  "collectionSlow" (dig "collectionSlow" "enabled" true $pr)
+  "recoveryAction" (dig "recoveryAction" "enabled" true $pr)
+  "xidCritical" (dig "xidCritical" "enabled" true $pr)
+  "xidWarning" (dig "xidWarning" "enabled" true $pr)
+  "uncorrectableEcc" (dig "uncorrectableEcc" "enabled" true $pr)
+  "rowRemapFailure" (dig "rowRemapFailure" "enabled" true $pr)
+  "rowRemapPending" (dig "rowRemapPending" "enabled" true $pr)
+  "retiredPagesPending" (dig "retiredPagesPending" "enabled" true $pr)
+  "thermalSlowdown" (dig "thermalSlowdown" "enabled" true $pr)
+  "swThermalSlowdown" (dig "swThermalSlowdown" "enabled" false $pr)
+  "powerBrake" (dig "powerBrake" "enabled" true $pr)
+  "temperatureHigh" (dig "temperatureHigh" "enabled" false $pr)
+  "gpuMissing" (dig "gpuMissing" "enabled" false $pr)
+}}
+{{- $any := false }}
+{{- range $k, $v := $on }}{{- if $v }}{{- $any = true }}{{- end }}{{- end }}
+{{- /* the two tiers carry contradictory instructions, so one code must never be in both */}}
+{{- $xidCritical := dig "xidCritical" "codes" (list 48 62 64 74 79 95 119 120) $pr }}
+{{- $xidWarning := dig "xidWarning" "codes" (list 94) $pr }}
+{{- range $c := $xidCritical }}
+{{- range $w := $xidWarning }}
+{{- if eq (toString $c) (toString $w) }}
+{{- fail (printf "prometheusRule: xid code %v must not be in both xidCritical.codes and xidWarning.codes" $c) }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if and $pr.enabled $any }}
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
   name: {{ template "nvidia-gpu-exporter.fullname" . }}
   labels:
     {{- include "nvidia-gpu-exporter.labels" . | nindent 4 }}
-  {{- with .Values.prometheusRule.additionalLabels }}
+  {{- with $pr.additionalLabels }}
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
   groups:
     - name: nvidia-gpu-exporter
       rules:
-        {{- if .Values.prometheusRule.collectionFailing.enabled }}
+        {{- if get $on "collectionFailing" }}
         - alert: NvidiaGpuExporterCollectionFailing
           expr: nvidia_smi_last_collect_success == 0
-          for: {{ .Values.prometheusRule.collectionFailing.for }}
+          for: {{ dig "collectionFailing" "for" "10m" $pr }}
           labels:
-            severity: {{ .Values.prometheusRule.collectionFailing.severity }}
+            severity: {{ dig "collectionFailing" "severity" "warning" $pr }}
           annotations:
-            summary: nvidia-smi collection is failing on {{ printf "{{ $labels.instance }}" }}
+            summary: GPU metric collection is failing on {{ printf "{{ $labels.instance }}" }}
             description: >-
               The exporter on {{ printf "{{ $labels.instance }}" }} cannot collect GPU metrics.
-              Check that the node has a GPU, the NVIDIA driver works, and the pod runs with
-              the NVIDIA runtime.
+              Run nvidia-smi on the node by hand and check dmesg for NVRM/Xid messages. The most
+              common cause is a driver/library mismatch after a driver upgrade, fixed by a reboot.
+              Also check that the node has a GPU and the pod runs with the NVIDIA runtime.
         {{- end }}
-        {{- if .Values.prometheusRule.collectionStale.enabled }}
+        {{- if get $on "collectionStale" }}
         - alert: NvidiaGpuExporterCollectionStale
           expr: >-
             time() - nvidia_smi_last_collect_success_timestamp_seconds
-            > {{ .Values.prometheusRule.collectionStale.thresholdSeconds }}
+            > {{ dig "collectionStale" "thresholdSeconds" 300 $pr }}
           labels:
-            severity: {{ .Values.prometheusRule.collectionStale.severity }}
+            severity: {{ dig "collectionStale" "severity" "warning" $pr }}
           annotations:
             summary: GPU metrics are stale on {{ printf "{{ $labels.instance }}" }}
             description: >-
               The last successful nvidia-smi collection on {{ printf "{{ $labels.instance }}" }}
-              is older than {{ .Values.prometheusRule.collectionStale.thresholdSeconds }} seconds.
-              The served GPU metrics no longer reflect the current state.
+              is older than {{ dig "collectionStale" "thresholdSeconds" 300 $pr }} seconds.
+              The served GPU metrics no longer reflect the current state. Check for a wedged
+              driver: run nvidia-smi by hand and check dmesg for NVRM/Xid messages.
+        {{- end }}
+        {{- if get $on "collectionSlow" }}
+        - alert: NvidiaGpuExporterCollectionSlow
+          expr: nvidia_smi_last_collect_duration_seconds > {{ dig "collectionSlow" "thresholdSeconds" 5 $pr }}
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: GPU metric collection is slow on {{ printf "{{ $labels.instance }}" }}
+            description: >-
+              Collecting GPU metrics on {{ printf "{{ $labels.instance }}" }} takes longer than
+              {{ dig "collectionSlow" "thresholdSeconds" 5 $pr }} seconds. A healthy nvidia-smi
+              answers well under a second when the persistence daemon runs. Enable persistence
+              mode (nvidia-persistenced) and check dmesg for Xid messages: sustained slowness
+              often precedes a wedged driver. Collections that hang entirely are caught by the
+              failing/stale alerts instead of this one.
+        {{- end }}
+        {{- if get $on "recoveryAction" }}
+        - alert: NvidiaGpuRecoveryActionNeeded
+          expr: nvidia_smi_gpu_recovery_action > 0
+          labels:
+            severity: critical
+          annotations:
+            summary: A GPU on {{ printf "{{ $labels.instance }}" }} needs a recovery action
+            description: >-
+              The NVIDIA driver itself reports that GPU {{ printf "{{ $labels.uuid }}" }} needs recovery. The value names the
+              action: 1 = reset the GPU, 2 = reboot the node, 3 = drain peer-to-peer workloads,
+              4 = drain and reset. Drain the GPU's workloads, then apply the action
+              (current value: {{ printf "{{ $value }}" }}).
+        {{- end }}
+        {{- if get $on "xidCritical" }}
+        - alert: NvidiaGpuXidCritical
+          expr: >-
+            time() - nvidia_smi_xid_last_timestamp_seconds{xid=~"{{ $xidCritical | join "|" }}"}
+            < 600
+          labels:
+            severity: critical
+          annotations:
+            summary: Critical GPU Xid error on {{ printf "{{ $labels.instance }}" }}
+            description: >-
+              GPU {{ printf "{{ $labels.uuid }}" }} reported Xid {{ printf "{{ $labels.xid }}" }}, a critical error, in the last 10
+              minutes. Drain the GPU. Among the default codes, 48/62/64/95/119/120 mean an
+              uncorrectable memory, microcontroller or GSP fault: reset the GPU (the reset also
+              applies pending row remaps). Xid 79 means the GPU fell off the PCIe bus: reboot the
+              node, and reseat the card or check its power if it recurs. Xid 74 is an NVLink
+              fault: reset the GPU or reboot. Check dmesg for the matching NVRM Xid line.
+              Requires the NVML backend.
+        {{- end }}
+        {{- if get $on "xidWarning" }}
+        - alert: NvidiaGpuXidWarning
+          expr: >-
+            time() - nvidia_smi_xid_last_timestamp_seconds{xid=~"{{ $xidWarning | join "|" }}"}
+            < 600
+          labels:
+            severity: warning
+          annotations:
+            summary: GPU Xid error on {{ printf "{{ $labels.instance }}" }}
+            description: >-
+              GPU {{ printf "{{ $labels.uuid }}" }} reported Xid {{ printf "{{ $labels.xid }}" }} in
+              the last 10 minutes. Xids in this tier (default: 94, a contained memory error) hit
+              one application without harming the GPU: restart the affected application, and
+              reset the GPU at the next convenient window. Requires the NVML backend.
+        {{- end }}
+        {{- if get $on "uncorrectableEcc" }}
+        - alert: NvidiaGpuUncorrectableEccErrors
+          expr: nvidia_smi_ecc_errors_uncorrected_volatile_total > 0
+          labels:
+            severity: critical
+          annotations:
+            summary: Uncorrectable GPU memory errors on {{ printf "{{ $labels.instance }}" }}
+            description: >-
+              GPU {{ printf "{{ $labels.uuid }}" }} hit uncorrectable ECC memory errors since its last reset, so results may
+              have been corrupted. Drain the GPU and reset it at the next window: on Ampere and
+              newer the reset triggers row remapping, which permanently repairs the location.
+              If errors recur after a reset, run the NVIDIA field diagnostic and consider an RMA.
+        {{- end }}
+        {{- if get $on "rowRemapFailure" }}
+        - alert: NvidiaGpuRowRemapFailure
+          expr: nvidia_smi_remapped_rows_failure == 1
+          labels:
+            severity: critical
+          annotations:
+            summary: GPU memory row remapping failed on {{ printf "{{ $labels.instance }}" }}
+            description: >-
+              GPU {{ printf "{{ $labels.uuid }}" }} can no longer repair its memory by row remapping, which is NVIDIA's
+              stated RMA criterion. Drain the GPU, run the NVIDIA field diagnostic and start
+              an RMA.
+        {{- end }}
+        {{- if get $on "rowRemapPending" }}
+        - alert: NvidiaGpuRowRemapPending
+          expr: nvidia_smi_remapped_rows_pending == 1
+          labels:
+            severity: warning
+          annotations:
+            summary: GPU memory row remap pending on {{ printf "{{ $labels.instance }}" }}
+            description: >-
+              A memory repair on GPU {{ printf "{{ $labels.uuid }}" }} is recorded but needs a GPU reset to take effect; until then the
+              degraded region stays in use. Schedule a GPU reset or node reboot at the next
+              convenient window.
+        {{- end }}
+        {{- if get $on "retiredPagesPending" }}
+        - alert: NvidiaGpuRetiredPagesPending
+          expr: nvidia_smi_retired_pages_pending == 1
+          labels:
+            severity: warning
+          annotations:
+            summary: GPU memory page retirement pending on {{ printf "{{ $labels.instance }}" }}
+            description: >-
+              A memory page retirement on GPU {{ printf "{{ $labels.uuid }}" }} is recorded but needs a reboot to take effect (pre-Ampere
+              GPUs). Reboot the node at the next convenient window.
+        {{- end }}
+        {{- if get $on "thermalSlowdown" }}
+        - alert: NvidiaGpuThermalSlowdown
+          expr: >-
+            nvidia_smi_clocks_event_reasons_hw_thermal_slowdown == 1
+            or nvidia_smi_clocks_throttle_reasons_hw_thermal_slowdown == 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: A GPU on {{ printf "{{ $labels.instance }}" }} is in hardware thermal slowdown
+            description: >-
+              Hardware thermal protection has been throttling GPU {{ printf "{{ $labels.uuid }}" }} for 5 minutes, which
+              costs a large share of its throughput and means cooling is failing at the
+              hardware trip point. Check fans, airflow, dust and ambient temperature; on a
+              desktop card also consider repasting. If this fires routinely on a
+              thermally-limited mobile or small-form-factor system, disable this rule.
+        {{- end }}
+        {{- if get $on "swThermalSlowdown" }}
+        - alert: NvidiaGpuSoftwareThermalSlowdown
+          expr: >-
+            nvidia_smi_clocks_event_reasons_sw_thermal_slowdown == 1
+            or nvidia_smi_clocks_throttle_reasons_sw_thermal_slowdown == 1
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: A GPU on {{ printf "{{ $labels.instance }}" }} is thermally throttled
+            description: >-
+              The driver has been throttling GPU {{ printf "{{ $labels.uuid }}" }} at its temperature target for 30 minutes.
+              This is normal on thermally-limited systems under sustained load, which is why the
+              rule is opt-in; if the throttling is unexpected, improve cooling.
+        {{- end }}
+        {{- if get $on "powerBrake" }}
+        - alert: NvidiaGpuPowerBrake
+          expr: >-
+            nvidia_smi_clocks_event_reasons_hw_power_brake_slowdown == 1
+            or nvidia_smi_clocks_throttle_reasons_hw_power_brake_slowdown == 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: A GPU on {{ printf "{{ $labels.instance }}" }} is power-brake throttled
+            description: >-
+              An external hardware power brake has been throttling GPU {{ printf "{{ $labels.uuid }}" }} for 5 minutes. This
+              is a power delivery problem, not a workload property: check the PSU, the power
+              cables/connectors and, in a datacenter, the rack power. The configured software
+              power limit does not raise this flag.
+        {{- end }}
+        {{- if get $on "temperatureHigh" }}
+        - alert: NvidiaGpuTemperatureHigh
+          expr: nvidia_smi_temperature_gpu > {{ dig "temperatureHigh" "thresholdCelsius" 85 $pr }}
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: A GPU on {{ printf "{{ $labels.instance }}" }} runs hot
+            description: >-
+              The core of GPU {{ printf "{{ $labels.uuid }}" }} has been above
+              {{ dig "temperatureHigh" "thresholdCelsius" 85 $pr }}C for 10 minutes. Check
+              cooling and airflow. This rule is opt-in because safe temperatures differ per
+              GPU generation; tune the threshold to your fleet.
+        {{- end }}
+        {{- if get $on "gpuMissing" }}
+        - alert: NvidiaGpuMissing
+          expr: >-
+            (
+              count by (job, instance) (nvidia_smi_gpu_info)
+              or
+              0 * sum by (job, instance) (nvidia_smi_last_collect_success)
+            )
+            < max_over_time((count by (job, instance) (nvidia_smi_gpu_info))[6h:5m])
+            and on (job, instance) nvidia_smi_last_collect_success == 1
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: A GPU disappeared on {{ printf "{{ $labels.instance }}" }}
+            description: >-
+              nvidia-smi reports fewer GPUs on {{ printf "{{ $labels.instance }}" }} than the
+              maximum seen in the last 6 hours while collection stays healthy. A GPU that fell
+              off the PCIe bus can vanish silently like this. Check dmesg for Xid 79, reseat the
+              card or check its power, and reboot the node. This rule is opt-in: it also fires
+              for up to 6 hours after deliberately removing a GPU, and it needs a stable
+              instance label across exporter restarts.
         {{- end }}
 {{- end }}
