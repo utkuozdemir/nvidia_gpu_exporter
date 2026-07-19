@@ -172,6 +172,82 @@ prometheusRule:
     thresholdSeconds: 300
     # -- Severity label of the alert
     severity: warning
+  collectionSlow:
+    # -- Alert when collecting GPU metrics is slow for 10 minutes. Healthy
+    # nvidia-smi answers well under a second with the persistence daemon
+    # running; sustained slowness often precedes a wedged driver.
+    enabled: true
+    # -- Collection duration in seconds above which the alert fires
+    thresholdSeconds: 5
+  recoveryAction:
+    # -- Alert when the driver itself requests a GPU recovery action (reset,
+    # reboot, drain). The most direct health signal there is; needs a recent
+    # driver (570+), silently absent on older ones.
+    enabled: true
+  xidCritical:
+    # -- Alert on Xid errors whose NVIDIA-recommended action is a GPU reset
+    # or node reboot. Needs the NVML backend; never fires on the default
+    # nvidia-smi backend.
+    enabled: true
+    # -- Xid codes treated as critical (reset/reboot class)
+    codes: [48, 62, 64, 74, 79, 95, 119, 120]
+  xidWarning:
+    # -- Alert on Xid errors whose recommended action is an application
+    # restart. Explicit allowlist: application-caused Xids (13, 31, 43, ...)
+    # and informational ones (63, 92) deliberately never alert.
+    enabled: true
+    # -- Xid codes treated as warning (restart-app class)
+    codes: [94]
+  uncorrectableEcc:
+    # -- Alert when a GPU reports uncorrectable ECC memory errors since its
+    # last reset. Data may have been corrupted; a GPU reset repairs the
+    # memory on Ampere and newer. Corrected (single-bit) errors never alert.
+    enabled: true
+  rowRemapFailure:
+    # -- Alert when GPU memory row remapping failed, which is NVIDIA's
+    # stated RMA criterion
+    enabled: true
+  rowRemapPending:
+    # -- Alert when a GPU memory row remap waits for a GPU reset to take
+    # effect
+    enabled: true
+  retiredPagesPending:
+    # -- Alert when a GPU memory page retirement waits for a reboot to take
+    # effect (pre-Ampere GPUs)
+    enabled: true
+  thermalSlowdown:
+    # -- Alert when hardware thermal protection throttles a GPU for 5
+    # minutes: cooling is failing at the hardware trip point. The driver
+    # applies the right per-model threshold, so this works across GPU
+    # generations. Disable if it fires routinely on thermally-limited
+    # mobile/small-form-factor systems.
+    enabled: true
+  swThermalSlowdown:
+    # -- Alert when the driver throttles a GPU at its temperature target for
+    # 30 minutes. Off by default: this is normal on thermally-limited
+    # consumer and laptop systems under sustained load.
+    enabled: false
+  powerBrake:
+    # -- Alert when an external hardware power brake throttles a GPU for 5
+    # minutes: a power delivery problem (PSU, cables, rack power). The
+    # configured software power limit never raises this.
+    enabled: true
+  temperatureHigh:
+    # -- Alert when the GPU core temperature stays above the threshold for
+    # 10 minutes. Off by default: safe temperatures differ per GPU
+    # generation (a datacenter A100 throttles around 83C while laptop GPUs
+    # sit at 87C by design), so tune the threshold to your fleet before
+    # enabling.
+    enabled: false
+    # -- Core temperature in Celsius above which the alert fires
+    thresholdCelsius: 85
+  gpuMissing:
+    # -- Alert when a machine reports fewer GPUs than its recent maximum
+    # while collection stays healthy, which catches GPUs that silently fall
+    # off the bus on the default backend. Off by default: it also fires for
+    # up to 6 hours after deliberately removing a GPU and needs a stable
+    # instance label across exporter restarts.
+    enabled: false
 
 grafanaDashboard:
   # -- Create a ConfigMap with the Grafana dashboards (single-GPU detail and
@@ -247,7 +323,7 @@ test:
     # -- Image repository for the `helm test` connection-check pod
     repository: docker.io/library/busybox
     # -- Image tag for the `helm test` pod
-    tag: "1.37"
+    tag: "1.38"
     # -- Image pull policy for the `helm test` pod
     pullPolicy: IfNotPresent
 

@@ -88,11 +88,15 @@ through driver events or the kernel log:
   recent event was received by the exporter (the driver events carry no
   timestamp of their own).
 
-For alerting, prefer the timestamp:
-`time() - nvidia_smi_xid_last_timestamp_seconds < 300` fires for any XID in
-the last five minutes, including a series' very first event. A rate-based
-expression like `increase(nvidia_smi_xid_errors_total[5m]) > 0` misses that
-first event, because Prometheus never observed the zero before it.
+For alerting, prefer the timestamp and filter to an explicit code allowlist:
+`time() - nvidia_smi_xid_last_timestamp_seconds{xid=~"48|62|64|74|79|95|119|120"} < 300`
+fires for the reset/reboot-class XIDs in the last five minutes, including a
+series' very first event. Alerting on every code is noise: many XIDs are
+application faults (13, 31, 43) or informational (63, 92) with no operator
+action. A rate-based expression like
+`increase(nvidia_smi_xid_errors_total[5m]) > 0` also misses a series' first
+event, because Prometheus never observed the zero before it. The Helm chart
+ships ready-made rules built this way.
 
 Nothing needs configuring; on setups where the driver does not support
 event registration the families simply stay empty.

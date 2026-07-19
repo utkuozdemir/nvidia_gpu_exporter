@@ -1,0 +1,10 @@
+# Local dev Alertmanager: the UI (localhost:9093) is the verification surface,
+# alerts go nowhere. backend distinguishes the exec and demo Prometheus so the
+# same alert from both flavors shows up as two entries instead of deduping.
+route:
+  receiver: "null"
+  group_by: [alertname, instance, backend]
+  group_wait: 5s
+  group_interval: 30s
+receivers:
+  - name: "null"

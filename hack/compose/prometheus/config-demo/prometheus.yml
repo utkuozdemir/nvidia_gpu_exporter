@@ -1,7 +1,19 @@
 global:
   # short interval so the dashboard moves quickly while iterating
   scrape_interval: 5s
-  evaluation_interval: 15s
+  evaluation_interval: 5s
+  external_labels:
+    # distinguishes this Prometheus's alerts from the exec flavor's in
+    # Alertmanager; without it identical alerts from both backends dedupe
+    backend: demo
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
 
 scrape_configs:
   - job_name: "nvidia_gpu_exporter"

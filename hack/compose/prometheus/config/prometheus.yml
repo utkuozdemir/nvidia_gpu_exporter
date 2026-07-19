@@ -1,7 +1,19 @@
 global:
   # short interval so the dashboard moves quickly while iterating
   scrape_interval: 5s
-  evaluation_interval: 15s
+  evaluation_interval: 5s
+  external_labels:
+    # distinguishes this Prometheus's alerts from the demo flavor's in
+    # Alertmanager; without it identical alerts from both backends dedupe
+    backend: exec
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
 
 scrape_configs:
   - job_name: "nvidia_gpu_exporter"
@@ -15,3 +27,8 @@ scrape_configs:
       - targets: ["exec-datacenter:9835"]
         labels:
           instance: datacenter
+      # only up when the stack runs with --profile broken; a down target
+      # produces no nvidia_smi_* series, so no alerts while absent
+      - targets: ["exec-broken:9835"]
+        labels:
+          instance: broken

@@ -185,12 +185,31 @@ What to do when upgrading:
 
 All optional resources are off by default. `serviceMonitor` and `podMonitor`
 require the Prometheus Operator CRDs (enable one of them, not both).
-`prometheusRule` adds alerts on the exporter's collection health metrics: if
-the exporter also runs on nodes without GPUs, restrict the DaemonSet to GPU
-nodes via `nodeSelector` or `affinity` before enabling it, otherwise the
-alerts fire for nodes that cannot collect GPU metrics by design. The alert
-expressions select all `nvidia_smi_*` series, so when installing multiple
-releases of this chart, enable the rules in only one of them.
+`prometheusRule` adds alerts on the exporter's collection health and on GPU
+health: driver-requested recovery actions, critical Xid errors, uncorrectable
+ECC errors, memory row-remap and page-retirement state, hardware thermal
+slowdown and power braking. Every alert's description says what to do about
+it. The defaults are deliberately conservative for consumer and homelab
+hardware; rules that depend on fleet knowledge (absolute temperature, GPU
+count) or that are normal on thermally-limited systems (software thermal
+slowdown) ship disabled, and each rule can be toggled individually. Some
+rules need the NVML backend (Xid) or specific query fields (ECC, remapped
+rows); where the metric is absent the rule simply never fires. When
+upgrading a release that already had `prometheusRule.enabled: true`, the new
+GPU health rules arrive enabled: review the list below and disable any you
+do not want. One real
+hardware fault can raise several of these alerts at once (for example an
+uncorrectable ECC error also produces an Xid and a recovery action); that
+overlap is deliberate, because no single signal exists on every backend,
+driver and GPU generation combination. Group them in your Alertmanager route
+by `instance` if you prefer one notification per node.
+
+If the exporter also runs on nodes without GPUs, restrict the DaemonSet to
+GPU nodes via `nodeSelector` or `affinity` before enabling `prometheusRule`,
+otherwise the collection alerts fire for nodes that cannot collect GPU
+metrics by design. The alert expressions select all `nvidia_smi_*` series, so
+when installing multiple releases of this chart, enable the rules in only one
+of them.
 `grafanaDashboard` ships the [Grafana dashboard](https://grafana.com/grafana/dashboards/14574)
 and its [multi-GPU overview companion](https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/docs/grafana/dashboard-overview.json)
 as a ConfigMap labeled for the Grafana sidecar.

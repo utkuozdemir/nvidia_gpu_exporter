@@ -38,6 +38,8 @@ Then open:
   *Data source* dropdown between "Prometheus - NVML" and "Prometheus - Exec"
   to compare the two surfaces of the selected machine.
 - Prometheus (exec): <http://localhost:9090>, (NVML): <http://localhost:9091>
+- Alertmanager: <http://localhost:9093> — the chart's alert rules evaluated
+  against both flavors (see "Verify the alert rules")
 - Exporter metrics: <http://localhost:9835/metrics> (exec-consumer),
   <http://localhost:9836/metrics> (exec-datacenter), <http://localhost:9837/metrics>
   (nvml-consumer), <http://localhost:9838/metrics> (nvml-datacenter)
@@ -55,7 +57,61 @@ service names) make Grafana or Prometheus trip over stale state; run
 `docker compose down -v` once to reset.
 
 `render-dashboard.sh` (run by `up.sh`) needs `python3` on the host, in
-addition to Docker.
+addition to Docker. `render-rules.sh` (also run by `up.sh`) needs only
+Docker: it runs helm and yq from pinned images.
+
+## Verify the alert rules
+
+`render-rules.sh` renders the Helm chart's PrometheusRule into
+`prometheus/rules/` with **every** rule force-enabled and all `for:`
+durations shortened to 30s, so the stack always evaluates exactly what the
+chart ships and alerts appear within a minute. Both Prometheuses evaluate
+the same rules and send to the one Alertmanager; their `backend` external
+label (`exec`/`demo`) keeps the two flavors' alerts apart there. After
+changing the chart's rules, re-run `./hack/compose/render-rules.sh` and
+Prometheus picks the change up on restart (`docker compose restart
+prometheus prometheus-demo`).
+
+What fires out of the box, all on the sick consumer card unless noted:
+
+- `NvidiaGpuRecoveryActionNeeded`, `NvidiaGpuUncorrectableEccErrors`,
+  `NvidiaGpuRowRemapFailure`, `NvidiaGpuRowRemapPending`,
+  `NvidiaGpuRetiredPagesPending`, `NvidiaGpuThermalSlowdown`,
+  `NvidiaGpuTemperatureHigh` — from the sick card's pinned overrides, on
+  both backends.
+- `NvidiaGpuXidCritical` (Xid 79) and `NvidiaGpuXidWarning` (Xid 94) — from
+  the datacenter machine's seeded XID history, demo backend only (the exec
+  surface honestly has no XID metrics). Xid 13 is also seeded and
+  deliberately fires nothing (application fault).
+- Healthy cards fire nothing: the alertable slowdown flags are pinned 0 on
+  them, and only cosmetic flags flip randomly.
+
+The exporter self-health alerts need a broken exporter, kept out of the
+default stack:
+
+- `NvidiaGpuExporterCollectionFailing`: start the failure box with
+  `docker compose --profile broken up -d exec-broken` — its fake nvidia-smi
+  exits non-zero from boot (instance `broken` on the exec Prometheus).
+- `NvidiaGpuExporterCollectionStale`: edit `machines/consumer.yaml` live and
+  add `exit: 15` at the top level; collection starts failing fast, the last
+  success timestamp ages, and the stale alert follows the failing one.
+  Remove the line to recover. A from-boot broken exporter never emits the
+  stale timestamp, which is why stale needs this healthy-then-fail
+  transition instead of the broken profile.
+- `NvidiaGpuExporterCollectionSlow`: add `delay: 2s` instead. Careful with
+  larger values: the delay applies per fake-nvidia-smi invocation, the
+  compute-apps query doubles it, and past the stack's 5s scrape timeout the
+  scrape dies before it can report a slow duration (the dev render lowers
+  the slow threshold to 2s for exactly this headroom reason).
+- `NvidiaGpuSoftwareThermalSlowdown` and `NvidiaGpuPowerBrake`: flip the
+  machine-level `clocks_event_reasons.sw_thermal_slowdown` or
+  `.hw_power_brake_slowdown` override in `machines/consumer.yaml` from `0`
+  to `1`; revert to recover.
+- `NvidiaGpuMissing`: shrink the `gpus:` list of a machine live (e.g. 8 to
+  7 entries); the alert compares against the recent 6h maximum. The
+  all-GPUs-gone form cannot be driven here (the fake refuses a zero-GPU
+  config, which breaks collection and trips the healthy-collection gate
+  instead); it is covered by a promtool unit test in `hack/alerts/`.
 
 ## What "same machine, two surfaces" means (and its limits)
 

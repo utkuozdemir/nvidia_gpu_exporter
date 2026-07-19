@@ -32,6 +32,12 @@ gpus:
       gpu_recovery_action: "Node Reboot"
       temperature.gpu: 93
       clocks_event_reasons.hw_thermal_slowdown: 1
+      # memory-repair states for the alert rules: remap failed (RMA
+      # criterion), a remap and a page retirement waiting for a reset.
+      # Yes/No enum fields, the exporter maps them to 1/0.
+      remapped_rows.failure: "Yes"
+      remapped_rows.pending: "Yes"
+      retired_pages.pending: "Yes"
       # ECC preview on the sick card only: the 4080 capture reports no ECC,
       # these force the banner tile red + populate the datacenter ECC detail
       # panel. Healthy cards keep "No ECC" so the overview dashboard can show
@@ -62,12 +68,15 @@ overrides:
   clocks.current.graphics: {min: 2500, max: 3140}
   # states the jitter does not cover. Integer 0:1 flips a flag ~50/50 per
   # scrape and per GPU; bare integers parse fine for pstate and compute mode.
+  # Only flags WITHOUT an alert rule flip randomly: the alertable slowdown
+  # flags (hw_thermal, sw_thermal, hw_power_brake) stay 0 on healthy cards so
+  # they cannot flicker pending alerts, and the sick card pins its own.
   clocks_event_reasons.sw_power_cap:                {min: 0, max: 1}
   clocks_event_reasons.sync_boost:                  {min: 0, max: 1}
-  clocks_event_reasons.hw_thermal_slowdown:         {min: 0, max: 1}
+  clocks_event_reasons.hw_thermal_slowdown:         0
   clocks_event_reasons.gpu_idle:                    {min: 0, max: 1}
-  clocks_event_reasons.sw_thermal_slowdown:         {min: 0, max: 1}
-  clocks_event_reasons.hw_power_brake_slowdown:     {min: 0, max: 1}
+  clocks_event_reasons.sw_thermal_slowdown:         0
+  clocks_event_reasons.hw_power_brake_slowdown:     0
   clocks_event_reasons.applications_clocks_setting: {min: 0, max: 1}
   compute_mode:                                     {min: 0, max: 3}
   pstate:                                           {min: 0, max: 5}  # busy states, coherent with the load

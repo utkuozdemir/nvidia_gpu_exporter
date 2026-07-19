@@ -290,6 +290,147 @@
             }
           },
           "additionalProperties": false
+        },
+        "collectionSlow": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "thresholdSeconds": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          },
+          "additionalProperties": false
+        },
+        "recoveryAction": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "xidCritical": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "codes": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "minItems": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "xidWarning": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "codes": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "minItems": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "uncorrectableEcc": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "rowRemapFailure": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "rowRemapPending": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "retiredPagesPending": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "thermalSlowdown": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "swThermalSlowdown": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "powerBrake": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "temperatureHigh": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "thresholdCelsius": {
+              "type": "number",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "gpuMissing": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

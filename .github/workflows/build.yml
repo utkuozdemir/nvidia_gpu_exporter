@@ -115,6 +115,8 @@ jobs:
           cmp docs/grafana/dashboard-overview.json charts/nvidia-gpu-exporter/dashboards/nvidia-gpu-overview.json
       - name: Lint chart
         run: ct lint --config .ct.yaml --all
+      - name: Validate alert rules
+        run: hack/alerts/verify.sh
       - name: Check that the chart README is current
         run: |
           docker run --rm -v "$(pwd):/helm-docs" -u "$(id -u)" jnorwood/helm-docs:v1.14.2

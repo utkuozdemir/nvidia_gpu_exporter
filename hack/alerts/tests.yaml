@@ -1,0 +1,286 @@
+# promtool unit tests for the chart's alert rules, run by verify.sh against
+# rendered/rules-noann.yml (the rendered rules with annotations stripped, so
+# these tests assert behavior, not wording; verify.sh asserts the wording).
+#
+# The scenarios encode the review findings that were fixable only by testing:
+# a pre-existing ECC count at first scrape must alert (level check, not
+# increase()), the legacy clocks_throttle_reasons_* family must alert on old
+# drivers, a never-successful exporter must not raise the stale alert, and
+# GpuMissing must catch both the partial and the all-GPUs-gone drop.
+rule_files:
+  - rendered/rules-noann.yml
+
+evaluation_interval: 1m
+
+tests:
+  # exporter self-health: failing, stale (only after a first success), slow
+  - interval: 1m
+    input_series:
+      - series: 'nvidia_smi_last_collect_success{job="gpu", instance="a"}'
+        values: "0x20"
+      # never-successful exporter: no timestamp series exists at all
+      - series: 'nvidia_smi_last_collect_duration_seconds{job="gpu", instance="a"}'
+        values: "0.1x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: NvidiaGpuExporterCollectionFailing
+        exp_alerts:
+          - exp_labels: {job: gpu, instance: a, severity: warning}
+      # no first success ever -> no timestamp series -> stale must stay quiet
+      - eval_time: 15m
+        alertname: NvidiaGpuExporterCollectionStale
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'nvidia_smi_last_collect_success{job="gpu", instance="a"}'
+        values: "1x30"
+      # one success at t=0, then the timestamp freezes: stale after 300s
+      - series: 'nvidia_smi_last_collect_success_timestamp_seconds{job="gpu", instance="a"}'
+        values: "60x30"
+      - series: 'nvidia_smi_last_collect_duration_seconds{job="gpu", instance="a"}'
+        values: "6x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: NvidiaGpuExporterCollectionStale
+        exp_alerts:
+          - exp_labels: {job: gpu, instance: a, severity: warning}
+      - eval_time: 20m
+        alertname: NvidiaGpuExporterCollectionSlow
+        exp_alerts:
+          - exp_labels: {job: gpu, instance: a, severity: warning}
+
+  # driver-requested recovery action
+  - interval: 1m
+    input_series:
+      - series: 'nvidia_smi_gpu_recovery_action{job="gpu", instance="a", uuid="g0"}'
+        values: "2x10"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: NvidiaGpuRecoveryActionNeeded
+        exp_alerts:
+          - exp_labels: {job: gpu, instance: a, uuid: g0, severity: critical}
+
+  # Xid tiers: 79 critical, 94 warning, 13 (application fault) neither
+  - interval: 1m
+    input_series:
+      - series: 'nvidia_smi_xid_last_timestamp_seconds{job="gpu", instance="a", uuid="g0", xid="79"}'
+        values: "540x15"
+      - series: 'nvidia_smi_xid_last_timestamp_seconds{job="gpu", instance="a", uuid="g0", xid="94"}'
+        values: "540x15"
+      - series: 'nvidia_smi_xid_last_timestamp_seconds{job="gpu", instance="a", uuid="g0", xid="13"}'
+        values: "540x15"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: NvidiaGpuXidCritical
+        exp_alerts:
+          - exp_labels: {job: gpu, instance: a, uuid: g0, xid: "79", severity: critical}
+      - eval_time: 10m
+        alertname: NvidiaGpuXidWarning
+        exp_alerts:
+          - exp_labels: {job: gpu, instance: a, uuid: g0, xid: "94", severity: warning}
+
+  # ECC level check: a count that is already non-zero at the first scrape
+  # must alert (increase() would read 0 here - review finding)
+  - interval: 1m
+    input_series:
+      - series: 'nvidia_smi_ecc_errors_uncorrected_volatile_total{job="gpu", instance="a", uuid="g0"}'
+        values: "5x10"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: NvidiaGpuUncorrectableEccErrors
+        exp_alerts:
+          - exp_labels: {job: gpu, instance: a, uuid: g0, severity: critical}
+
+  # ECC 0 -> 1 transition alerts, and a clean 0 does not
+  - interval: 1m
+    input_series:
+      - series: 'nvidia_smi_ecc_errors_uncorrected_volatile_total{job="gpu", instance="a", uuid="g0"}'
+        values: "0 0 0 0 0 1x10"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: NvidiaGpuUncorrectableEccErrors
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: NvidiaGpuUncorrectableEccErrors
+        exp_alerts:
+          - exp_labels: {job: gpu, instance: a, uuid: g0, severity: critical}
+
+  # memory repair states
+  - interval: 1m
+    input_series:
+      - series: 'nvidia_smi_remapped_rows_failure{job="gpu", instance="a", uuid="g0"}'
+        values: "1x10"
+      - series: 'nvidia_smi_remapped_rows_pending{job="gpu", instance="a", uuid="g1"}'
+        values: "1x10"
+      - series: 'nvidia_smi_retired_pages_pending{job="gpu", instance="a", uuid="g2"}'
+        values: "1x10"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: NvidiaGpuRowRemapFailure
+        exp_alerts:
+          - exp_labels: {job: gpu, instance: a, uuid: g0, severity: critical}
+      - eval_time: 5m
+        alertname: NvidiaGpuRowRemapPending
+        exp_alerts:
+          - exp_labels: {job: gpu, instance: a, uuid: g1, severity: warning}
+      - eval_time: 5m
+        alertname: NvidiaGpuRetiredPagesPending
+        exp_alerts:
+          - exp_labels: {job: gpu, instance: a, uuid: g2, severity: warning}
+
+  # throttle flags, modern metric family
+  - interval: 1m
+    input_series:
+      - series: 'nvidia_smi_clocks_event_reasons_hw_thermal_slowdown{job="gpu", instance="a", uuid="g0"}'
+        values: "1x15"
+      - series: 'nvidia_smi_clocks_event_reasons_hw_power_brake_slowdown{job="gpu", instance="a", uuid="g1"}'
+        values: "1x15"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: NvidiaGpuThermalSlowdown
+        exp_alerts:
+          - exp_labels: {job: gpu, instance: a, uuid: g0, severity: warning}
+      - eval_time: 10m
+        alertname: NvidiaGpuPowerBrake
+        exp_alerts:
+          - exp_labels: {job: gpu, instance: a, uuid: g1, severity: warning}
+
+  # throttle flags, legacy clocks_throttle_reasons_* family (older drivers on
+  # the exec backend - review finding: without the OR these alerts silently
+  # vanish on exactly the older consumer cards)
+  - interval: 1m
+    input_series:
+      - series: 'nvidia_smi_clocks_throttle_reasons_hw_thermal_slowdown{job="gpu", instance="a", uuid="g0"}'
+        values: "1x15"
+      - series: 'nvidia_smi_clocks_throttle_reasons_hw_power_brake_slowdown{job="gpu", instance="a", uuid="g1"}'
+        values: "1x15"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: NvidiaGpuThermalSlowdown
+        exp_alerts:
+          - exp_labels: {job: gpu, instance: a, uuid: g0, severity: warning}
+      - eval_time: 10m
+        alertname: NvidiaGpuPowerBrake
+        exp_alerts:
+          - exp_labels: {job: gpu, instance: a, uuid: g1, severity: warning}
+
+  # software thermal slowdown (opt-in rule), modern and legacy families
+  - interval: 1m
+    input_series:
+      - series: 'nvidia_smi_clocks_event_reasons_sw_thermal_slowdown{job="gpu", instance="a", uuid="g0"}'
+        values: "1x40"
+      - series: 'nvidia_smi_clocks_throttle_reasons_sw_thermal_slowdown{job="gpu", instance="a", uuid="g1"}'
+        values: "1x40"
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: NvidiaGpuSoftwareThermalSlowdown
+        exp_alerts:
+          - exp_labels: {job: gpu, instance: a, uuid: g0, severity: warning}
+          - exp_labels: {job: gpu, instance: a, uuid: g1, severity: warning}
+
+  # temperature threshold (rendered with the default 85C)
+  - interval: 1m
+    input_series:
+      - series: 'nvidia_smi_temperature_gpu{job="gpu", instance="a", uuid="g0"}'
+        values: "90x20"
+      - series: 'nvidia_smi_temperature_gpu{job="gpu", instance="a", uuid="g1"}'
+        values: "70x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: NvidiaGpuTemperatureHigh
+        exp_alerts:
+          - exp_labels: {job: gpu, instance: a, uuid: g0, severity: warning}
+
+  # GpuMissing, partial drop: one of two GPUs stops reporting at t=15m while
+  # collection stays healthy
+  - interval: 1m
+    input_series:
+      - series: 'nvidia_smi_gpu_info{job="gpu", instance="a", uuid="g0"}'
+        values: "1x45"
+      - series: 'nvidia_smi_gpu_info{job="gpu", instance="a", uuid="g1"}'
+        values: "1x15"
+      - series: 'nvidia_smi_last_collect_success{job="gpu", instance="a"}'
+        values: "1x45"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: NvidiaGpuMissing
+        exp_alerts:
+          - exp_labels: {job: gpu, instance: a, severity: warning}
+
+  # GpuMissing, all GPUs gone: every gpu_info series vanishes at t=15m but
+  # the exporter itself stays healthy (empty-vector case - review finding:
+  # without the zero-fill the single-GPU machine never alerts)
+  - interval: 1m
+    input_series:
+      - series: 'nvidia_smi_gpu_info{job="gpu", instance="a", uuid="g0"}'
+        values: "1x15"
+      - series: 'nvidia_smi_last_collect_success{job="gpu", instance="a"}'
+        values: "1x45"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: NvidiaGpuMissing
+        exp_alerts:
+          - exp_labels: {job: gpu, instance: a, severity: warning}
+
+  # healthy machine raises nothing: every alertable metric is PRESENT with
+  # its healthy value, so this proves the rules stay quiet on real healthy
+  # data, not merely on absent series (review finding)
+  - interval: 1m
+    input_series:
+      - series: 'nvidia_smi_last_collect_success{job="gpu", instance="a"}'
+        values: "1x30"
+      - series: 'nvidia_smi_last_collect_duration_seconds{job="gpu", instance="a"}'
+        values: "0.1x30"
+      - series: 'nvidia_smi_gpu_recovery_action{job="gpu", instance="a", uuid="g0"}'
+        values: "0x30"
+      - series: 'nvidia_smi_ecc_errors_uncorrected_volatile_total{job="gpu", instance="a", uuid="g0"}'
+        values: "0x30"
+      - series: 'nvidia_smi_remapped_rows_failure{job="gpu", instance="a", uuid="g0"}'
+        values: "0x30"
+      - series: 'nvidia_smi_remapped_rows_pending{job="gpu", instance="a", uuid="g0"}'
+        values: "0x30"
+      - series: 'nvidia_smi_retired_pages_pending{job="gpu", instance="a", uuid="g0"}'
+        values: "0x30"
+      - series: 'nvidia_smi_clocks_event_reasons_hw_thermal_slowdown{job="gpu", instance="a", uuid="g0"}'
+        values: "0x30"
+      - series: 'nvidia_smi_clocks_event_reasons_hw_power_brake_slowdown{job="gpu", instance="a", uuid="g0"}'
+        values: "0x30"
+      - series: 'nvidia_smi_temperature_gpu{job="gpu", instance="a", uuid="g0"}'
+        values: "70x30"
+      - series: 'nvidia_smi_gpu_info{job="gpu", instance="a", uuid="g0"}'
+        values: "1x30"
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: NvidiaGpuExporterCollectionFailing
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: NvidiaGpuExporterCollectionSlow
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: NvidiaGpuRecoveryActionNeeded
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: NvidiaGpuUncorrectableEccErrors
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: NvidiaGpuRowRemapFailure
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: NvidiaGpuRowRemapPending
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: NvidiaGpuRetiredPagesPending
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: NvidiaGpuThermalSlowdown
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: NvidiaGpuPowerBrake
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: NvidiaGpuTemperatureHigh
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: NvidiaGpuMissing
+        exp_alerts: []
