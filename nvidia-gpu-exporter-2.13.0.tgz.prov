@@ -1,0 +1,54 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+annotations:
+  artifacthub.io/license: MIT
+  artifacthub.io/links: |
+    - name: Grafana dashboard
+      url: https://grafana.com/grafana/dashboards/14574
+    - name: Grafana dashboard (multi-GPU overview)
+      url: https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/docs/grafana/dashboard-overview.json
+  artifacthub.io/signKey: |
+    fingerprint: 93122B2C53431C2F60964EB7EAC49314A32B9205
+    url: https://utkuozdemir.github.io/nvidia_gpu_exporter/pubkey.asc
+apiVersion: v2
+appVersion: 1.13.0
+description: Nvidia GPU exporter for prometheus, using nvidia-smi binary to gather
+  metrics.
+home: https://github.com/utkuozdemir/nvidia_gpu_exporter
+icon: https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/docs/img/nvidia.png
+keywords:
+- - nvidia
+- - gpu
+- - exporter
+- - nvidia-smi
+- - prometheus
+maintainers:
+- - email: utkuozdemir@gmail.com
+  name: Utku Özdemir
+  url: https://utkuozdemir.org
+name: nvidia-gpu-exporter
+sources:
+- - https://github.com/utkuozdemir/nvidia_gpu_exporter
+type: application
+version: 2.13.0
+
+...
+files:
+  nvidia-gpu-exporter-2.13.0.tgz: sha256:17c7712b7419e58c8b6953e013beaaefdc5a498b84c7f3ec7be80de25546e351
+-----BEGIN PGP SIGNATURE-----
+
+wsFcBAEBCgAQBQJqXNrkCRDqxJMUoyuSBQAAeysQAI2b+z0UI28BmvJVCfPyzP63
+OpFcPaI4gO7ureqiO4QG1Tq7V7EIcjzOUGLF3t6S1JAdZuXw5ilpyuvLhsIBDqsF
+KIQljK+cHcAnipjOC57QxkTlfsRm21OauVfyryMTNmT/EPG0GWGHkPhkgElteE4O
+ErQS1vlvuWXH5d+VLfOYRfxOhxnHCA8k55FdaPAB6n8W7q4q7j0gcfo0F06T9z7l
+QVvF0HPJ1nRMG6vjDllYnqYSoTUjnCe1/lAjW9mQKeaE1km0kXN9RQPhPuE726PC
+ljKypdLFtMMX5aLZvA6brFK3a+xzFab1vmMSaiPcmiL7V+MNxPNiG9T0G86NRbLN
+qdIyAzg6abqUxwmBy4iYqLOndb1OfMy3soNqHCDwRBaGIqx3SqVAmnZ2nwiB33wW
+7f47mn/18zD4Ndma7ZcTf6P+vgtQu6+aYqT0mwIlP37JceyO0vIKdFdTaN9EhVzE
+j5GvQXyFcHC/ODtaEIq5IgJoz0Yl41A5JP6CQt+HmOHBiXnBq3cGEQNpFHdkRBGl
+4+1Y/ZyLQ8KZpIg1BFwjxgTJq2z3XrFXIHbaxBeK+KnxZRtikv40HbMGlJGEVrCg
+E51Mdgo1SyetEBRcGBTqKnrqzeyGEVDkTW+dpy9u9UG3AVczdkCEs0YvsVwjD3jR
+Y7logTl35aDMHu70fTIC
+=vod0
+-----END PGP SIGNATURE-----

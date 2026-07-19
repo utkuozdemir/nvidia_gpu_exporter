@@ -12,8 +12,43 @@ entries:
         fingerprint: 93122B2C53431C2F60964EB7EAC49314A32B9205
         url: https://utkuozdemir.github.io/nvidia_gpu_exporter/pubkey.asc
     apiVersion: v2
+    appVersion: 1.13.0
+    created: "2026-07-19T14:10:49.831275694Z"
+    description: Nvidia GPU exporter for prometheus, using nvidia-smi binary to gather
+      metrics.
+    digest: 17c7712b7419e58c8b6953e013beaaefdc5a498b84c7f3ec7be80de25546e351
+    home: https://github.com/utkuozdemir/nvidia_gpu_exporter
+    icon: https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/docs/img/nvidia.png
+    keywords:
+    - nvidia
+    - gpu
+    - exporter
+    - nvidia-smi
+    - prometheus
+    maintainers:
+    - email: utkuozdemir@gmail.com
+      name: Utku Özdemir
+      url: https://utkuozdemir.org
+    name: nvidia-gpu-exporter
+    sources:
+    - https://github.com/utkuozdemir/nvidia_gpu_exporter
+    type: application
+    urls:
+    - https://utkuozdemir.github.io/nvidia_gpu_exporter/nvidia-gpu-exporter-2.13.0.tgz
+    version: 2.13.0
+  - annotations:
+      artifacthub.io/license: MIT
+      artifacthub.io/links: |
+        - name: Grafana dashboard
+          url: https://grafana.com/grafana/dashboards/14574
+        - name: Grafana dashboard (multi-GPU overview)
+          url: https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/docs/grafana/dashboard-overview.json
+      artifacthub.io/signKey: |
+        fingerprint: 93122B2C53431C2F60964EB7EAC49314A32B9205
+        url: https://utkuozdemir.github.io/nvidia_gpu_exporter/pubkey.asc
+    apiVersion: v2
     appVersion: 1.12.0
-    created: "2026-07-16T21:21:18.744861475Z"
+    created: "2026-07-19T14:10:49.829692843Z"
     description: Nvidia GPU exporter for prometheus, using nvidia-smi binary to gather
       metrics.
     digest: 9dcfb89306c64a4ddfa5d5d17fed0ccbeca2d202c051c07c9a4669d2efed7cde
@@ -48,7 +83,7 @@ entries:
         url: https://utkuozdemir.github.io/nvidia_gpu_exporter/pubkey.asc
     apiVersion: v2
     appVersion: 1.11.0
-    created: "2026-07-16T21:21:18.74381937Z"
+    created: "2026-07-19T14:10:49.827606339Z"
     description: Nvidia GPU exporter for prometheus, using nvidia-smi binary to gather
       metrics.
     digest: ee86fdce1c7e8cb52b2cc3990d558ba37c73f8e64bdbf81693bf39cbb0ed60c8
@@ -81,7 +116,7 @@ entries:
         url: https://utkuozdemir.github.io/nvidia_gpu_exporter/pubkey.asc
     apiVersion: v2
     appVersion: 1.10.0
-    created: "2026-07-16T21:21:18.742951094Z"
+    created: "2026-07-19T14:10:49.826255886Z"
     description: Nvidia GPU exporter for prometheus, using nvidia-smi binary to gather
       metrics.
     digest: 50fbc913c7bc86f04b1a18ba74d5751f0757457d61f4d944a7a1687c1e212b0d
@@ -111,7 +146,7 @@ entries:
           url: https://grafana.com/grafana/dashboards/14574
     apiVersion: v2
     appVersion: 1.9.1
-    created: "2026-07-16T21:21:18.747147166Z"
+    created: "2026-07-19T14:10:49.83480906Z"
     description: Nvidia GPU exporter for prometheus, using nvidia-smi binary to gather
       metrics.
     digest: b7aca1518a7cd2717a70073672f36ee955fc6ccc8a897c05e06f04cba3e47151
@@ -141,7 +176,7 @@ entries:
           url: https://grafana.com/grafana/dashboards/14574
     apiVersion: v2
     appVersion: 1.9.0
-    created: "2026-07-16T21:21:18.746533841Z"
+    created: "2026-07-19T14:10:49.832899992Z"
     description: Nvidia GPU exporter for prometheus, using nvidia-smi binary to gather
       metrics.
     digest: f594343e535c2f6752deaeffa70289250a979634e1b20087cf9a4494d608f28d
@@ -171,7 +206,7 @@ entries:
           url: https://grafana.com/grafana/dashboards/14574
     apiVersion: v2
     appVersion: 1.8.0
-    created: "2026-07-16T21:21:18.745430104Z"
+    created: "2026-07-19T14:10:49.832073326Z"
     description: Nvidia GPU exporter for prometheus, using nvidia-smi binary to gather
       metrics.
     digest: 8ae197d55e83e185346bcc04c37ea1701b1cf52b3880cddc849678e46438296b
@@ -194,4 +229,4 @@ entries:
     urls:
     - https://utkuozdemir.github.io/nvidia_gpu_exporter/nvidia-gpu-exporter-2.8.0.tgz
     version: 2.8.0
-generated: "2026-07-16T21:21:18.741847767Z"
+generated: "2026-07-19T14:10:49.825344491Z"
