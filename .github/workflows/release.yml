@@ -18,7 +18,7 @@ jobs:
       id-token: write # cosign keyless image signing (OIDC)
     steps:
       - name: Checkout
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@v7.0.1
         with:
           # to be able to generate the full changelog:
           # https://github.com/goreleaser/goreleaser-action/issues/56#issuecomment-568718162
@@ -109,7 +109,7 @@ jobs:
       id-token: write # cosign keyless chart signing (OIDC)
     steps:
       - name: Checkout
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@v7.0.1
       - name: Compute chart and app versions from the tag
         run: |
           app_version="${GITHUB_REF_NAME#v}"
