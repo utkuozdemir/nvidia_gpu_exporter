@@ -211,7 +211,7 @@ metrics by design. The alert expressions select all `nvidia_smi_*` series, so
 when installing multiple releases of this chart, enable the rules in only one
 of them.
 `grafanaDashboard` ships the [Grafana dashboard](https://grafana.com/grafana/dashboards/14574)
-and its [multi-GPU overview companion](https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/docs/grafana/dashboard-overview.json)
+and its [multi-GPU overview companion](https://grafana.com/grafana/dashboards/25547)
 as a ConfigMap labeled for the Grafana sidecar.
 
 With [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack),

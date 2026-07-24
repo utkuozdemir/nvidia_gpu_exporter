@@ -160,7 +160,8 @@ the full reference is the demo mode section in `docs/CONFIGURE.md`.
 
 The dashboards are authored in the Grafana UI and exported to
 `docs/grafana/dashboard.json` (single-GPU detail, grafana.com 14574) and
-`docs/grafana/dashboard-overview.json` (multi-GPU comparison). Those files
+`docs/grafana/dashboard-overview.json` (multi-GPU comparison, grafana.com
+25547). Those files
 select their data source through a template variable; `render-dashboard.sh`
 copies them into the provisioning directory, flipping `editable` on and
 preselecting the NVML data source (the published artifacts themselves stay

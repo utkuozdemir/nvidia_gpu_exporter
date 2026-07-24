@@ -1,0 +1,62 @@
+# Grafana dashboards
+
+Two dashboards live here, and these files are the source of truth for both:
+
+- `dashboard.json`: the per-GPU detail dashboard, published as
+  [grafana.com 14574](https://grafana.com/grafana/dashboards/14574).
+- `dashboard-overview.json`: the multi-GPU overview, published as
+  [grafana.com 25547](https://grafana.com/grafana/dashboards/25547), which
+  drills down into the detail dashboard.
+
+Each carries the `nvidia_gpu_exporter` tag and a "Related dashboards" link, so
+they find each other in Grafana once both are installed.
+
+The Helm chart ships copies under `charts/nvidia-gpu-exporter/dashboards/`, and CI
+compares them byte for byte, so a change here must be mirrored there in the same
+commit. Publishing a new revision to grafana.com is a manual step, separate from
+the release pipeline.
+
+`task lint:dashboard` runs
+[grafana/dashboard-linter](https://github.com/grafana/dashboard-linter) in strict
+mode. Rule exclusions live in `.lint`, each with a written reason; the bar for
+adding one is that the rule conflicts with the dashboards' long-published design.
+
+The dashboards are normally authored in the Grafana UI and exported back into
+these files, but editing the JSON directly is fine too.
+
+## Query and panel conventions
+
+Each of these came out of a panel that looked fine and was wrong, so treat them
+as correctness rules rather than style. Most fail silently when violated: the
+panel still renders, it just shows the wrong thing or nothing at all. Verify any
+query change against the local dev stack (`hack/compose`), including its empty
+and failed-collection cases, before committing.
+
+- **Enrichment joins for legends** take the form
+  `(expr) * on(uuid) group_left(index, name) nvidia_smi_gpu_info{...}`.
+  The parentheses are load-bearing, because `*` binds tighter than `+` and `or`.
+- **Table targets need an absence sentinel.** Every table target ORs an arm of
+  the form `... nvidia_smi_gpu_info * 0 - 1`, and `-1` maps to an n/a-style cell.
+  Without it, a totally absent series makes the join drop whole columns. The
+  sentinel arm must be aggregated down to the same labels as the joined left
+  side, otherwise it doubles the series.
+- **MIG joins must tolerate heterogeneous compute instances.** A GPU instance
+  hosting several compute instances hard-errors any join carrying the profile
+  label. Strip the compute-instance prefix with `label_replace` before
+  aggregating.
+- **Panels reading NVML-only families need an `unless`-guarded uuid-only arm**,
+  or they go blank instead of degrading when a collection fails.
+- **State timelines** use fixed/`text` color mode with no thresholds key; the
+  value mappings carry the band colors.
+- **Multi-GPU timeseries** use `palette-classic`, because dynamically-named
+  series cannot take a custom palette.
+
+## Compatibility
+
+The dashboards have a large installed base, which constrains two things:
+
+- **Metric names and labels are a frozen contract.** See `AGENTS.md` for the
+  full rules; in short, a renamed series silently breaks strangers' dashboards.
+- **The instance-selector template variable is not named `instance`,** and cannot
+  be renamed. Every bookmarked URL carries the current name. The dashboard-linter
+  rule that wants `instance` is excluded in `.lint` rather than obeyed.

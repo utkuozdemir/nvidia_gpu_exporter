@@ -329,11 +329,14 @@ Things to keep in mind:
 ## Experimental: native NVML backend
 
 `--collect.backend=nvml` reads GPU metrics directly from the driver library
-(`libnvidia-ml.so.1`) instead of running `nvidia-smi`. Its metric surface is
-a superset of the default backend's: every metric derived from the
-`nvidia-smi` query fields is identical in name, labels and value (verified
-field-by-field against live hardware), and on top of that shared core the
-nvml backend serves metric families only the driver library can provide.
+(`libnvidia-ml.so.1`) instead of running `nvidia-smi`. For every query field
+both backends serve, the metric is identical in name, labels and value
+(verified field-by-field against live hardware), and on top of that shared
+core the nvml backend serves metric families only the driver library can
+provide. Its query-field vocabulary is a built-in catalog rather than
+runtime discovery, though, so it is not automatically a superset: a handful
+of fields have no verified mapping yet and are deliberately not served, and
+a field a newer driver adds shows up under the default backend first.
 
 What each backend can do (`demo` serves synthetic data, see
 [Demo mode](#demo-mode)):
@@ -370,7 +373,7 @@ What it buys:
 
 - It needs no `nvidia-smi` binary. In containers, the NVIDIA container runtime
   injecting the driver library is enough. The `-nvml` release artifacts and image tags (for example
-  `utkuozdemir/nvidia_gpu_exporter:1.5.0-nvml`) carry this backend and
+  `utkuozdemir/nvidia_gpu_exporter:latest-nvml`) carry this backend and
   default to it, so they need no flag at all; `--collect.backend=exec`
   switches them back. Note for semver-based image automation (e.g. a Flux
   `ImagePolicy`): the `-nvml` suffix parses as a semver pre-release, so

@@ -51,11 +51,11 @@ probably the better fit; this exporter aims at the cases above.
 ## Highlights
 
 - Will work on any system that has `nvidia-smi(.exe)?` binary - Windows, Linux, MacOS... No C bindings required
-- Doesn't even need to run the monitored machine: can be configured to execute `nvidia-smi` command remotely
+- Doesn't even need to run on the monitored machine: can be configured to execute `nvidia-smi` command remotely
 - Auto-discovery of the metric fields `nvidia-smi` can expose (future-compatible)
 - Optional per-process GPU metrics: see which process uses how much GPU memory
 - Optional background collection: run `nvidia-smi` on a timer instead of on every scrape
-- Comes with its own [Grafana dashboard](https://grafana.com/grafana/dashboards/14574)
+- Comes with its own Grafana dashboards: a [per-GPU detail](https://grafana.com/grafana/dashboards/14574) one and a [multi-GPU overview](https://grafana.com/grafana/dashboards/25547)
 
 ## Try it without a GPU
 
@@ -72,17 +72,20 @@ and an XID error history. The simulated setup is configurable; see
 
 ## Visualization
 
-You can use the official [Grafana dashboard](https://grafana.com/grafana/dashboards/14574)
-to see your GPU metrics in a nicely visualized way.
+There are two official Grafana dashboards, and they link to each other in Grafana:
 
-Here's how it looks:
+- [Nvidia GPU Metrics](https://grafana.com/grafana/dashboards/14574) (ID `14574`),
+  the per-GPU detail view.
+- [Nvidia GPU Overview](https://grafana.com/grafana/dashboards/25547) (ID `25547`),
+  which compares all GPUs of a node side by side and drills down into the
+  detail dashboard.
+
+Import either by ID in Grafana (*Dashboards* - *New* - *Import*), or enable
+`grafanaDashboard` in the Helm chart to get both provisioned automatically. The
+JSON is also in this repository under [docs/grafana](docs/grafana).
+
+Here's how they look:
 ![Grafana dashboard](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/docs/grafana/dashboard.png)
-
-For machines with more than one GPU there is a companion
-[overview dashboard](https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/docs/grafana/dashboard-overview.json)
-that compares all GPUs of a node side by side and drills down into the
-single-GPU dashboard above. Import it from the JSON file, or enable
-`grafanaDashboard` in the Helm chart to get both dashboards provisioned.
 
 ![Grafana overview dashboard](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/docs/grafana/dashboard-overview.png)
 
