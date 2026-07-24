@@ -32,13 +32,13 @@ Follow the steps below:
 If you are on a Debian-based system (.deb), you can install the exporter with the following command:
 
 ```bash
-sudo dpkg -i nvidia-gpu-exporter_1.3.1_linux_amd64.deb
+sudo dpkg -i nvidia-gpu-exporter_<version>_linux_amd64.deb
 ```
 
 If you are on a Red Hat-based system (.rpm), you can install the exporter with the following command:
 
 ```bash
-sudo rpm -i nvidia-gpu-exporter_1.3.1_linux_amd64.rpm
+sudo rpm -i nvidia-gpu-exporter_<version>_linux_amd64.rpm
 ```
 
 **Note:** .rpm and .deb packages only support systems using systemd as init system.
@@ -53,7 +53,8 @@ sudo rpm -i nvidia-gpu-exporter_1.3.1_linux_amd64.rpm
 Sample steps for Linux 64-bit:
 
 ```bash
-VERSION=1.3.1
+# pick a release from https://github.com/utkuozdemir/nvidia_gpu_exporter/releases
+VERSION=X.Y.Z
 wget https://github.com/utkuozdemir/nvidia_gpu_exporter/releases/download/v${VERSION}/nvidia_gpu_exporter_${VERSION}_linux_x86_64.tar.gz
 tar -xvzf nvidia_gpu_exporter_${VERSION}_linux_x86_64.tar.gz
 mv nvidia_gpu_exporter /usr/bin
@@ -240,8 +241,12 @@ docker run -d \
   --gpus all \
   -e NVIDIA_DRIVER_CAPABILITIES=utility \
   -p 9835:9835 \
-  utkuozdemir/nvidia_gpu_exporter:1.7.0
+  utkuozdemir/nvidia_gpu_exporter:latest
 ```
+
+The examples on this page use `latest` so they can be pasted as-is. For
+anything you actually run, pin a release tag instead, so that picking up a new
+version stays a deliberate change.
 
 `--gpus all` turns on Docker's NVIDIA integration for the container and
 exposes all GPUs to it. `NVIDIA_DRIVER_CAPABILITIES=utility` declares that
@@ -251,7 +256,7 @@ documentation of intent and compatibility with older setups rather than a
 restriction.
 
 There is also an experimental `-nvml` image variant (for example
-`utkuozdemir/nvidia_gpu_exporter:1.7.0-nvml`) that reads the driver library
+`utkuozdemir/nvidia_gpu_exporter:latest-nvml`) that reads the driver library
 directly instead of running `nvidia-smi`. See [CONFIGURE.md](CONFIGURE.md).
 
 > [!TIP]
@@ -262,7 +267,7 @@ With docker-compose:
 ```yaml
 services:
   nvidia_gpu_exporter:
-    image: utkuozdemir/nvidia_gpu_exporter:1.7.0
+    image: utkuozdemir/nvidia_gpu_exporter:latest
     restart: unless-stopped
     environment:
       - NVIDIA_DRIVER_CAPABILITIES=utility
@@ -354,7 +359,7 @@ spec:
       runtimeClassName: nvidia # omit if the NVIDIA runtime is your cluster default
       containers:
         - name: exporter
-          image: utkuozdemir/nvidia_gpu_exporter:1.7.0
+          image: utkuozdemir/nvidia_gpu_exporter:latest # pin a release tag in production
           env:
             - name: NVIDIA_VISIBLE_DEVICES
               value: all

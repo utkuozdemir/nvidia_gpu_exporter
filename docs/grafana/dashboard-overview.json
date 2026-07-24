@@ -50,6 +50,7 @@
   "description": "Compare all GPUs of one node side by side: current state, utilization, thermals, throttling and health per GPU. Companion to the Nvidia GPU Metrics dashboard (single-GPU detail, click a GPU in the table to drill down). Shows physical GPUs as reported by nvidia-smi, MIG instances are not broken out: rows are the parent GPUs, whose utilization is not reported in MIG mode and shows n/a. Based on the prometheus metrics from github.com/utkuozdemir/nvidia_gpu_exporter",
   "editable": false,
   "fiscalYearStartMonth": 0,
+  "gnetId": 25547,
   "graphTooltip": 1,
   "id": null,
   "links": [
