@@ -226,7 +226,11 @@ dockers_v2:
       - linux/amd64
 
 scoops:
-  - repository:
+    # only the static build, like every other publisher; the cgo nvml flavor
+    # must never leak into the scoop manifest
+  - ids:
+      - nvidia_gpu_exporter-archive
+    repository:
       owner: utkuozdemir
       name: scoop_nvidia_gpu_exporter
       token: "{{ .Env.PRIVATE_ACCESS_TOKEN }}"
