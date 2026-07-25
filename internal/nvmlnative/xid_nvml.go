@@ -180,13 +180,22 @@ func (b *Backend) xidRegister(warnings *xidWatcherLog) (nvml.EventSet, map[nvml.
 
 	generation := b.generation.Load()
 
+	// the event set is a resource group as well: it is created, waited on and
+	// freed through separate exports, so it is only safe to create when all of
+	// them are present.
+	if !b.avail.Load().hasAll(
+		"nvmlEventSetCreate", "nvmlEventSetFree", "nvmlDeviceRegisterEvents",
+	) {
+		return nil, nil, 0, false
+	}
+
 	set, ret := b.api.eventSetCreate()
 	if ret != nvml.SUCCESS {
 		if !warnings.createWarned {
 			warnings.createWarned = true
 
 			b.logger.Warn("cannot create an NVML event set, XID errors will not be counted",
-				"nvml_return", ret.String())
+				"nvml_return", retString(ret))
 		}
 
 		return nil, nil, 0, false
@@ -202,7 +211,7 @@ func (b *Backend) xidRegister(warnings *xidWatcherLog) (nvml.EventSet, map[nvml.
 	uuids := map[nvml.Device]string{}
 
 	for deviceIdx := range count {
-		dev, ret := b.api.deviceByIndex(deviceIdx)
+		dev, ret := b.device(deviceIdx)
 		if ret != nvml.SUCCESS {
 			continue
 		}
@@ -217,13 +226,13 @@ func (b *Backend) xidRegister(warnings *xidWatcherLog) (nvml.EventSet, map[nvml.
 				warnings.registerWarned = true
 
 				b.logger.Warn("cannot register for XID error events on a GPU",
-					"uuid", nvidiasmi.NormalizeUUID(uuid), "nvml_return", ret.String())
+					"uuid", nvidiasmi.NormalizeUUID(uuid), "nvml_return", retString(ret))
 			}
 
 			continue
 		}
 
-		uuids[dev] = nvidiasmi.NormalizeUUID(uuid)
+		uuids[dev.raw()] = nvidiasmi.NormalizeUUID(uuid)
 	}
 
 	if len(uuids) == 0 {
@@ -317,7 +326,7 @@ func (b *Backend) warnOnceXID(msg string, ret nvml.Return) {
 
 	b.xids.waitWarned = true
 
-	b.logger.Warn(msg, "nvml_return", ret.String())
+	b.logger.Warn(msg, "nvml_return", retString(ret))
 }
 
 // recordXID folds one received event into the accumulator.

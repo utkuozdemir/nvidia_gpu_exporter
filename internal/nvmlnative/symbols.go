@@ -14,6 +14,19 @@ type symbolRequirement struct {
 
 //nolint:gochecknoglobals,goconst // shared requirement manifest; field names repeat by design
 var nvmlSymbolRequirements = []symbolRequirement{
+	{
+		// the guarded surface collapses the handler indirection: the adapter
+		// calls GetC2cModeInfoV().V1(), collector code calls this.
+		goCall: "GetC2cModeInfoV1",
+		anyOf:  []string{"nvmlDeviceGetC2cModeInfoV"},
+		serves: "c2c.mode",
+	},
+	{
+		// as above, for the fabric handler's V2.
+		goCall: "GetGpuFabricInfoV2",
+		anyOf:  []string{"nvmlDeviceGetGpuFabricInfoV"},
+		serves: "fabric.*",
+	},
 	{goCall: "init", anyOf: []string{"nvmlInit_v2", "nvmlInit"}, serves: "NVML initialization"},
 	{goCall: "shutdown", anyOf: []string{"nvmlShutdown"}, serves: "NVML shutdown"},
 	{
