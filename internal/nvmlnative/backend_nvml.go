@@ -150,37 +150,13 @@ func newWithAPI(api nvmlAPI, logger *slog.Logger) (*Backend, error) {
 	// series into one. There is nothing to serve in that state, so refuse to
 	// start rather than publish a corrupt scrape.
 	if !backend.avail.Load().has("nvmlDeviceGetUUID") {
-		backend.api.shutdown()
+		_ = backend.api.shutdown()
 
 		return nil, errors.New("driver library does not export nvmlDeviceGetUUID, " +
 			"which every GPU metric is labeled by")
 	}
 
 	return backend, nil
-}
-
-// refreshAvailability re-probes the guarded exports. It runs after every
-// successful initialization, not once per process: the backend re-opens NVML
-// during lifecycle recovery, which is exactly when the driver may have been
-// upgraded underneath it and the export set may differ.
-func (b *Backend) refreshAvailability() {
-	// the ad-hoc probe cache belongs to the previous library generation
-	b.symbolsPresent = nil
-
-	avail := probeSymbols(b.api.lookupSymbol, guardedSymbols)
-	b.avail.Store(avail)
-	avail.log(b.logger)
-}
-
-// device wraps a driver device handle so that every entry point it exposes is
-// guarded by the current availability snapshot.
-func (b *Backend) device(index int) (device, nvml.Return) {
-	dev, ret := b.api.deviceByIndex(index)
-	if ret != nvml.SUCCESS {
-		return nil, ret
-	}
-
-	return guardedDevice{dev: dev, avail: b.avail.Load()}, ret
 }
 
 // DriverVersion reports the installed driver version, used to pick the
@@ -391,6 +367,7 @@ func (b *Backend) collectTable(
 	if b.avail.Load().has("nvmlSystemGetDriverVersion") {
 		driverVersion, ret = b.api.driverVersion()
 	}
+
 	shared.driverVersion, shared.driverVersionRet = driverVersion, ret
 	shared.count, shared.countRet = count, nvml.SUCCESS
 
@@ -829,6 +806,7 @@ func (b *Backend) collectDevice(
 		if b.avail.Load().has("nvmlDeviceValidateInforom") {
 			ret = b.api.validateInforom(dev.raw())
 		}
+
 		coll.set("inforom.checksum_validation", ret, func() string { return "valid" })
 	}
 
@@ -1716,4 +1694,32 @@ func (b *Backend) warnOnce(family, msg string, ret nvml.Return) {
 	b.extrasWarned[family] = true
 
 	b.logger.Warn(msg, "family", family, "nvml_return", retString(ret))
+}
+
+// refreshAvailability re-probes the guarded exports. It runs after every
+// successful initialization, not once per process: the backend re-opens NVML
+// during lifecycle recovery, which is exactly when the driver may have been
+// upgraded underneath it and the export set may differ.
+func (b *Backend) refreshAvailability() {
+	// the ad-hoc probe cache belongs to the previous library generation
+	b.symbolsPresent = nil
+
+	avail := probeSymbols(b.api.lookupSymbol, guardedSymbols)
+	b.avail.Store(avail)
+	avail.log(b.logger)
+}
+
+// device wraps a driver device handle so that every entry point it exposes is
+// guarded by the current availability snapshot.
+//
+// code must never receive a raw handle.
+//
+//nolint:ireturn // handing back the guarded interface is the point: collector
+func (b *Backend) device(index int) (device, nvml.Return) {
+	dev, ret := b.api.deviceByIndex(index)
+	if ret != nvml.SUCCESS {
+		return nil, ret
+	}
+
+	return guardedDevice{dev: dev, avail: b.avail.Load()}, ret
 }

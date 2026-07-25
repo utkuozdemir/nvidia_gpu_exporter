@@ -68,8 +68,6 @@ type migGroup struct {
 // collectMIG gathers one parent device's MIG inventory, memory and GPM
 // utilization into extras. seenGIs records the GPM state keys touched this
 // cycle for orphan cleanup. Reports whether extras collection may continue.
-//
-//nolint:cyclop // one linear pass: mode gate, enumeration, GPM per instance
 func (b *Backend) collectMIG(
 	dev device,
 	parentUUID string,
@@ -111,6 +109,17 @@ func (b *Backend) collectMIG(
 		return false
 	}
 
+	return b.collectMIGUtilization(dev, parentUUID, extras, groups)
+}
+
+// collectMIGUtilization samples per-GPU-instance activity and stamps it onto
+// the instances enumerated for this parent.
+func (b *Backend) collectMIGUtilization(
+	dev device,
+	parentUUID string,
+	extras *collect.Extras,
+	groups []migGroup,
+) bool {
 	support, ret := dev.GpmQueryDeviceSupport()
 
 	switch {

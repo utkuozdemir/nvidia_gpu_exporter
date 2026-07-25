@@ -1,0 +1,26 @@
+# Context rules for hack/dev.Dockerfile only. BuildKit prefers a
+# <dockerfile>.dockerignore over the root one, so the release images keep their
+# own, much narrower context untouched.
+#
+# The difference that matters: the root .dockerignore drops *.md, because the
+# release images only ever copy a binary. The checks here lint the markdown, so
+# it has to stay.
+#
+# .git is excluded: it changes on every commit and would invalidate every stage
+# that copies the tree. The goreleaser check synthesizes a repository instead.
+.git
+dist
+_work
+hack/compose/grafana/data
+hack/compose/grafana/dashboards
+hack/compose/prometheus/data
+hack/alerts/rendered
+# local, uncommitted state: gitignored, so it was never lint input before
+*.local.md
+*.override.md
+.idea
+.vscode
+.claude
+.DS_Store
+*.patch
+*.diff

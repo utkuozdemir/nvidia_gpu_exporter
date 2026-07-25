@@ -44,39 +44,17 @@ jobs:
         uses: actions/setup-go@v7.0.0
         with:
           go-version-file: go.mod
-      - name: Check go.mod tidiness
-        run: go mod tidy --diff
-      - name: Run linters
-        uses: golangci/golangci-lint-action@v9.3.0
-        with:
-          # renovate: depName=golangci/golangci-lint datasource=github-releases
-          version: v2.12.2
-          args: --timeout=3m0s
-          install-mode: goinstall
       - name: Set up Task
         uses: arduino/setup-task@v3.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install asset linters
-        run: |
-          # renovate: depName=markdownlint-cli datasource=npm
-          npm install --global markdownlint-cli@0.49.1
-          # renovate: depName=mvdan.cc/sh/v3 datasource=go
-          go install mvdan.cc/sh/v3/cmd/shfmt@v3.13.1
-          # "go install" does not work on the dashboard-linter module (it has
-          # replace directives), so install the release binary. The version is
-          # a variable so renovate updates every occurrence in the URL at once.
-          # renovate: depName=grafana/dashboard-linter datasource=github-releases
-          DASHBOARD_LINTER_VERSION=0.2.0
-          curl -sSfL "https://github.com/grafana/dashboard-linter/releases/download/v${DASHBOARD_LINTER_VERSION}/dashboard-linter_${DASHBOARD_LINTER_VERSION}_linux_amd64.tar.gz" | tar -xz -C "$(go env GOPATH)/bin" dashboard-linter
-      - name: Lint markdown and shell scripts
-        run: task lint:assets
-      - name: Lint the Grafana dashboard
-        run: task lint:dashboard
+      # every linter, at the versions pinned in hack/dev.Dockerfile, in the same
+      # containers a developer gets locally. Nothing is installed here, so CI
+      # and a workstation cannot drift apart.
+      - name: Lint
+        run: task lint
       - name: Run tests
         run: go test -v -race -coverpkg=./... -coverprofile ./coverage.out -covermode=atomic -timeout 20m ./...
-      - name: Compile the GPU-tagged parity test # never runs in CI, must not rot between GPU box sessions
-        run: go test -run '^$' -tags gpu ./internal/integration/
       - name: Print coverage results
         run: go tool cover -func ./coverage.out
       - name: Send coverage
@@ -119,6 +97,7 @@ jobs:
         run: hack/alerts/verify.sh
       - name: Check that the chart README is current
         run: |
+          # renovate: depName=jnorwood/helm-docs datasource=docker
           docker run --rm -v "$(pwd):/helm-docs" -u "$(id -u)" jnorwood/helm-docs:v1.14.2
           git diff --exit-code charts/
       - name: Create kind cluster
