@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.19
+# syntax=docker/dockerfile:1.25
 #
 # The development and CI toolchain, one stage per check.
 #
