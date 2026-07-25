@@ -14,12 +14,14 @@ import "github.com/NVIDIA/go-nvml/pkg/nvml"
 //
 // Adding a getter here is what forces its symbol to be declared: the compiler
 // rejects a collector call that this interface does not carry.
+//
+//nolint:interfacebloat // the method set mirrors go-nvml's Device interface
 type device interface {
 	GetAccountingBufferSize() (int, nvml.Return)
 	GetAccountingMode() (nvml.EnableState, nvml.Return)
 	GetAddressingMode() (nvml.DeviceAddressingMode, nvml.Return)
 	GetC2cModeInfoV1() (nvml.C2cModeInfo_v1, nvml.Return)
-	GetClockInfo(nvml.ClockType) (uint32, nvml.Return)
+	GetClockInfo(clockType nvml.ClockType) (uint32, nvml.Return)
 	GetComputeInstanceId() (int, nvml.Return)
 	GetComputeMode() (nvml.ComputeMode, nvml.Return)
 	GetComputeRunningProcesses() ([]nvml.ProcessInfo, nvml.Return)
@@ -38,7 +40,7 @@ type device interface {
 	GetEncoderUtilization() (uint32, uint32, nvml.Return)
 	GetEnforcedPowerLimit() (uint32, nvml.Return)
 	GetFanSpeed() (uint32, nvml.Return)
-	GetFieldValues([]nvml.FieldValue) nvml.Return
+	GetFieldValues(values []nvml.FieldValue) nvml.Return
 	GetGpuFabricInfoV2() (nvml.GpuFabricInfo_v2, nvml.Return)
 	GetGpuInstanceId() (int, nvml.Return)
 	GetGpuMaxPcieLinkGeneration() (int, nvml.Return)
@@ -47,20 +49,24 @@ type device interface {
 	GetHostname_v1() (string, nvml.Return)
 	GetIndex() (int, nvml.Return)
 	GetInforomImageVersion() (string, nvml.Return)
-	GetInforomVersion(nvml.InforomObject) (string, nvml.Return)
+	GetInforomVersion(object nvml.InforomObject) (string, nvml.Return)
 	GetJpgUtilization() (uint32, uint32, nvml.Return)
 	GetMarginTemperature() (nvml.MarginTemperature, nvml.Return)
-	GetMaxClockInfo(nvml.ClockType) (uint32, nvml.Return)
+	GetMaxClockInfo(clockType nvml.ClockType) (uint32, nvml.Return)
 	GetMaxMigDeviceCount() (int, nvml.Return)
 	GetMaxPcieLinkGeneration() (int, nvml.Return)
 	GetMaxPcieLinkWidth() (int, nvml.Return)
-	GetMemoryErrorCounter(nvml.MemoryErrorType, nvml.EccCounterType, nvml.MemoryLocation) (uint64, nvml.Return)
+	GetMemoryErrorCounter(
+		errorType nvml.MemoryErrorType,
+		counterType nvml.EccCounterType,
+		location nvml.MemoryLocation,
+	) (uint64, nvml.Return)
 	GetMemoryInfo_v2() (nvml.Memory_v2, nvml.Return)
-	GetMigDeviceHandleByIndex(int) (device, nvml.Return)
+	GetMigDeviceHandleByIndex(index int) (device, nvml.Return)
 	GetMigMode() (int, int, nvml.Return)
 	GetName() (string, nvml.Return)
 	GetOfaUtilization() (uint32, uint32, nvml.Return)
-	GetPcieThroughput(nvml.PcieUtilCounter) (uint32, nvml.Return)
+	GetPcieThroughput(counter nvml.PcieUtilCounter) (uint32, nvml.Return)
 	GetPciInfoExt() (nvml.PciInfoExt, nvml.Return)
 	GetPerformanceState() (nvml.Pstates, nvml.Return)
 	GetPersistenceMode() (nvml.EnableState, nvml.Return)
@@ -71,20 +77,20 @@ type device interface {
 	GetPowerUsage() (uint32, nvml.Return)
 	GetRemappedRows() (int, int, bool, bool, nvml.Return)
 	GetRemappedRows_v2() (nvml.RemappedRowsInfo_v2, nvml.Return)
-	GetRetiredPages(nvml.PageRetirementCause) ([]uint64, nvml.Return)
+	GetRetiredPages(cause nvml.PageRetirementCause) ([]uint64, nvml.Return)
 	GetRetiredPagesPendingStatus() (nvml.EnableState, nvml.Return)
 	GetRowRemapperHistogram() (nvml.RowRemapperHistogramValues, nvml.Return)
 	GetSerial() (string, nvml.Return)
 	GetSramEccErrorStatus() (nvml.EccSramErrorStatus, nvml.Return)
 	GetSupportedClocksEventReasons() (uint64, nvml.Return)
-	GetTemperature(nvml.TemperatureSensors) (uint32, nvml.Return)
-	GetTotalEccErrors(nvml.MemoryErrorType, nvml.EccCounterType) (uint64, nvml.Return)
+	GetTemperature(sensor nvml.TemperatureSensors) (uint32, nvml.Return)
+	GetTotalEccErrors(errorType nvml.MemoryErrorType, counterType nvml.EccCounterType) (uint64, nvml.Return)
 	GetTotalEnergyConsumption() (uint64, nvml.Return)
 	GetUtilizationRates() (nvml.Utilization, nvml.Return)
 	GetUUID() (string, nvml.Return)
 	GetVbiosVersion() (string, nvml.Return)
 	GpmQueryDeviceSupport() (nvml.GpmSupport, nvml.Return)
-	RegisterEvents(uint64, nvml.EventSet) nvml.Return
+	RegisterEvents(eventTypes uint64, set nvml.EventSet) nvml.Return
 
 	// raw exposes the underlying handle for the few places that must match
 	// identities go-nvml hands back to us (the XID watcher keys events by the
@@ -98,8 +104,6 @@ type guardedDevice struct {
 	dev   nvml.Device
 	avail *availability
 }
-
-func (g guardedDevice) raw() nvml.Device { return g.dev }
 
 func (g guardedDevice) GetAccountingBufferSize() (int, nvml.Return) {
 	if !g.avail.has("nvmlDeviceGetAccountingBufferSize") {
@@ -147,6 +151,7 @@ func (g guardedDevice) GetClockInfo(p0 nvml.ClockType) (uint32, nvml.Return) {
 	return g.dev.GetClockInfo(p0)
 }
 
+//nolint:revive // the name must match go-nvml's Device interface to delegate
 func (g guardedDevice) GetComputeInstanceId() (int, nvml.Return) {
 	if !g.avail.has("nvmlDeviceGetComputeInstanceId") {
 		return 0, nvml.ERROR_FUNCTION_NOT_FOUND
@@ -252,8 +257,10 @@ func (g guardedDevice) GetDisplayMode() (nvml.EnableState, nvml.Return) {
 
 func (g guardedDevice) GetDramEncryptionMode() (nvml.DramEncryptionInfo, nvml.DramEncryptionInfo, nvml.Return) {
 	if !g.avail.has("nvmlDeviceGetDramEncryptionMode") {
-		var z0 nvml.DramEncryptionInfo
-		var z1 nvml.DramEncryptionInfo
+		var (
+			z0 nvml.DramEncryptionInfo
+			z1 nvml.DramEncryptionInfo
+		)
 
 		return z0, z1, nvml.ERROR_FUNCTION_NOT_FOUND
 	}
@@ -267,8 +274,10 @@ func (g guardedDevice) GetDriverModel() (nvml.DriverModel, nvml.DriverModel, nvm
 	// already safe against a driver that lacks the newer one. Hard-probing a
 	// single spelling here would be wrong.
 	if !g.avail.hasAny("nvmlDeviceGetDriverModel", "nvmlDeviceGetDriverModel_v2") {
-		var z0 nvml.DriverModel
-		var z1 nvml.DriverModel
+		var (
+			z0 nvml.DriverModel
+			z1 nvml.DriverModel
+		)
 
 		return z0, z1, nvml.ERROR_FUNCTION_NOT_FOUND
 	}
@@ -278,8 +287,10 @@ func (g guardedDevice) GetDriverModel() (nvml.DriverModel, nvml.DriverModel, nvm
 
 func (g guardedDevice) GetEccMode() (nvml.EnableState, nvml.EnableState, nvml.Return) {
 	if !g.avail.has("nvmlDeviceGetEccMode") {
-		var z0 nvml.EnableState
-		var z1 nvml.EnableState
+		var (
+			z0 nvml.EnableState
+			z1 nvml.EnableState
+		)
 
 		return z0, z1, nvml.ERROR_FUNCTION_NOT_FOUND
 	}
@@ -337,6 +348,7 @@ func (g guardedDevice) GetGpuFabricInfoV2() (nvml.GpuFabricInfo_v2, nvml.Return)
 	return g.dev.GetGpuFabricInfoV().V2()
 }
 
+//nolint:revive // the name must match go-nvml's Device interface to delegate
 func (g guardedDevice) GetGpuInstanceId() (int, nvml.Return) {
 	if !g.avail.has("nvmlDeviceGetGpuInstanceId") {
 		return 0, nvml.ERROR_FUNCTION_NOT_FOUND
@@ -355,8 +367,10 @@ func (g guardedDevice) GetGpuMaxPcieLinkGeneration() (int, nvml.Return) {
 
 func (g guardedDevice) GetGpuOperationMode() (nvml.GpuOperationMode, nvml.GpuOperationMode, nvml.Return) {
 	if !g.avail.has("nvmlDeviceGetGpuOperationMode") {
-		var z0 nvml.GpuOperationMode
-		var z1 nvml.GpuOperationMode
+		var (
+			z0 nvml.GpuOperationMode
+			z1 nvml.GpuOperationMode
+		)
 
 		return z0, z1, nvml.ERROR_FUNCTION_NOT_FOUND
 	}
@@ -372,6 +386,7 @@ func (g guardedDevice) GetGspFirmwareMode() (bool, bool, nvml.Return) {
 	return g.dev.GetGspFirmwareMode()
 }
 
+//nolint:revive // the name must match go-nvml's Device interface to delegate
 func (g guardedDevice) GetHostname_v1() (string, nvml.Return) {
 	if !g.avail.has("nvmlDeviceGetHostname_v1") {
 		return "", nvml.ERROR_FUNCTION_NOT_FOUND
@@ -466,6 +481,7 @@ func (g guardedDevice) GetMemoryErrorCounter(
 	return g.dev.GetMemoryErrorCounter(p0, p1, p2)
 }
 
+//nolint:revive // the name must match go-nvml's Device interface to delegate
 func (g guardedDevice) GetMemoryInfo_v2() (nvml.Memory_v2, nvml.Return) {
 	if !g.avail.has("nvmlDeviceGetMemoryInfo_v2") {
 		var z0 nvml.Memory_v2
@@ -476,6 +492,7 @@ func (g guardedDevice) GetMemoryInfo_v2() (nvml.Memory_v2, nvml.Return) {
 	return g.dev.GetMemoryInfo_v2()
 }
 
+//nolint:ireturn // a MIG handle must arrive wrapped, never raw
 func (g guardedDevice) GetMigDeviceHandleByIndex(p0 int) (device, nvml.Return) {
 	if !g.avail.has("nvmlDeviceGetMigDeviceHandleByIndex") {
 		return nil, nvml.ERROR_FUNCTION_NOT_FOUND
@@ -601,6 +618,7 @@ func (g guardedDevice) GetRemappedRows() (int, int, bool, bool, nvml.Return) {
 	return g.dev.GetRemappedRows()
 }
 
+//nolint:revive // the name must match go-nvml's Device interface to delegate
 func (g guardedDevice) GetRemappedRows_v2() (nvml.RemappedRowsInfo_v2, nvml.Return) {
 	if !g.avail.has("nvmlDeviceGetRemappedRows_v2") {
 		var z0 nvml.RemappedRowsInfo_v2
@@ -732,3 +750,9 @@ func (g guardedDevice) RegisterEvents(p0 uint64, p1 nvml.EventSet) nvml.Return {
 
 	return g.dev.RegisterEvents(p0, p1)
 }
+
+// raw exposes the underlying handle for identity matching only. It must never
+// be used to make a call.
+//
+//nolint:ireturn // hands back go-nvml's own interface type by definition
+func (g guardedDevice) raw() nvml.Device { return g.dev }

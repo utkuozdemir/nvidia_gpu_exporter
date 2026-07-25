@@ -1,53 +1,113 @@
 version: "3"
 
+# Every check runs in the toolchain image built from hack/dev.Dockerfile, one
+# stage per check, so the host needs only docker and task and CI runs the exact
+# same tool versions. It is also the only way the checks see the whole tree:
+# much of internal/nvmlnative is behind a `linux && cgo` build tag, which a host
+# toolchain on macOS excludes from the build entirely, so a host linter reports
+# success without having read those files at all.
+#
+# The Go version comes from go.mod, so the toolchain cannot drift from what the
+# module declares.
+
 tasks:
   fmt:
-    desc: format code
+    desc: format code and scripts
     cmds:
-      - go mod tidy
-      - go fix ./...
-      - golangci-lint run --fix ./...
-      - golangci-lint fmt ./...
-      - git ls-files '*.sh' | xargs shfmt -w -i 2 -ci -sr
+      # the formatters write in place, so the working tree is bind-mounted
+      # rather than exported from a stage: the stage has no sources of its own.
+      # The container runs as the invoking user so nothing comes back
+      # root-owned, and a named volume keeps the Go and linter caches between
+      # runs instead of recompiling the world every time.
+      - >-
+        docker buildx build -f hack/dev.Dockerfile
+        --build-arg GO_VERSION="$(sed -n 's/^go //p' go.mod)"
+        --target fmt --load --tag nvidia-gpu-exporter-tools:local .
+      - "{{.FMT}} sh -c 'go mod tidy && go fix ./...'"
+      # unfixable findings are reported by lint, not by fmt
+      - "{{.FMT}} golangci-lint run --fix --issues-exit-code 0 ./..."
+      - "{{.FMT}} golangci-lint fmt ./..."
+      # tracked files only: a bare find would also rewrite scratch directories
+      # and any other worktree checked out under this one
+      - git ls-files '*.sh' | xargs {{.FMT}} shfmt -w -i 2 -ci -sr
+    vars:
+      FMT: >-
+        docker run --rm -u "$(id -u):$(id -g)"
+        -e GOFLAGS=-mod=mod -e HOME=/tmp
+        -e GOCACHE=/tmp/go-build -e GOMODCACHE=/tmp/go-mod
+        -e GOLANGCI_LINT_CACHE=/tmp/golangci-lint
+        -v nvidia-gpu-exporter-fmt-cache:/tmp
+        -v "$PWD":/src -w /src nvidia-gpu-exporter-tools:local
 
   lint:
-    desc: lint everything (code, docs, scripts, dashboard, release config)
+    desc: lint everything (code, docs, scripts, dashboards, release config)
     cmds:
       - task: lint:go
       - task: lint:assets
       - task: lint:dashboard
-      - goreleaser check
+      - task: lint:release
 
   lint:go:
-    desc: lint go code and module tidiness (what CI covers via golangci)
+    desc: lint go code and module tidiness
     cmds:
-      - go mod tidy --diff
-      - golangci-lint run ./...
+      - task: stage
+        vars: {TARGET: lint-go-mod-tidy}
+      - task: stage
+        vars: {TARGET: lint-golangci-lint}
+      # never runs without a GPU, but it must keep compiling
+      - task: stage
+        vars: {TARGET: lint-gpu-tagged-test}
 
-  # runs in CI as its own step; lints tracked files only, so local scratch
-  # space and generated output stay out of scope, and dot-directories like
-  # .github are covered (filesystem globs would skip them)
   lint:assets:
     desc: lint markdown and shell scripts
     cmds:
-      - git ls-files '*.md' | xargs markdownlint
-      - git ls-files '*.sh' | xargs shellcheck
-      - git ls-files '*.sh' | xargs shfmt -d -i 2 -ci -sr
+      - task: stage
+        vars: {TARGET: lint-markdown}
+      - task: stage
+        vars: {TARGET: lint-shell}
 
-  # needs the dashboard-linter binary from the grafana/dashboard-linter
-  # releases page ("go install" does not work on it, the module carries
-  # replace directives). Rule exclusions live in docs/grafana/.lint.
   lint:dashboard:
     desc: lint the Grafana dashboards against grafana.com best practices
     cmds:
-      - dashboard-linter lint --strict docs/grafana/dashboard.json
-      - dashboard-linter lint --strict docs/grafana/dashboard-overview.json
+      - task: stage
+        vars: {TARGET: lint-dashboard}
+
+  lint:release:
+    desc: validate the release configuration
+    cmds:
+      - task: stage
+        vars: {TARGET: lint-goreleaser}
+
+  test:
+    desc: run the unit and integration tests
+    cmds:
+      - task: stage
+        vars: {TARGET: unit-tests}
+
+  chart:docs:
+    desc: regenerate the chart README from the values.yaml comments
+    cmds:
+      # renovate: depName=jnorwood/helm-docs datasource=docker
+      - docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/helm-docs jnorwood/helm-docs:v1.14.2
+
+  # builds one check stage; every check goes through here so the build
+  # invocation exists in exactly one place
+  stage:
+    internal: true
+    cmds:
+      - >-
+        docker buildx build -f hack/dev.Dockerfile
+        --build-arg GO_VERSION="$(sed -n 's/^go //p' go.mod)"
+        --target {{.TARGET}} .
 
   release:
     desc: release
     vars:
       NEXT:
-        sh: svu next
+        # renovate: depName=caarlos0/svu datasource=docker
+        # run from the primary checkout: a linked worktree's .git points at a
+        # common directory outside this mount
+        sh: docker run --rm -v "$PWD":/src -w /src caarlos0/svu:3.4.1 next
     cmds:
       - git tag -a {{.NEXT}} -m "{{.NEXT}}"
       - echo {{.NEXT}}

@@ -4,6 +4,7 @@ package nvmlnative
 
 import (
 	"log/slog"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -58,13 +59,7 @@ func (a *availability) has(symbol string) bool {
 // selects at load time: it probes the newer spellings and falls back to the
 // classic one, so the call is safe as long as any of them resolves.
 func (a *availability) hasAny(symbols ...string) bool {
-	for _, symbol := range symbols {
-		if a.has(symbol) {
-			return true
-		}
-	}
-
-	return false
+	return slices.ContainsFunc(symbols, a.has)
 }
 
 // hasAll reports whether every one of the given entry points is exported. It
