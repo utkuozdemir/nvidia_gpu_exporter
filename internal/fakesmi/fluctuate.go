@@ -174,7 +174,10 @@ var numericPrefix = regexp.MustCompile(`^[+-]?\d+(\.\d+)?`)
 // caller. A tail containing digits is also refused: it means the cell is not
 // the "<number><unit>" shape (an exponent form the exporter rejects, a
 // timestamp, a second number), and rewriting it could turn a cell the
-// exporter drops into one it accepts.
+// exporter drops into one it accepts. A tail starting with "x" is refused for
+// the same reason: the cell is a hex value (the exporter reads "0x..." as hex,
+// digits in the tail or not), and rewriting its numeric prefix would change the
+// value's base rather than its magnitude.
 func parseNumericCell(cell string) (numericCell, bool) {
 	token := numericPrefix.FindString(cell)
 	if token == "" {
@@ -183,6 +186,10 @@ func parseNumericCell(cell string) (numericCell, bool) {
 
 	suffix := cell[len(token):]
 	if strings.ContainsAny(suffix, "0123456789") {
+		return numericCell{}, false
+	}
+
+	if strings.HasPrefix(strings.ToLower(suffix), "x") {
 		return numericCell{}, false
 	}
 

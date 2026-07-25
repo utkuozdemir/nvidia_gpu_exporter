@@ -4,3 +4,7 @@
 # Windows would otherwise break the whole suite).
 internal/captures/*.txt text eol=lf
 internal/integration/testdata/*.metrics text eol=lf
+
+# The fuzz seed corpora encode their values as Go string literals, so a CRLF
+# conversion would silently change the input each entry replays.
+internal/*/testdata/fuzz/**  text eol=lf

@@ -31,6 +31,19 @@ func ParseCSVIntoTable(queryResult string, qFields []QField) (Table, error) {
 	numCols := len(qFields)
 	numRows := len(valuesLines)
 
+	// The header must line up with what was asked for before anything is
+	// indexed by column. Checking it up front rather than per row also covers
+	// the header-only case: callers map the returned names back by query-field
+	// position, so a mismatch that survives here is an out-of-range access
+	// one caller away.
+	if numCols != len(rFields) {
+		return Table{}, fmt.Errorf(
+			"field count mismatch: query fields: %d, returned fields: %d",
+			numCols,
+			len(rFields),
+		)
+	}
+
 	rows := make([]Row, numRows)
 
 	qFieldToCells := make(map[QField][]Cell)
@@ -39,37 +52,16 @@ func ParseCSVIntoTable(queryResult string, qFields []QField) (Table, error) {
 	}
 
 	for rowIndex, valuesLine := range valuesLines {
-		qFieldToCell := make(map[QField]Cell, numCols)
-		cells := make([]Cell, numCols)
-		rawValues := parseCSVLine(valuesLine)
-
-		if len(qFields) != len(rFields) {
-			return Table{}, fmt.Errorf(
-				"field count mismatch: query fields: %d, returned fields: %d",
-				len(qFields),
-				len(rFields),
-			)
+		row, err := parseCSVRow(valuesLine, qFields, rFields)
+		if err != nil {
+			return Table{}, fmt.Errorf("row %d: %w", rowIndex+1, err)
 		}
 
-		for colIndex, rawValue := range rawValues {
-			currentQField := qFields[colIndex]
-			currentRField := rFields[colIndex]
-			tableCell := Cell{
-				QField:   currentQField,
-				RField:   currentRField,
-				RawValue: rawValue,
-			}
-			qFieldToCell[currentQField] = tableCell
-			cells[colIndex] = tableCell
-			qFieldToCells[currentQField][rowIndex] = tableCell
+		for colIndex, cell := range row.Cells {
+			qFieldToCells[qFields[colIndex]][rowIndex] = cell
 		}
 
-		tableRow := Row{
-			QFieldToCells: qFieldToCell,
-			Cells:         cells,
-		}
-
-		rows[rowIndex] = tableRow
+		rows[rowIndex] = row
 	}
 
 	return Table{
@@ -77,6 +69,40 @@ func ParseCSVIntoTable(queryResult string, qFields []QField) (Table, error) {
 		RFields:       rFields,
 		QFieldToCells: qFieldToCells,
 	}, nil
+}
+
+// parseCSVRow splits one data line into cells, one per query field.
+func parseCSVRow(valuesLine string, qFields []QField, rFields []RField) (Row, error) {
+	numCols := len(qFields)
+	rawValues := parseCSVLine(valuesLine)
+
+	// A row that does not match the header has no defined column mapping: this
+	// output has no quoting, so a value containing a comma is indistinguishable
+	// from an extra column. Failing the collection reports no GPU data, which
+	// is the contract; guessing would export values under the wrong metrics.
+	if len(rawValues) != numCols {
+		return Row{}, fmt.Errorf(
+			"has %d columns, want %d: %q",
+			len(rawValues),
+			numCols,
+			strings.TrimSpace(valuesLine),
+		)
+	}
+
+	qFieldToCell := make(map[QField]Cell, numCols)
+	cells := make([]Cell, numCols)
+
+	for colIndex, rawValue := range rawValues {
+		cell := Cell{
+			QField:   qFields[colIndex],
+			RField:   rFields[colIndex],
+			RawValue: rawValue,
+		}
+		qFieldToCell[cell.QField] = cell
+		cells[colIndex] = cell
+	}
+
+	return Row{QFieldToCells: qFieldToCell, Cells: cells}, nil
 }
 
 func parseCSVLine(line string) []string {

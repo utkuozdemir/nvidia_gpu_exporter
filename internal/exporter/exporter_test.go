@@ -164,6 +164,7 @@ func TestBuildQFieldToMetricInfoMap(t *testing.T) {
 	qFieldToMetricInfoMap := exporter.BuildQFieldToMetricInfoMap(
 		"prefix",
 		map[nvidiasmi.QField]nvidiasmi.RField{"aaa": "AAA", "bbb": "BBB"},
+		nil,
 		logger,
 	)
 

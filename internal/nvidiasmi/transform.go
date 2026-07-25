@@ -3,6 +3,7 @@ package nvidiasmi
 import (
 	"errors"
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -135,5 +136,15 @@ func parseSanitizedValueWithBestEffort(
 		return -1, fmt.Errorf("failed to parse float %q: %w", allNums[0], err)
 	}
 
-	return parsed * valueMultiplier, nil
+	scaled := parsed * valueMultiplier
+
+	// A reading large enough to overflow once scaled into its base unit is not
+	// a measurement. Reporting it as infinity would poison every rate and
+	// average computed over the series, so it is dropped like any other
+	// unusable value.
+	if math.IsInf(scaled, 0) || math.IsNaN(scaled) {
+		return -1, fmt.Errorf("value %q does not scale to a finite number", sanitizedValue)
+	}
+
+	return scaled, nil
 }

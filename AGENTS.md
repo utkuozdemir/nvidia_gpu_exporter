@@ -113,6 +113,20 @@ Consequences to keep in mind before changing anything here:
 - The GPU-hardware parity test is behind a build tag and never runs in CI, but CI compiles it, so it cannot rot between the rare sessions where real hardware is available.
 - The nvml backend's drift tests check its catalog and its required driver symbols against the recorded captures, so a driver that renames or withdraws something is caught offline.
 
+### Fuzzing
+
+The corpus covers the driver output that has been seen; fuzz targets cover the output that has not.
+That gap is real here, because the exec backend parses whatever a driver, a platform or a user's wrapper command prints, and a panic in a parser takes the whole exporter down.
+
+Every fuzz target asserts a property rather than just the absence of a panic, and the properties are the contracts callers already rely on: a parsed table is safe to index by column, a transformed value is finite, a discovered field name survives being joined into a query, a derived metric name is registrable.
+`task test:fuzz` drives the search; `task test` replays the seed corpora, so a fixed bug stays fixed without anyone running a fuzzer.
+Targets live in `fuzz_test.go` next to the package they cover, or `fuzz_internal_test.go` when they need unexported access, which is the repo's convention for internal-package tests and what the `testpackage` linter allows.
+
+Two rules keep the targets honest, both learned by getting them wrong first:
+
+- Assert at the layer that owns the invariant, not the layer below it. A metric name is only required to be registrable where all the names are built together, because that is where a collision can be seen and where a single bad descriptor would otherwise fail every scrape.
+- Constrain a target to the input domain the code actually receives. Handing the fake's projection an invocation shape the fake never routes there produces failures that describe the test, not the code.
+
 ## Metrics and their compatibility contract
 
 Exported metric names are a public contract, and breaking one is the most expensive mistake available in this repo.
@@ -133,6 +147,12 @@ Some specifics that regularly surprise people:
   The MIG attribution labels on the per-process metrics are the precedent to follow.
 - Fields that report a state rather than a number are mapped to numbers.
   An unavailable value is not exported at all; an unrecognized value is also not exported, but is logged, because guessing at a brand-new driver state is worse than a visible gap.
+- A derived metric name that is unusable costs the whole scrape, not one series, because the exporter registers as a single collector on every scrape and the registry rejects a bad descriptor wholesale.
+  So a field whose returned name yields an empty name, or a name another field or one of the exporter's own families already owns, is dropped with a logged error instead.
+  When several fields contend for one name, *all* of them are dropped: which field owns a derived name is not knowable here, and publishing one field's reading under a contested name would put a wrong value on an established series.
+  The fixed family names live in one list in `internal/exporter`, pinned by a test against what the exporter actually describes, so a new family cannot be added without reserving its name.
+- Every field list, whether the user wrote it or auto-detection discovered it, is deduplicated and has the identity fields appended before it is queried.
+  Cells are assigned to fields positionally, so a duplicate would be queried twice and emit two samples for one series, failing the whole scrape.
 
 `docs/METRICS.md` carries the reference and the per-family semantics; keep it in sync when the surface changes.
 

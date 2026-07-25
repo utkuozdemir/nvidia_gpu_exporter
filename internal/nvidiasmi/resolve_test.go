@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os/exec"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -108,4 +109,62 @@ func TestResolveFieldsExplicitUnknownFieldStillFails(t *testing.T) {
 	)
 
 	require.ErrorContains(t, err, "brand_new.field")
+}
+
+// TestResolveFieldsAutoNormalizesDiscoveredList covers a --help-query-gpu
+// output that lists a field twice and omits the identity fields. The query
+// assigns cells positionally, so a duplicate would be queried twice and emit
+// two samples for one series, failing the whole scrape, and a missing identity
+// field would leave the gpu_info label it claims with nothing behind it.
+func TestResolveFieldsAutoNormalizesDiscoveredList(t *testing.T) {
+	t.Parallel()
+
+	helpText := "List of valid properties:\n\n\"name\"\n\n\"name\"\n\n\"temperature.gpu\"\n"
+
+	run := func(cmd *exec.Cmd) error {
+		if slices.Contains(cmd.Args, "--help-query-gpu") {
+			_, _ = cmd.Stdout.Write([]byte(helpText))
+
+			return nil
+		}
+
+		// echo a header matching whatever was requested, plus one data row
+		for _, arg := range cmd.Args {
+			fields, ok := strings.CutPrefix(arg, "--query-gpu=")
+			if !ok {
+				continue
+			}
+
+			names := strings.Split(fields, ",")
+			values := make([]string, len(names))
+
+			for i := range names {
+				values[i] = "1"
+			}
+
+			_, _ = cmd.Stdout.Write([]byte(strings.Join(names, ", ") + "\n" +
+				strings.Join(values, ", ") + "\n"))
+		}
+
+		return nil
+	}
+
+	resolved, err := nvidiasmi.ResolveFields(
+		t.Context(), "nvidia-smi", nvidiasmi.DefaultQField, "", time.Second, run, slogt.New(t),
+	)
+	require.NoError(t, err)
+
+	seen := map[nvidiasmi.QField]int{}
+	for _, qField := range resolved.Query {
+		seen[qField]++
+	}
+
+	for qField, count := range seen {
+		assert.Equalf(t, 1, count, "query field %q appears %d times", qField, count)
+	}
+
+	for _, infoField := range resolved.Info {
+		assert.Containsf(t, resolved.Query, infoField.QField,
+			"identity field %q is claimed by gpu_info but never queried", infoField.QField)
+	}
 }

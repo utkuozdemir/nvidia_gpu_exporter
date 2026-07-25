@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -145,7 +147,8 @@ func New(
 	exitCodeMetric ExitCodeMetric,
 	logger *slog.Logger,
 ) *GPUExporter {
-	qFieldToMetricInfoMap := BuildQFieldToMetricInfoMap(prefix, fields.Returned, logger)
+	qFieldToMetricInfoMap := BuildQFieldToMetricInfoMap(
+		prefix, fields.Returned, reservedMetricNames(prefix, exitCodeMetric), logger)
 
 	// cuda_version rides gpu_info but is not a query field: it comes from the
 	// collection's extras, so it is appended after the resolved info fields
@@ -772,42 +775,46 @@ func (e *GPUExporter) renderRow(metricCh chan<- prometheus.Metric, row nvidiasmi
 	e.sendMetric(metricCh, infoMetric)
 
 	for _, currentCell := range row.Cells {
-		metricInfo := e.qFieldToMetricInfoMap[currentCell.QField]
-
-		num, numErr := nvidiasmi.TransformFieldValue(
-			currentCell.QField, currentCell.RawValue, metricInfo.ValueMultiplier)
-		if numErr != nil {
-			switch {
-			case errors.Is(numErr, nvidiasmi.ErrAbsentValue):
-				// expected unavailable reading (e.g. an unsupported field), skip quietly
-			case nvidiasmi.IsEnumMappedField(currentCell.QField):
-				// an enum field returned a value we do not map: never guess a number,
-				// but surface it so a new/unexpected state is not silently invisible
-				e.logger.Warn("skipping metric: unrecognized enum value", "query_field_name",
-					currentCell.QField, "raw_value", currentCell.RawValue)
-			default:
-				e.logger.Debug("failed to transform raw value", "err", numErr, "query_field_name",
-					currentCell.QField, "raw_value", currentCell.RawValue)
-			}
-
-			continue
-		}
-
-		metric, metricErr := prometheus.NewConstMetric(
-			metricInfo.desc,
-			metricInfo.MType,
-			num,
-			uuid,
-		)
-		if metricErr != nil {
-			e.logger.Error("failed to create metric", "err", metricErr, "query_field_name",
-				currentCell.QField, "raw_value", currentCell.RawValue)
-
-			continue
-		}
-
-		e.sendMetric(metricCh, metric)
+		e.renderCell(metricCh, currentCell, uuid)
 	}
+}
+
+// renderCell emits one query field's metric for one GPU. A cell no descriptor
+// was built for is skipped: BuildQFieldToMetricInfoMap reported it once at
+// startup, and there is nothing to emit it under.
+func (e *GPUExporter) renderCell(metricCh chan<- prometheus.Metric, cell nvidiasmi.Cell, uuid string) {
+	metricInfo, described := e.qFieldToMetricInfoMap[cell.QField]
+	if !described {
+		return
+	}
+
+	num, numErr := nvidiasmi.TransformFieldValue(cell.QField, cell.RawValue, metricInfo.ValueMultiplier)
+	if numErr != nil {
+		switch {
+		case errors.Is(numErr, nvidiasmi.ErrAbsentValue):
+			// expected unavailable reading (e.g. an unsupported field), skip quietly
+		case nvidiasmi.IsEnumMappedField(cell.QField):
+			// an enum field returned a value we do not map: never guess a number,
+			// but surface it so a new/unexpected state is not silently invisible
+			e.logger.Warn("skipping metric: unrecognized enum value", "query_field_name",
+				cell.QField, "raw_value", cell.RawValue)
+		default:
+			e.logger.Debug("failed to transform raw value", "err", numErr, "query_field_name",
+				cell.QField, "raw_value", cell.RawValue)
+		}
+
+		return
+	}
+
+	metric, metricErr := prometheus.NewConstMetric(metricInfo.desc, metricInfo.MType, num, uuid)
+	if metricErr != nil {
+		e.logger.Error("failed to create metric", "err", metricErr, "query_field_name",
+			cell.QField, "raw_value", cell.RawValue)
+
+		return
+	}
+
+	e.sendMetric(metricCh, metric)
 }
 
 // sendMetric delivers unconditionally: the Prometheus registry drains the
@@ -829,14 +836,121 @@ type MetricInfo struct {
 	ValueMultiplier float64
 }
 
+// fixedMetricNames are the metric names the exporter owns outside the query
+// field schema, without the prefix. They are listed rather than derived because
+// they are built across several constructors; TestReservedMetricNamesCoverAll
+// pins the list against what the exporter actually describes, so a new family
+// cannot be added without appearing here.
+var fixedMetricNames = []string{
+	// health
+	"failed_scrapes_total", "last_collect_success",
+	"last_collect_success_timestamp_seconds", "last_collect_duration_seconds",
+	// identity
+	"gpu_info",
+	// per-process
+	"compute_app_info", "compute_app_used_memory_bytes", "compute_apps",
+	"compute_apps_last_collect_success",
+	// nvml extras
+	"pcie_throughput_tx_bytes_per_second", "pcie_throughput_rx_bytes_per_second",
+	"energy_joules_total",
+	"mig_info", "mig_memory_total_bytes", "mig_memory_used_bytes",
+	"mig_memory_free_bytes", "mig_memory_reserved_bytes",
+	"mig_graphics_activity_ratio", "mig_sm_activity_ratio", "mig_sm_occupancy_ratio",
+	"mig_tensor_activity_ratio",
+	"mig_pcie_throughput_tx_bytes_per_second", "mig_pcie_throughput_rx_bytes_per_second",
+	// XID
+	"xid_errors_total", "xid_last_timestamp_seconds",
+}
+
+// reservedMetricNames returns the fully-qualified names no query field may
+// claim. Every family is reserved regardless of whether its feature is on, so
+// enabling one later cannot turn a working configuration into a failing one.
+func reservedMetricNames(prefix string, exitCodeMetric ExitCodeMetric) map[string]struct{} {
+	names := make(map[string]struct{}, len(fixedMetricNames)+2)
+
+	for _, name := range fixedMetricNames {
+		names[prometheus.BuildFQName(prefix, "", name)] = struct{}{}
+	}
+
+	// both backends' collection status names, so switching backend cannot
+	// newly collide either
+	for _, metric := range []ExitCodeMetric{ExecExitCodeMetric, NVMLReturnCodeMetric, exitCodeMetric} {
+		names[prometheus.BuildFQName(prefix, "", metric.Name)] = struct{}{}
+	}
+
+	return names
+}
+
+// BuildQFieldToMetricInfoMap builds the per-field metric descriptors. A field
+// whose returned name yields no usable metric name, one another field already
+// claimed, or one reserved by a family the exporter owns, is left out: the whole
+// exporter is registered as one collector on every scrape, so a single
+// unusable or conflicting descriptor would fail every scrape wholesale instead
+// of costing one series.
 func BuildQFieldToMetricInfoMap(
 	prefix string,
 	qFieldtoRFieldMap map[nvidiasmi.QField]nvidiasmi.RField,
+	reserved map[string]struct{},
 	logger *slog.Logger,
 ) map[nvidiasmi.QField]MetricInfo {
-	result := make(map[nvidiasmi.QField]MetricInfo)
-	for qField, rField := range qFieldtoRFieldMap {
-		result[qField] = BuildMetricInfo(prefix, rField, logger)
+	// Sorted, so the outcome never depends on map iteration order.
+	qFields := slices.Sorted(maps.Keys(qFieldtoRFieldMap))
+
+	// derived once per field, so the guards below and the descriptor can never
+	// disagree about the name
+	type derived struct {
+		fqName     string
+		multiplier float64
+	}
+
+	names := make(map[nvidiasmi.QField]derived, len(qFields))
+	claimants := make(map[string][]nvidiasmi.QField, len(qFields))
+
+	for _, qField := range qFields {
+		fqName, multiplier := BuildFQNameAndMultiplier(prefix, qFieldtoRFieldMap[qField], logger)
+		names[qField] = derived{fqName: fqName, multiplier: multiplier}
+		claimants[fqName] = append(claimants[fqName], qField)
+	}
+
+	result := make(map[nvidiasmi.QField]MetricInfo, len(qFields))
+
+	for _, qField := range qFields {
+		rField := qFieldtoRFieldMap[qField]
+
+		fqName := names[qField].fqName
+		if fqName == "" {
+			logger.Error("skipping metric: returned field yields no metric name",
+				"query_field_name", qField, "rfield_name", rField)
+
+			continue
+		}
+
+		if _, isReserved := reserved[fqName]; isReserved {
+			logger.Error("skipping metric: returned field maps to a metric name the exporter owns, "+
+				"please report it in the project's issue tracker",
+				"metric_name", fqName, "query_field_name", qField, "rfield_name", rField)
+
+			continue
+		}
+
+		// Every claimant of a contested name is dropped, not just the losers.
+		// Which query field "owns" a derived name is not something this can
+		// know, and publishing one field's reading under a name another field
+		// also claims would put a wrong value on an established series. An
+		// absent metric is a visible gap; a plausible wrong one is not.
+		if others := claimants[fqName]; len(others) > 1 {
+			logger.Error("skipping metric: several returned fields map to the same metric name, "+
+				"please report it in the project's issue tracker",
+				"metric_name", fqName, "query_field_names", others)
+
+			continue
+		}
+
+		result[qField] = MetricInfo{
+			desc:            prometheus.NewDesc(fqName, string(rField), []string{uuidLabel}, nil),
+			MType:           prometheus.GaugeValue,
+			ValueMultiplier: names[qField].multiplier,
+		}
 	}
 
 	return result
