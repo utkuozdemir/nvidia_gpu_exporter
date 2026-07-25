@@ -71,7 +71,7 @@ type migGroup struct {
 //
 //nolint:cyclop // one linear pass: mode gate, enumeration, GPM per instance
 func (b *Backend) collectMIG(
-	dev nvml.Device,
+	dev device,
 	parentUUID string,
 	extras *collect.Extras,
 	seenGIs map[string]bool,
@@ -102,6 +102,13 @@ func (b *Backend) collectMIG(
 	// get their retained samples mistaken for orphans
 	for _, group := range groups {
 		seenGIs[giKey(parentUUID, group.gi)] = true
+	}
+
+	// GPM is an all-or-nothing group: sampling allocates a handle that must be
+	// freed through a second export, so a driver providing only part of the set
+	// would either leak or crash on teardown.
+	if !b.gpmAvailable() {
+		return false
 	}
 
 	support, ret := dev.GpmQueryDeviceSupport()
@@ -151,7 +158,7 @@ func giKey(parentUUID string, gi int) string {
 //
 //nolint:cyclop,funlen // one linear enumeration pass with per-getter fallbacks
 func (b *Backend) enumerateMIG(
-	dev nvml.Device,
+	dev device,
 	parentUUID string,
 	extras *collect.Extras,
 ) ([]migGroup, bool) {
@@ -254,7 +261,7 @@ func (b *Backend) enumerateMIG(
 // whether extras collection may continue.
 //
 //nolint:cyclop // the retention guards are a linear rule set
-func (b *Backend) gpmUtilization(dev nvml.Device, key string, group migGroup) (*collect.MIGUtilization, bool) {
+func (b *Backend) gpmUtilization(dev device, key string, group migGroup) (*collect.MIGUtilization, bool) {
 	fingerprint := strings.Join(group.members, ",")
 	now := b.now()
 
@@ -281,7 +288,7 @@ func (b *Backend) gpmUtilization(dev nvml.Device, key string, group migGroup) (*
 		return nil, b.extrasFailure("mig-gpm", "cannot allocate a GPM sample", ret)
 	}
 
-	if ret := b.api.gpmMigSampleGet(dev, group.gi, sample); ret != nvml.SUCCESS {
+	if ret := b.api.gpmMigSampleGet(dev.raw(), group.gi, sample); ret != nvml.SUCCESS {
 		_ = b.api.gpmSampleFree(sample)
 
 		return nil, b.extrasFailure("mig-gpm", "cannot sample the GPU instance activity", ret)
@@ -405,7 +412,7 @@ func (b *Backend) dropOrphanGPMStates(seenGIs map[string]bool) {
 // ("NVIDIA H100 80GB HBM3 MIG 1g.10gb"), falling back to the full name when
 // the shape is unknown, or to the absent token when unreadable. The return
 // code is reported so the caller can classify lifecycle failures.
-func migProfile(mig nvml.Device) (string, nvml.Return) {
+func migProfile(mig device) (string, nvml.Return) {
 	name, ret := mig.GetName()
 	if ret != nvml.SUCCESS {
 		return tokenNotAvailable, ret
@@ -443,4 +450,16 @@ func migAppID(id uint32) string {
 	}
 
 	return strconv.FormatUint(uint64(id), 10)
+}
+
+// gpmAvailable reports whether the driver exports every GPM entry point the
+// sampling path uses. They are probed as a set because the family allocates a
+// sample through one export and releases it through another.
+func (b *Backend) gpmAvailable() bool {
+	return b.avail.Load().hasAll(
+		"nvmlGpmSampleAlloc",
+		"nvmlGpmSampleFree",
+		"nvmlGpmMigSampleGet",
+		"nvmlGpmMetricsGet",
+	)
 }

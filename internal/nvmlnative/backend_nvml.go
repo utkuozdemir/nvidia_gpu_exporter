@@ -93,9 +93,13 @@ type Backend struct {
 	// extrasWarned makes a persistent extras failure visible exactly once
 	// per family, mirroring permLogged/fnfLogged.
 	extrasWarned map[string]bool
-	// symbolsPresent caches driver-library symbol probes (constant for the
-	// process lifetime). Guarded by mu like the rest of the cycle state.
+	// symbolsPresent caches ad-hoc driver-library symbol probes. Guarded by
+	// mu like the rest of the cycle state.
 	symbolsPresent map[string]bool
+	// avail is the guarded-export snapshot for the current NVML generation.
+	// It is replaced wholesale on re-initialization rather than mutated, and
+	// read atomically because the XID watcher reads it without holding mu.
+	avail atomic.Pointer[availability]
 	// gpm retains one activity sample per GPU instance across cycles, so
 	// utilization can be computed over the inter-collection window. Guarded
 	// by mu like the rest of the cycle state; every sample is freed before
@@ -133,19 +137,59 @@ func New(logger *slog.Logger) (*Backend, error) {
 func newWithAPI(api nvmlAPI, logger *slog.Logger) (*Backend, error) {
 	backend := &Backend{api: api, now: time.Now, logger: logger}
 	if ret := backend.api.init(); ret != nvml.SUCCESS {
-		return nil, fmt.Errorf("failed to initialize NVML: %s", ret.String())
+		return nil, fmt.Errorf("failed to initialize NVML: %s", retString(ret))
 	}
 
 	backend.initialized = true
 	backend.generation.Store(1)
 	backend.genLive.Store(true)
+	backend.refreshAvailability()
+
+	// uuid labels every per-GPU series, so an absent one does not degrade a
+	// single field: it gives every GPU the same identity and collapses their
+	// series into one. There is nothing to serve in that state, so refuse to
+	// start rather than publish a corrupt scrape.
+	if !backend.avail.Load().has("nvmlDeviceGetUUID") {
+		backend.api.shutdown()
+
+		return nil, errors.New("driver library does not export nvmlDeviceGetUUID, " +
+			"which every GPU metric is labeled by")
+	}
 
 	return backend, nil
+}
+
+// refreshAvailability re-probes the guarded exports. It runs after every
+// successful initialization, not once per process: the backend re-opens NVML
+// during lifecycle recovery, which is exactly when the driver may have been
+// upgraded underneath it and the export set may differ.
+func (b *Backend) refreshAvailability() {
+	// the ad-hoc probe cache belongs to the previous library generation
+	b.symbolsPresent = nil
+
+	avail := probeSymbols(b.api.lookupSymbol, guardedSymbols)
+	b.avail.Store(avail)
+	avail.log(b.logger)
+}
+
+// device wraps a driver device handle so that every entry point it exposes is
+// guarded by the current availability snapshot.
+func (b *Backend) device(index int) (device, nvml.Return) {
+	dev, ret := b.api.deviceByIndex(index)
+	if ret != nvml.SUCCESS {
+		return nil, ret
+	}
+
+	return guardedDevice{dev: dev, avail: b.avail.Load()}, ret
 }
 
 // DriverVersion reports the installed driver version, used to pick the
 // driver-appropriate field spellings during resolution.
 func (b *Backend) DriverVersion() string {
+	if !b.avail.Load().has("nvmlSystemGetDriverVersion") {
+		return ""
+	}
+
 	version, ret := b.api.driverVersion()
 	if ret != nvml.SUCCESS {
 		return ""
@@ -311,11 +355,16 @@ func (b *Backend) collectTable(
 	if !b.initialized {
 		if ret := b.api.init(); ret != nvml.SUCCESS {
 			return nil, int(ret), &collect.FatalError{
-				Err: fmt.Errorf("failed to re-initialize NVML: %s", ret.String()),
+				Err: fmt.Errorf("failed to re-initialize NVML: %s", retString(ret)),
 			}
 		}
 
 		b.logger.Info("re-initialized NVML after a lifecycle error")
+
+		// the library was re-opened, and a driver can be replaced underneath a
+		// running process, so the export set is re-established here rather than
+		// carried over from the previous generation
+		b.refreshAvailability()
 
 		b.initialized = true
 		b.generation.Add(1)
@@ -338,7 +387,10 @@ func (b *Backend) collectTable(
 	// reading appears in every row, keeping rows mutually consistent
 	shared := sharedValues{timestamp: time.Now().Format(timestampLayout)}
 
-	driverVersion, ret := b.api.driverVersion()
+	driverVersion, ret := "", nvml.ERROR_FUNCTION_NOT_FOUND
+	if b.avail.Load().has("nvmlSystemGetDriverVersion") {
+		driverVersion, ret = b.api.driverVersion()
+	}
 	shared.driverVersion, shared.driverVersionRet = driverVersion, ret
 	shared.count, shared.countRet = count, nvml.SUCCESS
 
@@ -352,7 +404,7 @@ func (b *Backend) collectTable(
 			return nil, -1, fmt.Errorf("collection interrupted: %w", err)
 		}
 
-		dev, ret := b.api.deviceByIndex(deviceIdx)
+		dev, ret := b.device(deviceIdx)
 		if ret != nvml.SUCCESS {
 			return nil, int(ret), b.lifecycle(ret, fmt.Errorf("failed to get device %d", deviceIdx))
 		}
@@ -401,7 +453,7 @@ func (b *Backend) collectTable(
 // the backend for re-initialization and are wrapped as fatal for
 // shutdown-on-error; anything else is a plain failed collection.
 func (b *Backend) lifecycle(ret nvml.Return, err error) error {
-	err = fmt.Errorf("%w: %s", err, ret.String())
+	err = fmt.Errorf("%w: %s", err, retString(ret))
 
 	if isLifecycleError(ret) {
 		b.markLost()
@@ -496,6 +548,8 @@ func (b *Backend) tryRecover() {
 
 	b.logger.Info("re-initialized NVML after a lifecycle error (event watcher recovery)")
 
+	b.refreshAvailability()
+
 	b.initialized = true
 	b.generation.Add(1)
 	b.genLive.Store(true)
@@ -508,7 +562,7 @@ type lifecycleRetError struct {
 }
 
 func (e *lifecycleRetError) Error() string {
-	return "device collection hit a lifecycle error: " + e.ret.String()
+	return "device collection hit a lifecycle error: " + retString(e.ret)
 }
 
 // sharedValues are once-per-cycle readings injected into every device row.
@@ -629,7 +683,7 @@ const edppMultiplierFieldID = 274
 //nolint:funlen,maintidx,cyclop,gocognit,gocyclo,goconst // deliberately one linear pass mirroring the catalog order
 func (b *Backend) collectDevice(
 	ctx context.Context,
-	dev nvml.Device,
+	dev device,
 	shared sharedValues,
 	reqs plan,
 ) (map[nvidiasmi.QField]string, error) {
@@ -769,7 +823,12 @@ func (b *Backend) collectDevice(
 
 	if reqs.want("inforom.checksum_validation") {
 		// "valid" is capture-verified; the corruption spelling is not
-		ret := b.api.validateInforom(dev)
+		// seam-level call, so it carries its own guard rather than riding the
+		// guarded device surface
+		ret := nvml.ERROR_FUNCTION_NOT_FOUND
+		if b.avail.Load().has("nvmlDeviceValidateInforom") {
+			ret = b.api.validateInforom(dev.raw())
+		}
 		coll.set("inforom.checksum_validation", ret, func() string { return "valid" })
 	}
 
@@ -1043,7 +1102,7 @@ func (b *Backend) collectDevice(
 	}
 
 	if reqs.want("c2c.mode") {
-		c2c, ret := dev.GetC2cModeInfoV().V1()
+		c2c, ret := dev.GetC2cModeInfoV1()
 		coll.set("c2c.mode", ret, func() string { return onOff(c2c.IsC2cEnabled != 0) })
 	}
 
@@ -1096,7 +1155,7 @@ func (b *Backend) collectDevice(
 // The field-ID choices are trace-verified against nvidia-smi's own calls.
 //
 //nolint:cyclop,funlen // one linear pass over the batched entries and their outcomes
-func (b *Backend) collectFieldValues(dev nvml.Device, coll *devCollector, reqs plan) {
+func (b *Backend) collectFieldValues(dev device, coll *devCollector, reqs plan) {
 	entries := []struct {
 		field  nvidiasmi.QField
 		id     uint32
@@ -1222,7 +1281,7 @@ func decodeFieldValue(fv nvml.FieldValue) (float64, bool) {
 	}
 }
 
-func collectEccCounters(dev nvml.Device, coll *devCollector, reqs plan) {
+func collectEccCounters(dev device, coll *devCollector, reqs plan) {
 	locations := map[string]nvml.MemoryLocation{
 		"device_memory":  nvml.MEMORY_LOCATION_DEVICE_MEMORY,
 		"dram":           nvml.MEMORY_LOCATION_DRAM,
@@ -1263,7 +1322,7 @@ func collectEccCounters(dev nvml.Device, coll *devCollector, reqs plan) {
 	}
 }
 
-func collectSramEcc(dev nvml.Device, coll *devCollector, reqs plan) {
+func collectSramEcc(dev device, coll *devCollector, reqs plan) {
 	sramFields := []nvidiasmi.QField{
 		"ecc.errors.uncorrected.volatile.sram.parity", "ecc.errors.uncorrected.volatile.sram.secded",
 		"ecc.errors.uncorrected.aggregate.sram.parity", "ecc.errors.uncorrected.aggregate.sram.secded",
@@ -1298,7 +1357,7 @@ func collectSramEcc(dev nvml.Device, coll *devCollector, reqs plan) {
 // collectFabric fills the fabric.* fields. When there is no fabric (state 0
 // or the call fails), every field prints the bare N/A token
 // (capture-verified). Lifecycle-class failures still poison the cycle.
-func collectFabric(dev nvml.Device, coll *devCollector, reqs plan) {
+func collectFabric(dev device, coll *devCollector, reqs plan) {
 	fabricFields := []nvidiasmi.QField{
 		"fabric.state", "fabric.status", "fabric.cliqueId", "fabric.clusterUuid",
 	}
@@ -1306,7 +1365,7 @@ func collectFabric(dev nvml.Device, coll *devCollector, reqs plan) {
 		return
 	}
 
-	info, ret := dev.GetGpuFabricInfoV().V2()
+	info, ret := dev.GetGpuFabricInfoV2()
 	if ret != nvml.SUCCESS || info.State == 0 {
 		coll.classify("fabric.state", ret)
 
@@ -1334,7 +1393,7 @@ func collectFabric(dev nvml.Device, coll *devCollector, reqs plan) {
 	coll.values["fabric.clusterUuid"] = uuidBytes(info.ClusterUuid)
 }
 
-func collectPlatform(dev nvml.Device, coll *devCollector, reqs plan) {
+func collectPlatform(dev device, coll *devCollector, reqs plan) {
 	if !reqs.want("platform.chassis_serial_number", "platform.slot_number", "platform.tray_index",
 		"platform.host_id", "platform.peer_type", "platform.module_id", "platform.gpu_fabric_guid") {
 		return
@@ -1383,7 +1442,7 @@ func (b *Backend) collectComputeApps(ctx context.Context) ([]nvidiasmi.ComputeAp
 			return nil, fmt.Errorf("per-process collection interrupted: %w", err)
 		}
 
-		dev, ret := b.api.deviceByIndex(deviceIdx)
+		dev, ret := b.device(deviceIdx)
 		if ret != nvml.SUCCESS {
 			return nil, b.softLifecycle(ret, fmt.Errorf("failed to get device %d", deviceIdx))
 		}
@@ -1398,8 +1457,14 @@ func (b *Backend) collectComputeApps(ctx context.Context) ([]nvidiasmi.ComputeAp
 			return nil, b.softLifecycle(ret, fmt.Errorf("failed to list processes of device %d", deviceIdx))
 		}
 
+		nameAvailable := b.avail.Load().has("nvmlSystemGetProcessName")
+
 		for _, proc := range procs {
-			name, nret := b.api.processName(int(proc.Pid))
+			name, nret := "", nvml.ERROR_FUNCTION_NOT_FOUND
+			if nameAvailable {
+				name, nret = b.api.processName(int(proc.Pid))
+			}
+
 			if nret != nvml.SUCCESS {
 				name = tok(nret)
 			}
@@ -1433,7 +1498,7 @@ func (b *Backend) softLifecycle(ret nvml.Return, err error) error {
 		b.markLost()
 	}
 
-	return fmt.Errorf("%w: %s", err, ret.String())
+	return fmt.Errorf("%w: %s", err, retString(ret))
 }
 
 // pcieThroughputKBMultiplier converts the driver's PCIe throughput reading
@@ -1459,7 +1524,10 @@ func (b *Backend) collectExtras(ctx context.Context, opts CollectOptions) collec
 		return extras
 	}
 
-	version, ret := b.api.cudaDriverVersion()
+	version, ret := 0, nvml.ERROR_FUNCTION_NOT_FOUND
+	if b.avail.Load().has("nvmlSystemGetCudaDriverVersion") {
+		version, ret = b.api.cudaDriverVersion()
+	}
 
 	switch {
 	case ret == nvml.SUCCESS:
@@ -1515,7 +1583,7 @@ func (b *Backend) collectDeviceExtras(
 	extras *collect.Extras,
 	seenGIs map[string]bool,
 ) bool {
-	dev, ret := b.api.deviceByIndex(deviceIdx)
+	dev, ret := b.device(deviceIdx)
 	if ret != nvml.SUCCESS {
 		return b.extrasFailure("extras", "failed to get a device for the extra metrics", ret)
 	}
@@ -1545,7 +1613,7 @@ func (b *Backend) collectDeviceExtras(
 // collectEnergy appends one device's cumulative energy reading. A device
 // that cannot report it (pre-Volta) is skipped silently; other persistent
 // failures are logged once. Reports whether extras collection may continue.
-func (b *Backend) collectEnergy(dev nvml.Device, uuid string, extras *collect.Extras) bool {
+func (b *Backend) collectEnergy(dev device, uuid string, extras *collect.Extras) bool {
 	millijoules, ret := dev.GetTotalEnergyConsumption()
 
 	//nolint:exhaustive // every other return is a plain failure
@@ -1568,7 +1636,7 @@ func (b *Backend) collectEnergy(dev nvml.Device, uuid string, extras *collect.Ex
 // simultaneous pair. Reports whether extras collection may continue.
 func (b *Backend) collectPcie(
 	ctx context.Context,
-	dev nvml.Device,
+	dev device,
 	uuid string,
 	extras *collect.Extras,
 ) bool {
@@ -1647,5 +1715,5 @@ func (b *Backend) warnOnce(family, msg string, ret nvml.Return) {
 
 	b.extrasWarned[family] = true
 
-	b.logger.Warn(msg, "family", family, "nvml_return", ret.String())
+	b.logger.Warn(msg, "family", family, "nvml_return", retString(ret))
 }
