@@ -84,6 +84,42 @@ tasks:
       - task: stage
         vars: {TARGET: unit-tests}
 
+  # `task test` already replays every fuzz target's seed corpus, which is where
+  # the regression value sits. This drives the actual search instead, one target
+  # at a time because -fuzz only ever fuzzes one.
+  #
+  # It bind-mounts the working tree the way fmt does, rather than running as a
+  # stage: a discovered failure is written to testdata/fuzz/ and has to survive
+  # into the tree, which a stage that copies the sources cannot do. The cache
+  # volume also keeps the generated corpus between runs, so successive sessions
+  # build on each other's coverage instead of starting cold.
+  test:fuzz:
+    desc: 'search for new fuzz failures (FUZZTIME=30s per target)'
+    vars:
+      FUZZTIME: '{{.FUZZTIME | default "30s"}}'
+      FUZZ: >-
+        docker run --rm -u "$(id -u):$(id -g)"
+        -e GOFLAGS=-mod=mod -e HOME=/tmp
+        -e GOCACHE=/tmp/go-build -e GOMODCACHE=/tmp/go-mod
+        -v nvidia-gpu-exporter-fmt-cache:/tmp
+        -v "$PWD":/src -w /src nvidia-gpu-exporter-tools:local
+    cmds:
+      - >-
+        docker buildx build -f hack/dev.Dockerfile
+        --build-arg GO_VERSION="$(sed -n 's/^go //p' go.mod)"
+        --target fmt --load --tag nvidia-gpu-exporter-tools:local .
+      - |
+        set -eu
+        for pkg in $({{.FUZZ}} go list ./...); do
+          # a listing failure means the package does not compile, which has to
+          # surface rather than read as "no fuzz targets here"
+          listed="$({{.FUZZ}} go test -list 'Fuzz' "$pkg")"
+          for target in $(printf '%s\n' "$listed" | grep '^Fuzz' || true); do
+            echo "==> $pkg $target ({{.FUZZTIME}})"
+            {{.FUZZ}} go test "$pkg" -run '^$' -fuzz "^${target}\$" -fuzztime '{{.FUZZTIME}}'
+          done
+        done
+
   chart:docs:
     desc: regenerate the chart README from the values.yaml comments
     cmds:

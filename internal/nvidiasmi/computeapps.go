@@ -128,10 +128,21 @@ func parseComputeAppRow(line string, logger *slog.Logger) (ComputeApp, bool) {
 		return ComputeApp{}, false
 	}
 
+	// The uuid is what joins the per-process series to their GPU. Without one
+	// the row cannot be attributed, and several such rows would collapse onto
+	// one label set and fail the whole scrape as duplicates.
+	uuid := NormalizeUUID(fields[0])
+	if uuid == "" {
+		logger.Warn("skipping compute apps row with no gpu uuid",
+			"pid", pid, "row", strings.TrimSpace(line))
+
+		return ComputeApp{}, false
+	}
+
 	name := strings.TrimSpace(strings.Join(fields[2:len(fields)-1], ","))
 
 	return ComputeApp{
-		GPUUUID:     NormalizeUUID(fields[0]),
+		GPUUUID:     uuid,
 		PID:         pid,
 		ProcessName: name,
 		UsedMemory:  strings.TrimSpace(fields[len(fields)-1]),

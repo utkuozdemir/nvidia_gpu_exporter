@@ -1,0 +1,3 @@
+go test fuzz v1
+string("name, uuid")
+string("name,uuid,index")

@@ -169,7 +169,17 @@ func recordedFields(command string) ([]string, error) {
 	for token := range strings.FieldsSeq(command) {
 		_, value, isQuery := strings.Cut(token, "=")
 		if isQuery && strings.HasPrefix(token, "--query-") && !strings.HasPrefix(token, "--format") {
-			return strings.Split(value, ","), nil
+			fields := strings.Split(value, ",")
+
+			// an unnamed column cannot be requested or projected, and would
+			// render as a blank cell the exporter silently drops
+			for _, field := range fields {
+				if strings.TrimSpace(field) == "" {
+					return nil, fmt.Errorf("recorded command %q has an empty field name", command)
+				}
+			}
+
+			return fields, nil
 		}
 	}
 
