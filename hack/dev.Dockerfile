@@ -36,7 +36,7 @@ ARG NODE_VERSION=24.18.0
 # renovate: depName=koalaman/shellcheck datasource=docker
 ARG SHELLCHECK_VERSION=v0.11.0
 # renovate: depName=goreleaser/goreleaser datasource=docker
-ARG GORELEASER_VERSION=v2.17.0
+ARG GORELEASER_VERSION=v2.17.1
 
 FROM koalaman/shellcheck:${SHELLCHECK_VERSION} AS shellcheck-bin
 FROM goreleaser/goreleaser:${GORELEASER_VERSION} AS goreleaser-bin
