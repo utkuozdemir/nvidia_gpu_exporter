@@ -23,13 +23,9 @@ This is a simple exporter that uses the `nvidia-smi(.exe)` binary to collect,
 parse and export metrics. Since it only needs `nvidia-smi`, it also works on
 Windows - no Docker or Linux required.
 
-It can also skip `nvidia-smi` and read the metrics straight from the NVIDIA
-Management Library (NVML). This mode is experimental and exposes some things
-`nvidia-smi` cannot provide, like per-MIG-instance metrics and XID error
-counters; see [CONFIGURE.md](docs/CONFIGURE.md).
-
-This project is based on [a0s/nvidia-smi-exporter](https://github.com/a0s/nvidia-smi-exporter).
-However, this one is written in Go to produce a single, static binary.
+It can also skip `nvidia-smi` entirely and read the metrics straight from
+the driver library. See [the NVML backend](#try-the-native-nvml-backend)
+below.
 
 ## Use cases
 
@@ -56,6 +52,39 @@ probably the better fit; this exporter aims at the cases above.
 - Optional per-process GPU metrics: see which process uses how much GPU memory
 - Optional background collection: run `nvidia-smi` on a timer instead of on every scrape
 - Comes with its own Grafana dashboards: a [per-GPU detail](https://grafana.com/grafana/dashboards/14574) one and a [multi-GPU overview](https://grafana.com/grafana/dashboards/25547)
+
+## Try the native NVML backend
+
+On Linux, the exporter can skip `nvidia-smi` and read the metrics directly
+from the NVIDIA driver library (NVML). Every metric the default backend
+serves stays identical in name, labels and value, so existing dashboards and
+alerts keep working. On top of that it adds families `nvidia-smi` cannot
+provide: per-MIG-instance metrics, XID error counters, a total energy
+counter and PCIe throughput. The official Grafana dashboards have panels for
+all of these, which sit empty on the default backend and light up on this
+one.
+
+It ships as its own release flavor that already defaults to this backend:
+grab a `-nvml` archive from the
+[releases page](https://github.com/utkuozdemir/nvidia_gpu_exporter/releases),
+or use a `-nvml` image tag:
+
+```bash
+docker run -d \
+  --name nvidia_gpu_exporter \
+  --restart unless-stopped \
+  --gpus all \
+  -e NVIDIA_DRIVER_CAPABILITIES=utility \
+  -p 9835:9835 \
+  utkuozdemir/nvidia_gpu_exporter:latest-nvml
+```
+
+It is marked experimental mainly because it needs more mileage across driver
+versions and GPU generations. If you try it, [open an
+issue](https://github.com/utkuozdemir/nvidia_gpu_exporter/issues) about how
+it went, good or bad. That is what will get it past the experimental label.
+See [CONFIGURE.md](docs/CONFIGURE.md#experimental-native-nvml-backend) for
+the full backend comparison and current limits.
 
 ## Try it without a GPU
 
@@ -121,12 +150,13 @@ See [METRICS.md](docs/METRICS.md) for details.
 
 See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for details.
 
-### Help wanted: contribute a GPU capture
+### Contribute a GPU capture
 
-The exporter parses `nvidia-smi` output, which differs across GPU models, driver
-versions and operating systems. If you have hardware that isn't covered yet
-(datacenter cards, MIG, multi-GPU, Windows/WSL2, brand-new drivers...), you can
-help a lot by capturing your `nvidia-smi` output with one command:
+The exporter parses `nvidia-smi` output, which differs across GPU models,
+driver versions and operating systems. The test corpus already covers a good
+range of hardware, but a capture from a setup it hasn't seen yet, say a new
+GPU model or a brand-new driver, is still a welcome contribution and takes
+one command:
 
 ```bash
 ./internal/captures/collect.sh          # add --load for an under-load sample too
