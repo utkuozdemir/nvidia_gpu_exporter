@@ -24,6 +24,27 @@ adding one is that the rule conflicts with the dashboards' long-published design
 The dashboards are normally authored in the Grafana UI and exported back into
 these files, but editing the JSON directly is fine too.
 
+## The images
+
+`dashboard.png` and `dashboard-overview.png` are what the README shows. They
+are generated, never screen-captured by hand:
+
+```bash
+task screenshots     # or hack/compose/screenshots.sh
+```
+
+That brings the dev stack up with a `grafana-image-renderer` sidecar, points it
+at row-expanded copies of these dashboards, and writes both files here. The
+renderer photographs a collapsed row as a collapsed row, which is why the copies
+exist; `render-dashboard.sh --screenshot` derives them, so there is no second
+copy of a dashboard to keep in sync.
+
+The pictures are of the NVML surface of the simulated datacenter machine, the
+only one that populates the MIG and XID panels. Refresh them when a dashboard
+changes, and read the image diff: every run photographs live demo data, so the
+pixels differ each time even when nothing else did. The `screenshots` workflow
+runs the same command and opens a pull request with the result.
+
 ## Query and panel conventions
 
 Each of these came out of a panel that looked fine and was wrong, so treat them

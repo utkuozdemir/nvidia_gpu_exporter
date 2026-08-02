@@ -114,9 +114,10 @@ Import either by ID in Grafana (*Dashboards* - *New* - *Import*), or enable
 JSON is also in this repository under [docs/grafana](docs/grafana).
 
 Here's how they look:
-![Grafana dashboard](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/docs/grafana/dashboard.png)
 
-![Grafana overview dashboard](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/docs/grafana/dashboard-overview.png)
+![Nvidia GPU Metrics](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/docs/grafana/dashboard.png)
+
+![Nvidia GPU Overview](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/docs/grafana/dashboard-overview.png)
 
 ## Installation
 

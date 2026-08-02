@@ -120,6 +120,15 @@ tasks:
           done
         done
 
+  # The dashboard images in the README are generated, not screen-captured by
+  # hand. Every run photographs live demo data, so the pictures differ each
+  # time even when nothing changed: refresh them when a dashboard changes, and
+  # read the image diff.
+  screenshots:
+    desc: regenerate the dashboard images in docs/grafana (needs the dev stack)
+    cmds:
+      - ./hack/compose/screenshots.sh
+
   chart:docs:
     desc: regenerate the chart README from the values.yaml comments
     cmds:

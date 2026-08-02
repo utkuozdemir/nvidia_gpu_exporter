@@ -1,26 +1,202 @@
-# Machine "datacenter": two healthy H200s, a MIG topology on GPU 0 whose first GPU
-# instance hosts two compute instances (the live probe for dashboard join
-# cardinality), a pre-seeded XID history and slow ongoing XID events. Served
-# by BOTH dev-stack flavors: exec-datacenter replays the table through the fake
-# nvidia-smi (which ignores the extras block - the exec surface honestly has
-# no MIG/XID/energy families), nvml-datacenter serves the full surface through the
-# demo backend. Both re-read this file on every scrape/collection cycle; a
-# demo-side edit resets the synthesized counters, like a driver reload.
+# Machine "datacenter": an eight-GPU H200 node, the shape an HGX box actually
+# ships in, with MIG topologies on two cards (GPU 0's first GPU instance hosts
+# two compute instances, the live probe for dashboard join cardinality), a
+# pre-seeded XID history and slow ongoing XID events. Served by BOTH dev-stack
+# flavors: exec-datacenter replays the table through the fake nvidia-smi (which
+# ignores the extras block - the exec surface honestly has no MIG/XID/energy
+# families), nvml-datacenter serves the full surface through the demo backend.
+# Both re-read this file on every scrape/collection cycle; a demo-side edit
+# resets the synthesized counters, like a driver reload.
+#
+# This is the machine the README's dashboard images are taken from, so the
+# eight cards are deliberately doing eight different things rather than the
+# same thing eight times: a node where every card reads alike tells a reader
+# nothing about what the dashboards show. The per-GPU blocks below set each
+# card's level and the top-level block covers what they share.
 capture: linux-x86_64__nvidia-h200__590.48.01
 state: load
 fluctuate: true
-gpus: 2
+
+# Each scrape draws from a band independently, so the bands are narrow on
+# purpose: a wide one is not a value that drifts, it is a value that teleports,
+# and the charts turn to noise. Width here is variety *between* cards, not
+# within one.
+gpus:
+  # 0: the flagship rank of a training job, working hard enough that the driver
+  # is holding it at its thermal target. This is the card the detail dashboard
+  # is photographed on, so it carries the whole story: pegged, memory nearly
+  # full, MIG partitions, an XID history, and one honest reason to be throttled.
+  - overrides:
+      utilization.gpu:    {min: 96, max: 100}
+      utilization.memory: {min: 72, max: 84}
+      memory.used:        {min: 132000, max: 136000}
+      memory.free:        {min: 7157, max: 11157}
+      temperature.gpu:    {min: 81, max: 84}
+      # Sustained, and the only alertable flag any card here sets. A software
+      # thermal slowdown is the driver capping clocks to hold the temperature
+      # target, which is what a card this hot is actually doing. The hardware
+      # flag would be wrong: it means clocks cut by half or more, which the
+      # clock panels would immediately contradict.
+      clocks_event_reasons.sw_thermal_slowdown: 1
+      # so the throttling is visible where it would really show, rather than
+      # being asserted by a flag while the card runs at full speed and power
+      clocks.current.graphics: {min: 1500, max: 1700}
+      clocks.current.sm:       {min: 1500, max: 1700}
+      power.draw:         {min: 600, max: 655}
+      power.draw.average: {min: 600, max: 655}
+      power.draw.instant: {min: 600, max: 655}
+      # A range rather than a pin, and wide enough to be visible: the P-state
+      # palette is a gradient, so neighbouring states are near indistinguishable
+      # at panel size and a card that only ever reads P0/P1 draws one unbroken
+      # band. A card the driver is holding at its thermal target really does
+      # drop performance states, which is what makes the wider range honest
+      # here and not on the cards that are not being throttled.
+      pstate:             {min: 0, max: 3}
+  # 1: its peer, a little cooler
+  - overrides:
+      utilization.gpu:    {min: 93, max: 99}
+      utilization.memory: {min: 66, max: 79}
+      memory.used:        {min: 129000, max: 134000}
+      memory.free:        {min: 9157, max: 14157}
+      power.draw:         {min: 630, max: 675}
+      power.draw.average: {min: 630, max: 675}
+      power.draw.instant: {min: 630, max: 675}
+      temperature.gpu:    {min: 67, max: 71}
+      pstate:             {min: 0, max: 1}
+  # 2: a half-loaded card, clocked down between steps
+  - overrides:
+      utilization.gpu:    {min: 52, max: 71}
+      utilization.memory: {min: 28, max: 45}
+      memory.used:        {min: 76000, max: 84000}
+      memory.free:        {min: 59157, max: 67157}
+      power.draw:         {min: 370, max: 455}
+      power.draw.average: {min: 370, max: 455}
+      power.draw.instant: {min: 370, max: 455}
+      temperature.gpu:    {min: 58, max: 64}
+      pstate:             {min: 1, max: 2}
+      clocks.current.graphics: {min: 1500, max: 1700}
+      clocks.current.sm:       {min: 1500, max: 1700}
+  # 3: partitioned, several tenants at once
+  - overrides:
+      utilization.gpu:    {min: 74, max: 88}
+      utilization.memory: {min: 44, max: 61}
+      memory.used:        {min: 95000, max: 103000}
+      memory.free:        {min: 40157, max: 48157}
+      power.draw:         {min: 470, max: 545}
+      power.draw.average: {min: 470, max: 545}
+      power.draw.instant: {min: 470, max: 545}
+      temperature.gpu:    {min: 63, max: 68}
+      pstate:             {min: 1, max: 2}
+  # 4: the broken one. Uncorrectable ECC errors it cannot correct away, so the
+  # driver is asking for the card to be drained and reset. Idle-and-cold is the
+  # coherent rest of that story rather than a separate decision: work is being
+  # drained off a card waiting to be reset, not scheduled onto it.
+  - overrides:
+      gpu_recovery_action: "Drain and Reset"
+      # the reason for the recovery action. Yes/No and count fields both; the
+      # exporter maps the enum ones to 1/0.
+      ecc.errors.uncorrected.aggregate.total:  12
+      ecc.errors.uncorrected.aggregate.dram:   9
+      ecc.errors.uncorrected.aggregate.sram:   3
+      ecc.errors.uncorrected.volatile.total:   4
+      ecc.errors.uncorrected.volatile.dram:    4
+      utilization.gpu:    {min: 0, max: 3}
+      utilization.memory: {min: 0, max: 2}
+      memory.used:        {min: 1800, max: 4200}
+      memory.free:        {min: 138957, max: 141357}
+      power.draw:         {min: 88, max: 135}
+      power.draw.average: {min: 88, max: 135}
+      power.draw.instant: {min: 88, max: 135}
+      temperature.gpu:    {min: 36, max: 42}
+      pstate:             {min: 6, max: 8}
+      clocks.current.graphics: {min: 300, max: 640}
+      clocks.current.sm:       {min: 300, max: 640}
+      clocks.current.memory:   {min: 800, max: 1600}
+      # the capture's process rows are replicated onto every simulated card, so
+      # this is what keeps the drained card's process table from contradicting
+      # the rest of its story
+      used_gpu_memory:    {min: 100, max: 400}
+  # 5: inference, compute-hungry and memory-light
+  - overrides:
+      utilization.gpu:    {min: 86, max: 100}
+      utilization.memory: {min: 52, max: 68}
+      memory.used:        {min: 21000, max: 27000}
+      memory.free:        {min: 116157, max: 122157}
+      power.draw:         {min: 545, max: 620}
+      power.draw.average: {min: 545, max: 620}
+      power.draw.instant: {min: 545, max: 620}
+      temperature.gpu:    {min: 65, max: 70}
+      pstate:             {min: 0, max: 1}
+  # 6: the opposite, feeding data: memory full, compute mostly waiting
+  - overrides:
+      utilization.gpu:    {min: 14, max: 33}
+      utilization.memory: {min: 58, max: 76}
+      memory.used:        {min: 117000, max: 125000}
+      memory.free:        {min: 18157, max: 26157}
+      power.draw:         {min: 205, max: 280}
+      power.draw.average: {min: 205, max: 280}
+      power.draw.instant: {min: 205, max: 280}
+      temperature.gpu:    {min: 50, max: 57}
+      pstate:             {min: 3, max: 5}
+      clocks.current.graphics: {min: 900, max: 1300}
+      clocks.current.sm:       {min: 900, max: 1300}
+  # 7: the other end of the same job, hot and working flat out, but not at its
+  # thermal target: nothing throttles it
+  - overrides:
+      utilization.gpu:    {min: 94, max: 100}
+      utilization.memory: {min: 70, max: 83}
+      memory.used:        {min: 125000, max: 131000}
+      memory.free:        {min: 12157, max: 18157}
+      power.draw:         {min: 668, max: 698}
+      power.draw.average: {min: 668, max: 698}
+      power.draw.instant: {min: 668, max: 698}
+      temperature.gpu:    {min: 77, max: 81}
+      pstate:             0
+
+# What the cards share. Anything a per-GPU block above names beats these.
+overrides:
+  # per-process memory, against this card's 143771 MiB framebuffer
+  used_gpu_memory: {min: 9000, max: 34000}
+  # kept just under this card's reported maxima (memory 3201 MHz, graphics and
+  # sm 1980 MHz), so the clock gauges do not read over 100%
+  clocks.current.memory:   {min: 3080, max: 3195}
+  clocks.current.graphics: {min: 1880, max: 1975}
+  clocks.current.sm:       {min: 1880, max: 1975}
+  # States the jitter does not cover. An integer 0:1 range flips a flag about
+  # half the time per scrape and per GPU, which is what gives the throttle
+  # timeline something to show. Only flags WITHOUT an alert rule flip: the
+  # alertable slowdowns stay pinned at 0 so this machine cannot flicker
+  # pending alerts, exactly as on the consumer box.
+  clocks_event_reasons.sw_power_cap:                {min: 0, max: 1}
+  clocks_event_reasons.sync_boost:                  {min: 0, max: 1}
+  clocks_event_reasons.gpu_idle:                    {min: 0, max: 1}
+  clocks_event_reasons.applications_clocks_setting: {min: 0, max: 1}
+  # Alertable slowdowns are pinned off for every card, so nothing here can
+  # flicker a pending alert. GPU 0 sets the software thermal one deliberately
+  # and permanently, which is a fixture decision rather than a flicker; see the
+  # alert inventory in README.md.
+  clocks_event_reasons.hw_thermal_slowdown:         0
+  clocks_event_reasons.sw_thermal_slowdown:         0
+  clocks_event_reasons.hw_power_brake_slowdown:     0
+
 extras:
   mig:
     - gpu: 0
       instances:
         - {gi: 2, profile: 3g.71gb, cis: 2, busy: true}
         - {gi: 7, profile: 1g.18gb}
+    - gpu: 3
+      instances:
+        - {gi: 1, profile: 3g.71gb, busy: true}
+        - {gi: 5, profile: 2g.35gb, busy: true}
   xids:
     initial:
-      # one per alert tier: 79 fires the critical Xid alert, 94 the warning
-      # one, and 13 (application fault) deliberately fires nothing
+      # one per alert tier: 79 fires the critical Xid alert and 94 the warning
+      # one. 13 (application fault) and 43 (stopped kernel) are both on the
+      # chart's never-alert list and deliberately fire nothing, so the panels
+      # have events the alert rules correctly ignore
       - {gpu: 1, xid: 79, count: 2}
       - {gpu: 0, xid: 94, count: 1}
       - {gpu: 0, xid: 13, count: 1}
+      - {gpu: 5, xid: 43, count: 1}
     interval: 5m
