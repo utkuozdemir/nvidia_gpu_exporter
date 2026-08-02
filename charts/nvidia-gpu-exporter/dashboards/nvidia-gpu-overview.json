@@ -445,72 +445,72 @@
                       },
                       "1": {
                         "text": "P1",
-                        "color": "#2B62D9",
+                        "color": "#3469DB",
                         "index": 1
                       },
                       "2": {
                         "text": "P2",
-                        "color": "#4880E0",
+                        "color": "#3E70DD",
                         "index": 2
                       },
                       "3": {
                         "text": "P3",
-                        "color": "#4880E0",
+                        "color": "#4777DE",
                         "index": 3
                       },
                       "4": {
                         "text": "P4",
-                        "color": "#6E9BE8",
+                        "color": "#507FE0",
                         "index": 4
                       },
                       "5": {
                         "text": "P5",
-                        "color": "#6E9BE8",
+                        "color": "#5986E2",
                         "index": 5
                       },
                       "6": {
                         "text": "P6",
-                        "color": "#6E9BE8",
+                        "color": "#638DE4",
                         "index": 6
                       },
                       "7": {
                         "text": "P7",
-                        "color": "#6E9BE8",
+                        "color": "#6C94E6",
                         "index": 7
                       },
                       "8": {
                         "text": "P8 \u00b7 Idle",
-                        "color": "#93B5EE",
+                        "color": "#759BE7",
                         "index": 8
                       },
                       "9": {
                         "text": "P9",
-                        "color": "#93B5EE",
+                        "color": "#7EA2E9",
                         "index": 9
                       },
                       "10": {
                         "text": "P10",
-                        "color": "#93B5EE",
+                        "color": "#88A9EB",
                         "index": 10
                       },
                       "11": {
                         "text": "P11",
-                        "color": "#93B5EE",
+                        "color": "#91B0ED",
                         "index": 11
                       },
                       "12": {
                         "text": "P12 \u00b7 Deep idle",
-                        "color": "#B6CDF4",
+                        "color": "#9AB8EF",
                         "index": 12
                       },
                       "13": {
                         "text": "P13",
-                        "color": "#B6CDF4",
+                        "color": "#A3BFF0",
                         "index": 13
                       },
                       "14": {
                         "text": "P14",
-                        "color": "#B6CDF4",
+                        "color": "#ADC6F2",
                         "index": 14
                       },
                       "15": {
@@ -571,7 +571,7 @@
                       },
                       "1": {
                         "text": "1 reason active",
-                        "color": "#FF9830",
+                        "color": "#FFB357",
                         "index": 1
                       },
                       "2": {
@@ -586,7 +586,7 @@
                       },
                       "4": {
                         "text": "4 reasons active",
-                        "color": "#E02F44",
+                        "color": "#C4162A",
                         "index": 4
                       }
                     }
@@ -704,7 +704,7 @@
                       },
                       "2": {
                         "text": "Node Reboot",
-                        "color": "#E02F44",
+                        "color": "#C4162A",
                         "index": 2
                       },
                       "3": {
@@ -754,7 +754,7 @@
       },
       "id": 1,
       "options": {
-        "cellHeight": "md",
+        "cellHeight": "sm",
         "footer": {
           "countRows": false,
           "fields": "",
@@ -980,7 +980,7 @@
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
-            "fillOpacity": 10,
+            "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -989,7 +989,7 @@
             },
             "insertNulls": false,
             "lineInterpolation": "linear",
-            "lineWidth": 1,
+            "lineWidth": 2,
             "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
@@ -1076,7 +1076,7 @@
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
-            "fillOpacity": 10,
+            "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -1085,7 +1085,7 @@
             },
             "insertNulls": false,
             "lineInterpolation": "linear",
-            "lineWidth": 1,
+            "lineWidth": 2,
             "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
@@ -1172,7 +1172,7 @@
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
-            "fillOpacity": 10,
+            "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -1181,7 +1181,7 @@
             },
             "insertNulls": false,
             "lineInterpolation": "linear",
-            "lineWidth": 1,
+            "lineWidth": 2,
             "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
@@ -1268,7 +1268,7 @@
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
-            "fillOpacity": 10,
+            "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -1277,7 +1277,7 @@
             },
             "insertNulls": false,
             "lineInterpolation": "linear",
-            "lineWidth": 1,
+            "lineWidth": 2,
             "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
@@ -1376,7 +1376,7 @@
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
-            "fillOpacity": 10,
+            "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -1385,7 +1385,7 @@
             },
             "insertNulls": false,
             "lineInterpolation": "linear",
-            "lineWidth": 1,
+            "lineWidth": 2,
             "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
@@ -1474,7 +1474,7 @@
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
-            "fillOpacity": 10,
+            "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -1483,7 +1483,7 @@
             },
             "insertNulls": false,
             "lineInterpolation": "linear",
-            "lineWidth": 1,
+            "lineWidth": 2,
             "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
@@ -1569,7 +1569,7 @@
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
-            "fillOpacity": 10,
+            "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -1578,7 +1578,7 @@
             },
             "insertNulls": false,
             "lineInterpolation": "linear",
-            "lineWidth": 1,
+            "lineWidth": 2,
             "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
@@ -1692,7 +1692,7 @@
                 },
                 "1": {
                   "text": "1 reason",
-                  "color": "#FF9830",
+                  "color": "#FFB357",
                   "index": 1
                 },
                 "2": {
@@ -1707,7 +1707,7 @@
                 },
                 "4": {
                   "text": "4 reasons",
-                  "color": "#E02F44",
+                  "color": "#C4162A",
                   "index": 4
                 }
               }
@@ -1789,72 +1789,72 @@
                 },
                 "1": {
                   "text": "P1",
-                  "color": "#2B62D9",
+                  "color": "#3469DB",
                   "index": 1
                 },
                 "2": {
                   "text": "P2",
-                  "color": "#4880E0",
+                  "color": "#3E70DD",
                   "index": 2
                 },
                 "3": {
                   "text": "P3",
-                  "color": "#4880E0",
+                  "color": "#4777DE",
                   "index": 3
                 },
                 "4": {
                   "text": "P4",
-                  "color": "#6E9BE8",
+                  "color": "#507FE0",
                   "index": 4
                 },
                 "5": {
                   "text": "P5",
-                  "color": "#6E9BE8",
+                  "color": "#5986E2",
                   "index": 5
                 },
                 "6": {
                   "text": "P6",
-                  "color": "#6E9BE8",
+                  "color": "#638DE4",
                   "index": 6
                 },
                 "7": {
                   "text": "P7",
-                  "color": "#6E9BE8",
+                  "color": "#6C94E6",
                   "index": 7
                 },
                 "8": {
                   "text": "P8 \u00b7 Idle",
-                  "color": "#93B5EE",
+                  "color": "#759BE7",
                   "index": 8
                 },
                 "9": {
                   "text": "P9",
-                  "color": "#93B5EE",
+                  "color": "#7EA2E9",
                   "index": 9
                 },
                 "10": {
                   "text": "P10",
-                  "color": "#93B5EE",
+                  "color": "#88A9EB",
                   "index": 10
                 },
                 "11": {
                   "text": "P11",
-                  "color": "#93B5EE",
+                  "color": "#91B0ED",
                   "index": 11
                 },
                 "12": {
                   "text": "P12 \u00b7 Deep idle",
-                  "color": "#B6CDF4",
+                  "color": "#9AB8EF",
                   "index": 12
                 },
                 "13": {
                   "text": "P13",
-                  "color": "#B6CDF4",
+                  "color": "#A3BFF0",
                   "index": 13
                 },
                 "14": {
                   "text": "P14",
-                  "color": "#B6CDF4",
+                  "color": "#ADC6F2",
                   "index": 14
                 },
                 "15": {
@@ -1937,7 +1937,7 @@
                 "barAlignment": 0,
                 "barWidthFactor": 0.6,
                 "drawStyle": "line",
-                "fillOpacity": 10,
+                "fillOpacity": 0,
                 "gradientMode": "none",
                 "hideFrom": {
                   "legend": false,
@@ -1946,7 +1946,7 @@
                 },
                 "insertNulls": false,
                 "lineInterpolation": "linear",
-                "lineWidth": 1,
+                "lineWidth": 2,
                 "pointSize": 5,
                 "scaleDistribution": {
                   "type": "linear"
@@ -2032,7 +2032,7 @@
                 "barAlignment": 0,
                 "barWidthFactor": 0.6,
                 "drawStyle": "line",
-                "fillOpacity": 10,
+                "fillOpacity": 0,
                 "gradientMode": "none",
                 "hideFrom": {
                   "legend": false,
@@ -2041,7 +2041,7 @@
                 },
                 "insertNulls": false,
                 "lineInterpolation": "linear",
-                "lineWidth": 1,
+                "lineWidth": 2,
                 "pointSize": 5,
                 "scaleDistribution": {
                   "type": "linear"
@@ -2141,7 +2141,7 @@
                 "barAlignment": 0,
                 "barWidthFactor": 0.6,
                 "drawStyle": "line",
-                "fillOpacity": 10,
+                "fillOpacity": 0,
                 "gradientMode": "none",
                 "hideFrom": {
                   "legend": false,
@@ -2150,7 +2150,7 @@
                 },
                 "insertNulls": false,
                 "lineInterpolation": "linear",
-                "lineWidth": 1,
+                "lineWidth": 2,
                 "pointSize": 5,
                 "scaleDistribution": {
                   "type": "linear"
@@ -2255,7 +2255,7 @@
                     },
                     "2": {
                       "text": "Node Reboot",
-                      "color": "#E02F44",
+                      "color": "#C4162A",
                       "index": 2
                     },
                     "3": {
@@ -2347,7 +2347,7 @@
                 "barAlignment": 0,
                 "barWidthFactor": 0.6,
                 "drawStyle": "line",
-                "fillOpacity": 10,
+                "fillOpacity": 0,
                 "gradientMode": "none",
                 "hideFrom": {
                   "legend": false,
@@ -2356,7 +2356,7 @@
                 },
                 "insertNulls": false,
                 "lineInterpolation": "linear",
-                "lineWidth": 1,
+                "lineWidth": 2,
                 "pointSize": 5,
                 "scaleDistribution": {
                   "type": "linear"
@@ -2441,7 +2441,7 @@
                 "barAlignment": 0,
                 "barWidthFactor": 0.6,
                 "drawStyle": "line",
-                "fillOpacity": 10,
+                "fillOpacity": 0,
                 "gradientMode": "none",
                 "hideFrom": {
                   "legend": false,
@@ -2450,7 +2450,7 @@
                 },
                 "insertNulls": false,
                 "lineInterpolation": "linear",
-                "lineWidth": 1,
+                "lineWidth": 2,
                 "pointSize": 5,
                 "scaleDistribution": {
                   "type": "linear"
@@ -2535,7 +2535,7 @@
                 "barAlignment": 0,
                 "barWidthFactor": 0.6,
                 "drawStyle": "line",
-                "fillOpacity": 10,
+                "fillOpacity": 0,
                 "gradientMode": "none",
                 "hideFrom": {
                   "legend": false,
@@ -2544,7 +2544,7 @@
                 },
                 "insertNulls": false,
                 "lineInterpolation": "linear",
-                "lineWidth": 1,
+                "lineWidth": 2,
                 "pointSize": 5,
                 "scaleDistribution": {
                   "type": "linear"
@@ -2629,7 +2629,7 @@
                 "barAlignment": 0,
                 "barWidthFactor": 0.6,
                 "drawStyle": "line",
-                "fillOpacity": 10,
+                "fillOpacity": 0,
                 "gradientMode": "none",
                 "hideFrom": {
                   "legend": false,
@@ -2638,7 +2638,7 @@
                 },
                 "insertNulls": false,
                 "lineInterpolation": "linear",
-                "lineWidth": 1,
+                "lineWidth": 2,
                 "pointSize": 5,
                 "scaleDistribution": {
                   "type": "linear"
@@ -2881,7 +2881,7 @@
                 "barAlignment": 0,
                 "barWidthFactor": 0.6,
                 "drawStyle": "line",
-                "fillOpacity": 10,
+                "fillOpacity": 0,
                 "gradientMode": "none",
                 "hideFrom": {
                   "legend": false,
@@ -2890,7 +2890,7 @@
                 },
                 "insertNulls": false,
                 "lineInterpolation": "linear",
-                "lineWidth": 1,
+                "lineWidth": 2,
                 "pointSize": 5,
                 "scaleDistribution": {
                   "type": "linear"
