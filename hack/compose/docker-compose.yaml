@@ -5,7 +5,7 @@ name: nvidia-gpu-exporter-dev
 # exec surface against its NVML surface and every visible difference is a
 # real surface difference (see README.md):
 #   machine "consumer" (machines/consumer.yaml): eight consumer cards, one sick
-#   machine "datacenter" (machines/datacenter.yaml): two H200s with MIG and XID history
+#   machine "datacenter" (machines/datacenter.yaml): eight H200s, MIG, XID history
 #   exec flavor:  exec-consumer / exec-datacenter -> scraped by `prometheus` (:9090)
 #   nvml flavor:  nvml-consumer / nvml-datacenter -> scraped by `prometheus-demo` (:9091)
 # Both Prometheuses relabel the same machine to the same instance name
@@ -124,6 +124,14 @@ services:
       GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
       GF_AUTH_DISABLE_LOGIN_FORM: "true"
       GF_USERS_DEFAULT_THEME: dark
+      # where to reach the renderer sidecar, which only runs under the
+      # "screenshot" profile. Harmless while it is down: Grafana starts fine
+      # and only fails if something actually asks it to render. The token is a
+      # literal for the same reason the admin above is anonymous, this stack is
+      # throwaway, but Grafana refuses to boot with the built-in default.
+      GF_RENDERING_SERVER_URL: http://renderer:8081/render
+      GF_RENDERING_CALLBACK_URL: http://grafana:3000/
+      GF_RENDERING_RENDERER_TOKEN: local-dev-stack
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning
       - ./grafana/dashboards:/var/lib/grafana/dashboards
@@ -131,6 +139,15 @@ services:
     depends_on:
       - prometheus
       - prometheus-demo
+
+  # headless Chromium, Grafana's own. Started only by screenshots.sh, which is
+  # why it sits behind a profile: everyday dev work does not need it and should
+  # not pull it. See ../../docs/grafana/README.md for what it is used for.
+  renderer:
+    profiles: ["screenshot"]
+    image: grafana/grafana-image-renderer:v5.10.3
+    environment:
+      AUTH_TOKEN: local-dev-stack
 
 volumes:
   prometheus-data:

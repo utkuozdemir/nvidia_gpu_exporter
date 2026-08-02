@@ -9,9 +9,16 @@ surface difference, not a different-simulated-hardware artifact:
 - **machine "consumer"** (`machines/consumer.yaml`): an eight-GPU consumer inference
   box, one card deliberately sick (health banner, throttle timeline,
   temperature alerts).
-- **machine "datacenter"** (`machines/datacenter.yaml`): two healthy H200s with a MIG
-  topology (one GPU instance deliberately hosting two compute instances, the
-  live probe for dashboard join cardinality) and an XID error history.
+- **machine "datacenter"** (`machines/datacenter.yaml`): an eight-GPU H200 node,
+  the shape an HGX box ships in, with MIG topologies on two cards (one GPU
+  instance deliberately hosting two compute instances, the live probe for
+  dashboard join cardinality) and an XID error history. The eight cards are
+  deliberately doing eight different things, from a pegged training rank to one
+  that is broken and being drained, because this is the machine the README's dashboard
+  images are taken from and a node where every card reads alike shows nothing.
+  Each card's band is narrow for the same reason: a scrape draws from a band
+  independently, so a wide one is not a value that drifts but one that
+  teleports.
 
 Flavors: `exec-consumer`/`exec-datacenter` run the real exec pipeline against the fake
 nvidia-smi binary, scraped by `prometheus` (:9090); `nvml-consumer`/`nvml-datacenter` run
@@ -58,7 +65,9 @@ service names) make Grafana or Prometheus trip over stale state; run
 
 `render-dashboard.sh` (run by `up.sh`) needs `python3` on the host, in
 addition to Docker. `render-rules.sh` (also run by `up.sh`) needs only
-Docker: it runs helm and yq from pinned images.
+Docker: it runs helm and yq from pinned images. `screenshots.sh` needs
+`python3` and `curl`, and runs its palette pass from a pinned image for the
+same reason.
 
 ## Verify the alert rules
 
@@ -83,6 +92,20 @@ What fires out of the box, all on the sick consumer card unless noted:
   the datacenter machine's seeded XID history, demo backend only (the exec
   surface honestly has no XID metrics). Xid 13 is also seeded and
   deliberately fires nothing (application fault).
+- `NvidiaGpuRecoveryActionNeeded` and `NvidiaGpuUncorrectableEccErrors` —
+  from the datacenter machine's GPU 4, on both backends. That card carries
+  uncorrectable ECC errors and the "Drain and Reset" recovery action the
+  driver asks for because of them, and is idle and cool because nothing is
+  being scheduled onto a card waiting to be reset. The consumer machine's
+  sick card fires the same two from a different cause, so both surfaces have
+  a broken card to look at.
+- `NvidiaGpuSoftwareThermalSlowdown` — from the datacenter machine's GPU 0,
+  on both backends. That card is pinned at its thermal target (81-84C) with
+  the software thermal flag set and its clocks and power held down to match,
+  so the throttle timeline and the clock panels tell the same story. It is
+  the one alertable flag any card on this machine sets deliberately, and it is
+  sustained rather than flickering. The rule ships disabled by default in the
+  chart; the dev render force-enables everything.
 - Healthy cards fire nothing: the alertable slowdown flags are pinned 0 on
   them, and only cosmetic flags flip randomly.
 
@@ -103,10 +126,11 @@ default stack:
   compute-apps query doubles it, and past the stack's 5s scrape timeout the
   scrape dies before it can report a slow duration (the dev render lowers
   the slow threshold to 2s for exactly this headroom reason).
-- `NvidiaGpuSoftwareThermalSlowdown` and `NvidiaGpuPowerBrake`: flip the
-  machine-level `clocks_event_reasons.sw_thermal_slowdown` or
-  `.hw_power_brake_slowdown` override in `machines/consumer.yaml` from `0`
-  to `1`; revert to recover.
+- `NvidiaGpuPowerBrake`: flip the machine-level
+  `clocks_event_reasons.hw_power_brake_slowdown` override in
+  `machines/consumer.yaml` from `0` to `1`; revert to recover.
+  (`NvidiaGpuSoftwareThermalSlowdown` already fires from the datacenter
+  machine, see above.)
 - `NvidiaGpuMissing`: shrink the `gpus:` list of a machine live (e.g. 8 to
   7 entries); the alert compares against the recent 6h maximum. The
   all-GPUs-gone form cannot be driven here (the fake refuses a zero-GPU
@@ -155,6 +179,34 @@ To drive a different card, change `capture:` to any embedded capture name
 binary embeds the full corpus). The `extras:` block (MIG topology, XID
 events, PCIe ranges) is read by the demo backend and ignored by the fake —
 the full reference is the demo mode section in `docs/CONFIGURE.md`.
+
+## Regenerate the README's dashboard images
+
+```bash
+./hack/compose/screenshots.sh    # or: task screenshots
+```
+
+Brings the stack up with the `screenshot` profile, which adds a
+`grafana-image-renderer` sidecar, and writes `docs/grafana/dashboard*.png`.
+Nothing else uses the profile, so ordinary runs neither pull nor start that
+image.
+
+There is no browser automation involved: the renderer is a service Grafana
+talks to, and a capture is an HTTP GET with `height=-1` for the whole page. It
+will not open a collapsed row, so the script points it at the row-expanded
+copies that `render-dashboard.sh --screenshot` derives.
+
+Both captures are the whole page, taken at the same instant, with `height=-1`
+asking the renderer for the full height rather than a viewport, at twice the
+nominal width so the small type survives being downsampled into a README. They
+are then reduced to a palette, which is what makes rendering at that size
+affordable: a dashboard is mostly flat colour, so the palette carries the whole
+picture at roughly the size of the hand-made images it replaces.
+
+A cold stack waits once, for `WINDOW` (2 minutes), which is how far back the
+pictures reach; a stack that has been up waits for nothing.
+`OUT_DIR=somewhere` writes the images elsewhere, which is how a run is
+reviewed without touching the committed ones.
 
 ## Iterate on the dashboards
 
