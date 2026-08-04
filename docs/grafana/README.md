@@ -67,6 +67,13 @@ and failed-collection cases, before committing.
   aggregating.
 - **Panels reading NVML-only families need an `unless`-guarded uuid-only arm**,
   or they go blank instead of degrading when a collection fails.
+- **Fields some hardware honestly lacks get one of two absence idioms.** A
+  single-value panel ORs a `sum(nvidia_smi_gpu_info{...}) * 0 - 1` arm and maps
+  `-1` to "N/A", which keeps three states apart: a reading, N/A on a card that
+  is alive but lacks the field (a passively cooled card's fan), and "No data"
+  when collection itself failed. A timeseries only gets `noValue: N/A`, because
+  the sentinel would draw as a flat line there; that blurs the failed-collection
+  case, which is acceptable on a graph whose neighbours all blank out with it.
 - **State timelines** use fixed/`text` color mode with no thresholds key; the
   value mappings carry the band colors.
 - **Multi-GPU timeseries** use `palette-classic`, because dynamically-named

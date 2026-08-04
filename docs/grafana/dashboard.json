@@ -915,7 +915,18 @@
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "-1": {
+                  "text": "N/A",
+                  "color": "#6E7B8B",
+                  "index": 0
+                }
+              }
+            }
+          ],
           "max": 1,
           "min": 0,
           "thresholds": {
@@ -962,7 +973,7 @@
             "uid": "${datasource}"
           },
           "exemplar": true,
-          "expr": "nvidia_smi_fan_speed_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+          "expr": "sum(nvidia_smi_fan_speed_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}) or sum(nvidia_smi_gpu_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}) * 0 - 1",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
@@ -2290,7 +2301,8 @@
               }
             ]
           },
-          "unit": "percentunit"
+          "unit": "percentunit",
+          "noValue": "N/A"
         },
         "overrides": []
       },
