@@ -70,10 +70,17 @@ and failed-collection cases, before committing.
 - **Fields some hardware honestly lacks get one of two absence idioms.** A
   single-value panel ORs a `sum(nvidia_smi_gpu_info{...}) * 0 - 1` arm and maps
   `-1` to "N/A", which keeps three states apart: a reading, N/A on a card that
-  is alive but lacks the field (a passively cooled card's fan), and "No data"
-  when collection itself failed. A timeseries only gets `noValue: N/A`, because
-  the sentinel would draw as a flat line there; that blurs the failed-collection
-  case, which is acceptable on a graph whose neighbours all blank out with it.
+  is alive but lacks the field (a passively cooled card's fan, whole-GPU
+  utilization on a MIG-enabled card), and "No data" when collection itself
+  failed. A timeseries only gets a `noValue` text, because the sentinel would
+  draw as a flat line there; that blurs the failed-collection case, which is
+  acceptable on a graph whose neighbours all blank out with it. The texts state
+  what is known, not a cause the panel cannot prove: "No XID data", never "no
+  XIDs happened", because the exec backend records none regardless.
+- **Never put a benign `noValue` on a panel whose query already carries a
+  `gpu_info` fallback arm.** Such a panel is empty *only* when collection is
+  dead, so a calm label there would caption the one state that must look
+  broken. Check the query before adding a text, not the panel type.
 - **State timelines** use fixed/`text` color mode with no thresholds key; the
   value mappings carry the band colors.
 - **Multi-GPU timeseries** use `palette-classic`, because dynamically-named
