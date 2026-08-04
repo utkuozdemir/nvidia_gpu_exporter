@@ -115,7 +115,7 @@ services:
       - ./alertmanager:/etc/alertmanager:ro
 
   grafana:
-    image: grafana/grafana:13.1.1
+    image: grafana/grafana:13.1.2
     ports:
       - "3000:3000"
     environment:
@@ -145,7 +145,7 @@ services:
   # not pull it. See ../../docs/grafana/README.md for what it is used for.
   renderer:
     profiles: ["screenshot"]
-    image: grafana/grafana-image-renderer:v5.10.3
+    image: grafana/grafana-image-renderer:v5.11.1
     environment:
       AUTH_TOKEN: local-dev-stack
 
