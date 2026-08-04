@@ -1016,7 +1016,8 @@
           },
           "unit": "percentunit",
           "min": 0,
-          "max": 1
+          "max": 1,
+          "noValue": "Not reported by driver"
         },
         "overrides": []
       },
@@ -1112,7 +1113,8 @@
           },
           "unit": "percentunit",
           "min": 0,
-          "max": 1
+          "max": 1,
+          "noValue": "Not reported by driver"
         },
         "overrides": []
       },
@@ -2177,7 +2179,8 @@
                 ]
               },
               "min": 0,
-              "decimals": 0
+              "decimals": 0,
+              "noValue": "No ECC reported"
             },
             "overrides": []
           },
@@ -2271,7 +2274,8 @@
                     }
                   }
                 }
-              ]
+              ],
+              "noValue": "Not reported by driver"
             },
             "overrides": []
           },
@@ -2382,7 +2386,8 @@
                   }
                 ]
               },
-              "unit": "watt"
+              "unit": "watt",
+              "noValue": "No energy data"
             },
             "overrides": []
           },
@@ -2476,7 +2481,8 @@
                   }
                 ]
               },
-              "unit": "Bps"
+              "unit": "Bps",
+              "noValue": "No PCIe data"
             },
             "overrides": []
           },
@@ -2570,7 +2576,8 @@
                   }
                 ]
               },
-              "unit": "Bps"
+              "unit": "Bps",
+              "noValue": "No PCIe data"
             },
             "overrides": []
           },
@@ -2797,7 +2804,7 @@
             "defaults": {
               "unit": "",
               "mappings": [],
-              "noValue": "No MIG partitions"
+              "noValue": "No MIG instances reported"
             },
             "overrides": []
           },
@@ -2916,7 +2923,8 @@
                   }
                 ]
               },
-              "unit": "percentunit"
+              "unit": "percentunit",
+              "noValue": "No MIG activity data"
             },
             "overrides": []
           },
@@ -2988,7 +2996,8 @@
                     "value": null
                   }
                 ]
-              }
+              },
+              "noValue": "No MIG memory data"
             },
             "overrides": []
           },

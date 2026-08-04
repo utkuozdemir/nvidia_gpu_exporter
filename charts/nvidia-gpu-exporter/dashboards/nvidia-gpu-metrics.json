@@ -239,8 +239,7 @@
               }
             ]
           },
-          "unit": "",
-          "noValue": "Not reported"
+          "unit": ""
         },
         "overrides": []
       },
@@ -775,13 +774,24 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Percent of time over the past sample period during which one or more kernels was executing on the GPU.\nThe sample period may be between 1 second and 1/6 second depending on the product.",
+      "description": "Percent of time over the past sample period during which one or more kernels was executing on the GPU.\nThe sample period may be between 1 second and 1/6 second depending on the product. MIG-enabled cards do not report a whole-GPU number, which shows as N/A; per-instance activity is in the MIG panels.",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "-1": {
+                  "text": "N/A",
+                  "color": "#6E7B8B",
+                  "index": 0
+                }
+              }
+            }
+          ],
           "max": 1,
           "min": 0,
           "thresholds": {
@@ -828,7 +838,7 @@
             "uid": "${datasource}"
           },
           "exemplar": true,
-          "expr": "nvidia_smi_utilization_gpu_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+          "expr": "sum(nvidia_smi_utilization_gpu_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}) or sum(nvidia_smi_gpu_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}) * 0 - 1",
           "interval": "",
           "legendFormat": "{{uuid}}",
           "refId": "A"
@@ -1271,13 +1281,24 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Percent of time over the past sample period during which global (device) memory was being read or written.\nThe sample period may be between 1 second and 1/6 second depending on the product.",
+      "description": "Percent of time over the past sample period during which global (device) memory was being read or written.\nThe sample period may be between 1 second and 1/6 second depending on the product. MIG-enabled cards do not report a whole-GPU number, which shows as N/A; per-instance activity is in the MIG panels.",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "-1": {
+                  "text": "N/A",
+                  "color": "#6E7B8B",
+                  "index": 0
+                }
+              }
+            }
+          ],
           "max": 1,
           "min": 0,
           "thresholds": {
@@ -1324,7 +1345,7 @@
             "uid": "${datasource}"
           },
           "exemplar": true,
-          "expr": "nvidia_smi_utilization_memory_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+          "expr": "sum(nvidia_smi_utilization_memory_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}) or sum(nvidia_smi_gpu_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}) * 0 - 1",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
@@ -1390,7 +1411,8 @@
               }
             ]
           },
-          "unit": "percentunit"
+          "unit": "percentunit",
+          "noValue": "Not reported by driver"
         },
         "overrides": []
       },
@@ -1487,7 +1509,8 @@
               }
             ]
           },
-          "unit": "percentunit"
+          "unit": "percentunit",
+          "noValue": "Not reported by driver"
         },
         "overrides": []
       },
@@ -2973,7 +2996,8 @@
                   }
                 ]
               },
-              "unit": "bytes"
+              "unit": "bytes",
+              "noValue": "No process data"
             },
             "overrides": []
           },
@@ -3233,7 +3257,8 @@
                   }
                 ]
               },
-              "unit": "none"
+              "unit": "none",
+              "noValue": "No ECC reported"
             },
             "overrides": []
           },
@@ -3512,7 +3537,8 @@
                 ]
               },
               "unit": "none",
-              "decimals": 0
+              "decimals": 0,
+              "noValue": "No XID data"
             },
             "overrides": []
           },
@@ -3606,7 +3632,8 @@
                   }
                 ]
               },
-              "unit": "Bps"
+              "unit": "Bps",
+              "noValue": "No PCIe data"
             },
             "overrides": []
           },
@@ -3662,7 +3689,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "Power averaged from the driver's cumulative energy counter, overlaid with the sampled power draw: the counter integrates everything between collections, the sample is one instant. Served only by the nvml and demo backends; absent under the default exec backend.",
+          "description": "Compares power integrated from the energy counter against the sampled power draw. The energy counter is NVML-only, so the default backend draws only the sampled line.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3786,7 +3813,7 @@
                 ]
               },
               "unit": "kwatth",
-              "noValue": "No data yet"
+              "noValue": "No energy data"
             },
             "overrides": []
           },
@@ -3884,7 +3911,8 @@
                   }
                 ]
               },
-              "unit": "bytes"
+              "unit": "bytes",
+              "noValue": "No MIG memory data"
             },
             "overrides": []
           },
@@ -3978,7 +4006,8 @@
                   }
                 ]
               },
-              "unit": "percentunit"
+              "unit": "percentunit",
+              "noValue": "No MIG activity data"
             },
             "overrides": []
           },
@@ -4072,7 +4101,8 @@
                   }
                 ]
               },
-              "unit": "percentunit"
+              "unit": "percentunit",
+              "noValue": "No MIG activity data"
             },
             "overrides": []
           },
