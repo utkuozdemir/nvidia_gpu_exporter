@@ -259,6 +259,29 @@ There is also an experimental `-nvml` image variant (for example
 `utkuozdemir/nvidia_gpu_exporter:latest-nvml`) that reads the driver library
 directly instead of running `nvidia-smi`. See [CONFIGURE.md](CONFIGURE.md).
 
+The image is distroless: it contains the exporter binary and a minimal
+runtime, with no shell, package manager, or other tools. This keeps it small
+and keeps scanner findings near zero, but it means there is no shell to
+`docker exec` into and derived images cannot run shell commands in `RUN`
+steps. Executing a binary directly still works, e.g.,
+`docker exec <container> nvidia-smi` to check that the driver injection
+worked. If you need extra tools next to the exporter
+(for example a custom `--nvidia-smi-command` wrapper), start from a fuller
+base image and copy the binary in:
+
+```dockerfile
+FROM debian:stable-slim
+COPY --from=utkuozdemir/nvidia_gpu_exporter:latest /usr/bin/nvidia_gpu_exporter /usr/bin/
+ENTRYPOINT ["/usr/bin/nvidia_gpu_exporter"]
+```
+
+When deriving from the `-nvml` variant this way, also carry over its
+`NVIDIA_VISIBLE_DEVICES=all` and `NVIDIA_DRIVER_CAPABILITIES=utility`
+environment variables: they are what makes the NVIDIA runtime inject the
+driver library when the container spec sets no `NVIDIA_*` variables itself,
+and without them the exporter fails at startup with a library-not-found
+error.
+
 > [!TIP]
 > The Docker image is also available from GHCR as `ghcr.io/utkuozdemir/nvidia_gpu_exporter`
 
@@ -310,10 +333,13 @@ cosign verify \
 On hosts where the toolkit cannot be installed, you can mount the required
 pieces into the container yourself: each `/dev/nvidia*` device, the
 `nvidia-smi` binary, and the `libnvidia-ml.so*` library files from the host
-library directory. Be warned that this is fragile: the library symlink chain
-breaks on driver upgrades, the device list varies with GPU count, and library
-paths differ per distribution and architecture. Prefer the toolkit whenever
-possible.
+library directory. Mount the libraries into the container's default library
+directory (`/usr/lib/x86_64-linux-gnu` on amd64, `/usr/lib/aarch64-linux-gnu`
+on arm64), because the image carries no `ldconfig` to register any other
+location, or set `LD_LIBRARY_PATH` to the directory you chose. Be warned that this is fragile: the library symlink
+chain breaks on driver upgrades, the device list varies with GPU count, and
+library paths differ per distribution and architecture. Prefer the toolkit
+whenever possible.
 
 ## Running in Kubernetes
 

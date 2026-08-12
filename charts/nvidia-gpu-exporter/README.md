@@ -266,7 +266,7 @@ grafanaDashboard:
 | nameOverride | string | `""` | Override the chart name |
 | nodeSelector | object | `{"kubernetes.io/os":"linux"}` | Node selector for the pods. The images are Linux-only, hence the default. Add a GPU node label to keep the DaemonSet off non-GPU nodes, e.g. `nvidia.com/gpu.present: "true"` on clusters with GPU Feature Discovery (see the README section on scheduling). Helm merges maps key by key, so overriding with `{}` does not clear the default; set the whole value to `null` to remove it. |
 | nvidiaDriverCapabilities | string | `"utility"` | NVIDIA driver capability tier to request. `utility` is the nvidia-smi/NVML tier, which is all the exporter needs. |
-| nvidiaSmiCommand | string | `"nvidia-smi"` | The command to run to get `nvidia-smi` compatible output. Can be a custom path and/or args. |
+| nvidiaSmiCommand | string | `"nvidia-smi"` | The command to run to get `nvidia-smi` compatible output. Can be a custom path and/or args. Note the official image contains only the exporter binary (no shell or ssh), so a wrapper command needs a custom image. |
 | nvidiaVisibleDevices | string | `"all"` | Which GPUs to make visible to the exporter. `all` monitors every GPU on the node. |
 | podAnnotations | object | `{}` | Annotations to add to the pods |
 | podLabels | object | `{}` | Extra labels to add to the pods |

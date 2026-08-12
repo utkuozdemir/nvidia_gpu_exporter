@@ -1,4 +1,6 @@
-FROM debian:13-slim
+# minimal glibc base: the cgo binary and the injected driver library need a
+# libc and its loader inside the container, so scratch/static bases cannot work
+FROM gcr.io/distroless/base-nossl-debian13:latest@sha256:de74d0660f05c00818d6cb18792e0ef4f7de2e94556a5978030369d0794d5232
 
 ARG TARGETPLATFORM
 COPY ${TARGETPLATFORM}/nvidia_gpu_exporter /usr/bin/nvidia_gpu_exporter
@@ -7,6 +9,10 @@ COPY ${TARGETPLATFORM}/nvidia_gpu_exporter /usr/bin/nvidia_gpu_exporter
 # even when the pod/container spec sets no NVIDIA_* env itself
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=utility
+
+# stays root (the base default) on purpose: changing the execution identity
+# of a widely deployed image is a migration of its own. GPU access itself
+# does not need root, and the chart documents a nonroot security context
 
 EXPOSE 9835
 # the binary in this image is the nvml flavor and defaults to the nvml
