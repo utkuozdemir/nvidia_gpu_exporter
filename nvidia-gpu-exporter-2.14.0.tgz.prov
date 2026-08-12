@@ -1,0 +1,54 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+annotations:
+  artifacthub.io/license: MIT
+  artifacthub.io/links: |
+    - name: Grafana dashboard
+      url: https://grafana.com/grafana/dashboards/14574
+    - name: Grafana dashboard (multi-GPU overview)
+      url: https://grafana.com/grafana/dashboards/25547
+  artifacthub.io/signKey: |
+    fingerprint: 93122B2C53431C2F60964EB7EAC49314A32B9205
+    url: https://utkuozdemir.github.io/nvidia_gpu_exporter/pubkey.asc
+apiVersion: v2
+appVersion: 1.14.0
+description: Nvidia GPU exporter for prometheus, using nvidia-smi binary to gather
+  metrics.
+home: https://github.com/utkuozdemir/nvidia_gpu_exporter
+icon: https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/docs/img/nvidia.png
+keywords:
+- - nvidia
+- - gpu
+- - exporter
+- - nvidia-smi
+- - prometheus
+maintainers:
+- - email: utkuozdemir@gmail.com
+  name: Utku Özdemir
+  url: https://utkuozdemir.org
+name: nvidia-gpu-exporter
+sources:
+- - https://github.com/utkuozdemir/nvidia_gpu_exporter
+type: application
+version: 2.14.0
+
+...
+files:
+  nvidia-gpu-exporter-2.14.0.tgz: sha256:7ced7ad35bf3131291f05f559eb0470d8eb26b8967da02951e986179437bf3d1
+-----BEGIN PGP SIGNATURE-----
+
+wsFcBAEBCgAQBQJqfNo1CRDqxJMUoyuSBQAA0TQQAJkbSF3S4/m4ei2IHJ8bsP3V
+DxhkJAfgV9bOExpUTNj4QjsGAFcOOghHkwZJKNuOxlAzj9skp73cYXVIrSvzcLA6
+x0geRLYnQhRHHOeFWTnmSP72KooPQlgJJlc4GViCCeAn5WIiaKnWnDA+NLyEOFS8
+PCRoYfTV6g5fCa/cCP1RpRrsmOCotSolgvAk0m/A8A7HGoMhUxYzFp+miUjTPBue
+JIgaPusgRW4NBeYGlgNG/j7wtX1Iq3b3Gc06O7WYChLJd6SHYOHnje0DzwcMOIC4
+2RsGj9fdReWNqFHokkPcw3VHmIQTUhSKNTNIwQcBIM/YNQ0KqXbnn0De78Lr0+Ab
+Nw73UW15+5h4XiwlrL45QaVazqT35WQDC3aLTtzpiQrcCFaMPEE35tjI6uez0Ynn
+FFClTAor0emLINmlTP0t3m3LbUf/t3PeB5jRgOBAbANFPPgiIi6O2SyRnkrhrUtn
+3q2WHLQ2SN8+/qaan4UQT0k4cbgAQQPjyoT6jZSlxGMF6v4nCJXsp/03lvTmS6dI
+8Eq1fmA5UXmKNcQV8eahEkQdcv6jqZ3AFKAP1BIZkvGHRxDIA+OIzpOZFZp/lFsU
+KVcBR8Wm49nDQyF42FYNqbzdTSouFfco86bYjJ1RvkuMFQTlA2f5cZ2WWtxwua1p
+b/ONVSc/8qowHkUTg6DD
+=wIvF
+-----END PGP SIGNATURE-----
