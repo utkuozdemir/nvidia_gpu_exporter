@@ -392,6 +392,24 @@ func TestValueOverrideQuotedSpaces(t *testing.T) {
 	assert.Regexp(t, `nvidia_smi_gpu_info\{[^}]*name="Fake RTX 3090"`, scrape(t, baseURL))
 }
 
+// TestUnknownUnitFieldOnWire proves a field with a rate unit reaches the
+// scrape output under its mapped name. The whole corpus reports [N/A] for
+// these fields, so the expected-output comparisons never see them, and only
+// the exposition layer shows the name a scraper actually gets: under a
+// UTF-8-lenient client library an unsanitized name would register fine and
+// then vary with the scraper's name-escaping negotiation.
+func TestUnknownUnitFieldOnWire(t *testing.T) {
+	t.Parallel()
+
+	baseURL := startExporter(t, "--nvidia-smi-command="+
+		fakeCommand("linux-x86_64__nvidia-geforce-rtx-2080-super__610.57.04",
+			"--set", quote("power_smoothing.curr_profile.ramp_up_rate=100.00 W/s")))
+
+	assert.Regexp(t,
+		`nvidia_smi_power_smoothing_curr_profile_ramp_up_rate_watts_per_second\{uuid="[^"]+"\} 100\b`,
+		scrape(t, baseURL))
+}
+
 // TestValueRange proves --set-range flows through to a metric within its bounds.
 func TestValueRange(t *testing.T) {
 	t.Parallel()

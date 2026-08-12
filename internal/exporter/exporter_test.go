@@ -121,6 +121,89 @@ func TestBuildFQNameAndMultiplierMilliseconds(t *testing.T) {
 	assert.Equal(t, "prefix_power_smoothing_window_multiplier_seconds", fqName)
 }
 
+func TestBuildFQNameAndMultiplierSeconds(t *testing.T) {
+	t.Parallel()
+
+	// seen on driver 610.57: bbx.time_run [seconds]. the slogassert handler
+	// fails the test on any unasserted message, so this also pins that the
+	// explicit mapping produces no derivation error: the old fallback
+	// produced this same name, but with a noisy log on every startup
+	handler := slogassert.New(t, slog.LevelError, nil)
+
+	fqName, multiplier := exporter.BuildFQNameAndMultiplier(
+		"prefix",
+		"bbx.time_run [seconds]",
+		slog.New(handler),
+	)
+
+	assertFloat(t, 1, multiplier)
+	assert.Equal(t, "prefix_bbx_time_run_seconds", fqName)
+}
+
+func TestBuildFQNameAndMultiplierWattsPerSecond(t *testing.T) {
+	t.Parallel()
+
+	// seen on driver 610.57: power_smoothing.curr_profile.ramp_down_rate
+	// [W/s]. the slogassert handler fails the test on any unasserted
+	// message, so this also pins that the mapping produces no derivation
+	// error
+	handler := slogassert.New(t, slog.LevelError, nil)
+
+	fqName, multiplier := exporter.BuildFQNameAndMultiplier(
+		"prefix",
+		"power_smoothing.curr_profile.ramp_down_rate [W/s]",
+		slog.New(handler),
+	)
+
+	assertFloat(t, 1, multiplier)
+	assert.Equal(t, "prefix_power_smoothing_curr_profile_ramp_down_rate_watts_per_second", fqName)
+}
+
+func TestBuildFQNameAndMultiplierUnknownUnitSanitized(t *testing.T) {
+	t.Parallel()
+
+	// a made-up future unit: the name must come out stable and legal no
+	// matter what characters the unit carries, and the logged name must be
+	// the name that is actually exposed. the mangled spelling is the
+	// fallback of last resort, not an endorsement: a real unit that shows
+	// up is expected to get an explicit mapping like [W/s] did
+	handler := slogassert.New(t, slog.LevelError, nil)
+
+	fqName, multiplier := exporter.BuildFQNameAndMultiplier(
+		"prefix",
+		"some.future_field [MiB/s]",
+		slog.New(handler),
+	)
+
+	assertFloat(t, 1, multiplier)
+	assert.Equal(t, "prefix_some_future_field__mi_b_s", fqName)
+	handler.AssertPrecise(slogassert.LogMessageMatch{
+		Message: "returned field contains unexpected characters, it is parsed it with best effort, " +
+			"but it might get renamed in the future. please report it in the project's issue tracker",
+		Level:         slog.LevelError,
+		Attrs:         map[string]any{"parsed_name": "some_future_field__mi_b_s"},
+		AllAttrsMatch: false,
+	})
+}
+
+func TestBuildFQNameAndMultiplierDoubleUnderscorePreserved(t *testing.T) {
+	t.Parallel()
+
+	// a legal double underscore in a returned field name must survive: it
+	// ships as-is today on drivers the corpus does not record, so collapsing
+	// it would rename an established series
+	handler := slogassert.New(t, slog.LevelError, nil)
+
+	fqName, multiplier := exporter.BuildFQNameAndMultiplier(
+		"prefix",
+		"foo__bar",
+		slog.New(handler),
+	)
+
+	assertFloat(t, 1, multiplier)
+	assert.Equal(t, "prefix_foo__bar", fqName)
+}
+
 func TestBuildFQNameAndMultiplierNoPrefix(t *testing.T) {
 	t.Parallel()
 
