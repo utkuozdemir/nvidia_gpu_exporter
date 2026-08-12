@@ -210,7 +210,7 @@ Linting is `golangci-lint` configured to enable linters by default and disable a
 
 CI additionally runs a goreleaser snapshot on every change.
 That is intentional: it validates the packaging inputs (the systemd unit, the package scriptlets, the archive layouts) in CI instead of letting them fail for the first time during a real release.
-It deliberately skips the container, signing and SBOM stages, so those paths are exercised only by a real release.
+It builds the container images for every platform without publishing them, which is what gates Renovate's automerged base-digest updates, and deliberately skips only the signing and SBOM stages, so those two paths are exercised only by a real release.
 
 ## Release pipeline
 
@@ -229,6 +229,15 @@ The release job verifies that the imported signing key matches the fingerprint t
 
 The chart is published twice: to GHCR as an OCI artifact, and to a Helm repository on the `gh-pages` branch.
 Both are expected to stay available; dropping either breaks existing users.
+
+The container images sit on a distroless glibc base, the smallest base worth maintaining.
+They cannot be libc-less: the NVIDIA container runtime injects `nvidia-smi` and the driver library from the host, both dynamically linked against glibc, so the image must provide a libc and its loader even though the exporter binary itself may be static.
+This was verified empirically on real hardware through both injection mechanisms (CDI and the legacy nvidia runtime), and on a libc-less base the injected `nvidia-smi` fails to exec.
+A hand-assembled libc-only rootfs would shave a few more megabytes but means owning the libc copy and its security tracking forever, so that option is deliberately written off.
+The cgo nvml flavor links against the glibc of the release build runner, so the base's glibc must be at least as new as the runner's, an invariant to re-check on any base swap or runner upgrade.
+The base carries no version tags, so it is pinned by digest and Renovate keeps the digest fresh, gated by CI building the images.
+There is no shell in the image: derived images cannot use shell-form `RUN`, and wrapper commands need an image that copies the exporter binary onto a fuller base (documented in the install guide).
+Executing a binary that exists in the image still works, e.g., `docker exec <container> nvidia-smi`, and fuller live debugging uses ephemeral debug containers (`kubectl debug`, or a `--pid=container:...` helper container under plain Docker).
 
 One packaging footgun: the nvml image tag suffix parses as a semver pre-release.
 Strict semver therefore sorts the flavored tag *below* the plain one of the same version, while tooling that sorts lexically or by push time may pick it instead, so automation consuming these tags needs an explicit filter either way.

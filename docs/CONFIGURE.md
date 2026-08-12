@@ -170,6 +170,11 @@ Simply override the `--nvidia-smi-command` command-line argument (replace `SSH_U
 nvidia_gpu_exporter --nvidia-smi-command "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null SSH_USER@SSH_HOST nvidia-smi"
 ```
 
+This applies to the binary installation. The official container image
+contains no `ssh` or shell, so wrapper commands there need a custom image
+that copies the exporter binary onto a fuller base
+(see [INSTALL.md](INSTALL.md#running-in-docker)).
+
 ## Excluding query fields
 
 By default (`--query-field-names=AUTO`) the exporter queries every field

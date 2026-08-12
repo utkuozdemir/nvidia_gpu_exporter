@@ -30,7 +30,7 @@ port: 9835
 # -- The path to expose the metrics from
 telemetryPath: /metrics
 
-# -- The command to run to get `nvidia-smi` compatible output. Can be a custom path and/or args.
+# -- The command to run to get `nvidia-smi` compatible output. Can be a custom path and/or args. Note the official image contains only the exporter binary (no shell or ssh), so a wrapper command needs a custom image.
 nvidiaSmiCommand: nvidia-smi
 
 # -- `nvidia-smi` fields to be queried by the exporter. `AUTO` auto-detects them.
