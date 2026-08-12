@@ -3,6 +3,7 @@ package exporter
 import (
 	"context"
 	"log/slog"
+	"regexp"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -10,6 +11,12 @@ import (
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/collect"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvidiasmi"
 )
+
+// classicMetricName is the classic Prometheus metric name grammar. The
+// registry alone cannot pin this: under UTF-8 name validation it accepts
+// names whose exposed spelling then depends on the scraper's escaping
+// negotiation, so derived names must stay classic-valid on their own.
+var classicMetricName = regexp.MustCompile(`^[a-zA-Z_:][a-zA-Z0-9_:]*$`)
 
 // emptySource serves a snapshot with no reading, which is enough to register.
 type emptySource struct{}
@@ -32,6 +39,8 @@ func FuzzExporterRegisters(f *testing.F) {
 	f.Add("x [W]", "x_watts")
 	f.Add("gpu.info", "failed_scrapes_total")
 	f.Add("energy_joules_total", "xid_errors_total")
+	f.Add("power_smoothing.curr_profile.ramp_down_rate [W/s]", "bbx.time_run [seconds]")
+	f.Add("some.future_field [MiB/s]", "foo__bar")
 	f.Fuzz(func(t *testing.T, first, second string) {
 		returned := map[nvidiasmi.QField]nvidiasmi.RField{
 			"first":  nvidiasmi.RField(first),
@@ -54,6 +63,13 @@ func FuzzExporterRegisters(f *testing.F) {
 
 		if err := prometheus.NewRegistry().Register(exp); err != nil {
 			t.Fatalf("returned fields %q and %q make the exporter unregistrable: %v", first, second, err)
+		}
+
+		for _, rf := range []string{first, second} {
+			fqName, _ := BuildFQNameAndMultiplier(DefaultPrefix, nvidiasmi.RField(rf), slog.New(slog.DiscardHandler))
+			if fqName != "" && !classicMetricName.MatchString(fqName) {
+				t.Fatalf("returned field %q derives metric name %q, which is not classic-valid", rf, fqName)
+			}
 		}
 	})
 }

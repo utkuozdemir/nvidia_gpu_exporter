@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -49,6 +50,32 @@ var computeAppLabels = []string{uuidLabel, "pid", "process_name"}
 // computeAppMIGLabels is the per-process label set with MIG attribution
 // (opt-in: adding labels changes the series identity of a shipped family).
 var computeAppMIGLabels = []string{uuidLabel, "pid", "process_name", "gpu_instance_id", "compute_instance_id"}
+
+// invalidNameCharRuns matches runs of characters that are not legal in a
+// classic Prometheus metric name. Matching whole runs keeps a legal
+// underscore a driver put in a field name untouched: collapsing those would
+// rename an established series on a driver the corpus does not record.
+var invalidNameCharRuns = regexp.MustCompile(`[^a-zA-Z0-9_:]+`)
+
+// knownUnitSuffixes maps the unit suffixes nvidia-smi appends to returned
+// field names onto metric name suffixes and value multipliers. A returned
+// unit missing here derives a best-effort name that warns on every startup
+// and may be renamed once a proper mapping is added, so a new unit belongs
+// in this table.
+var knownUnitSuffixes = []struct {
+	suffix     string
+	nameSuffix string
+	multiplier float64
+}{
+	{suffix: " [W]", nameSuffix: "_watts", multiplier: 1},
+	{suffix: " [MHz]", nameSuffix: "_clock_hz", multiplier: 1000000},
+	{suffix: " [MiB]", nameSuffix: "_bytes", multiplier: 1048576},
+	{suffix: " [%]", nameSuffix: "_ratio", multiplier: 0.01},
+	{suffix: " [us]", nameSuffix: "_seconds", multiplier: 0.000001},
+	{suffix: " [ms]", nameSuffix: "_seconds", multiplier: 0.001},
+	{suffix: " [seconds]", nameSuffix: "_seconds", multiplier: 1},
+	{suffix: " [W/s]", nameSuffix: "_watts_per_second", multiplier: 1},
+}
 
 // Features selects the conditionally-described metric families. Each one
 // follows the compute-apps precedent: its descriptors exist only when the
@@ -977,33 +1004,36 @@ func BuildFQNameAndMultiplier(
 	multiplier := 1.0
 	split := strings.Split(rFieldStr, " ")[0]
 
-	switch {
-	case strings.HasSuffix(rFieldStr, " [W]"):
-		suffixTransformed = split + "_watts"
-	case strings.HasSuffix(rFieldStr, " [MHz]"):
-		suffixTransformed = split + "_clock_hz"
-		multiplier = 1000000
-	case strings.HasSuffix(rFieldStr, " [MiB]"):
-		suffixTransformed = split + "_bytes"
-		multiplier = 1048576
-	case strings.HasSuffix(rFieldStr, " [%]"):
-		suffixTransformed = split + "_ratio"
-		multiplier = 0.01
-	case strings.HasSuffix(rFieldStr, " [us]"):
-		suffixTransformed = split + "_seconds"
-		multiplier = 0.000001
-	case strings.HasSuffix(rFieldStr, " [ms]"):
-		suffixTransformed = split + "_seconds"
-		multiplier = 0.001
+	for _, unit := range knownUnitSuffixes {
+		if strings.HasSuffix(rFieldStr, unit.suffix) {
+			suffixTransformed = split + unit.nameSuffix
+			multiplier = unit.multiplier
+
+			break
+		}
 	}
 
 	suffixTransformed = strings.ReplaceAll(suffixTransformed, ".", "_")
 	suffixTransformed = util.ToSnakeCase(suffixTransformed)
 
-	if strings.ContainsAny(suffixTransformed, " []") {
-		suffixTransformed = strings.ReplaceAll(suffixTransformed, " [", "_")
-		suffixTransformed = strings.ReplaceAll(suffixTransformed, "]", "")
+	// an unrecognized unit means a best-effort name that a future release
+	// may replace with a proper mapping, so it warns even when the
+	// best-effort spelling happens to be legal
+	bestEffort := strings.ContainsAny(suffixTransformed, " []")
 
+	suffixTransformed = strings.ReplaceAll(suffixTransformed, " [", "_")
+	suffixTransformed = strings.ReplaceAll(suffixTransformed, "]", "")
+
+	if invalidNameCharRuns.MatchString(suffixTransformed) {
+		// an unrecognized unit or field name can carry characters that are
+		// not legal in a metric name (e.g. the "/" of a rate). left in, the
+		// exposed spelling would depend on the scraper's name-escaping
+		// negotiation, so normalize here and keep one stable name instead
+		suffixTransformed = invalidNameCharRuns.ReplaceAllString(suffixTransformed, "_")
+		bestEffort = true
+	}
+
+	if bestEffort {
 		logger.Error("returned field contains unexpected characters, "+
 			"it is parsed it with best effort, but it might get renamed in the future. "+
 			"please report it in the project's issue tracker",
