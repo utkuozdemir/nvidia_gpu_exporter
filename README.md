@@ -171,11 +171,10 @@ an issue. See [internal/captures/README.md](internal/captures/README.md).
 ## Star History
 
 <!-- markdownlint-disable no-inline-html -->
-<a href="https://star-history.com/#utkuozdemir/nvidia_gpu_exporter&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=utkuozdemir/nvidia_gpu_exporter&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=utkuozdemir/nvidia_gpu_exporter&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=utkuozdemir/nvidia_gpu_exporter&type=Date" />
- </picture>
+<a href="https://github.com/utkuozdemir/nvidia_gpu_exporter/stargazers">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/utkuozdemir/star-charts/main/charts/utkuozdemir/nvidia_gpu_exporter/dark.svg" />
+    <img alt="Star history of utkuozdemir/nvidia_gpu_exporter" src="https://raw.githubusercontent.com/utkuozdemir/star-charts/main/charts/utkuozdemir/nvidia_gpu_exporter/light.svg" />
+  </picture>
 </a>
 <!-- markdownlint-enable no-inline-html -->
