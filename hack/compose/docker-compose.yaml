@@ -82,7 +82,7 @@ services:
       - "9839:9835"
 
   prometheus:
-    image: prom/prometheus:v3.13.2
+    image: prom/prometheus:v3.14.0
     ports:
       - "9090:9090"
     volumes:
@@ -94,7 +94,7 @@ services:
       - exec-datacenter
 
   prometheus-demo:
-    image: prom/prometheus:v3.13.2
+    image: prom/prometheus:v3.14.0
     ports:
       - "9091:9090"
     volumes:
@@ -115,7 +115,7 @@ services:
       - ./alertmanager:/etc/alertmanager:ro
 
   grafana:
-    image: grafana/grafana:13.1.3
+    image: grafana/grafana:13.2.0
     ports:
       - "3000:3000"
     environment:
