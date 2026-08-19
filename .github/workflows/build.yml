@@ -67,7 +67,7 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4.2.0
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4.2.0
+        uses: docker/setup-buildx-action@v4.3.0
       # a full snapshot release (unpublished) rather than a single-target
       # build, so the packaging inputs (systemd unit, nfpm scriptlets) and
       # the container images are validated in CI instead of failing for the
