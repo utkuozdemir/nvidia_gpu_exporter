@@ -1,4 +1,9 @@
 version: "2"
+run:
+  # The GPU parity test is behind this tag and never runs, so the linter is the
+  # only thing that reads it. Without the tag it was not read at all.
+  build-tags:
+    - gpu
 linters:
   default: all
   disable:

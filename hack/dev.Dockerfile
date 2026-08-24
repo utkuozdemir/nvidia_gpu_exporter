@@ -84,6 +84,18 @@ RUN --mount=type=cache,target=/root/.cache/go-build,id=nvidia_gpu_exporter/go-bu
     --mount=type=cache,target=/root/.cache/golangci-lint,id=nvidia_gpu_exporter/golangci-lint \
     golangci-lint run --timeout=5m ./...
 
+# the Windows service is behind a build tag that a Linux analysis pass excludes,
+# so it needs a pass of its own. Its GPU-tagged counterpart needs no separate
+# stage: that tag is set in the linter's own config and so applies above.
+FROM base AS lint-golangci-lint-windows
+COPY .golangci.yml ./
+COPY --from=tools /usr/local/bin/golangci-lint /usr/local/bin/
+ENV GOOS=windows
+RUN --mount=type=cache,target=/root/.cache/go-build,id=nvidia_gpu_exporter/go-build \
+    --mount=type=cache,target=/go/pkg,id=nvidia_gpu_exporter/go-pkg \
+    --mount=type=cache,target=/root/.cache/golangci-lint,id=nvidia_gpu_exporter/golangci-lint \
+    golangci-lint run --timeout=5m ./...
+
 FROM base AS lint-go-mod-tidy
 RUN --mount=type=cache,target=/root/.cache/go-build,id=nvidia_gpu_exporter/go-build \
     --mount=type=cache,target=/go/pkg,id=nvidia_gpu_exporter/go-pkg \
