@@ -145,7 +145,7 @@ services:
   # not pull it. See ../../docs/grafana/README.md for what it is used for.
   renderer:
     profiles: ["screenshot"]
-    image: grafana/grafana-image-renderer:v5.12.1
+    image: grafana/grafana-image-renderer:v5.12.2
     environment:
       AUTH_TOKEN: local-dev-stack
 
