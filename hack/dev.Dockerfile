@@ -35,6 +35,9 @@ ARG MARKDOWNLINT_VERSION=0.49.1
 ARG NODE_VERSION=24.19.0
 # renovate: depName=koalaman/shellcheck datasource=docker
 ARG SHELLCHECK_VERSION=v0.11.0
+# the single declaration of the goreleaser version: the workflows read it from
+# here rather than carrying their own, so the version that validates the release
+# config is always the version that performs the release
 # renovate: depName=goreleaser/goreleaser datasource=docker
 ARG GORELEASER_VERSION=v2.18.0
 
