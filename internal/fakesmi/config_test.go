@@ -184,7 +184,7 @@ func TestSetRangeFractionalBounds(t *testing.T) {
 		{"temperature.gpu=0.001:0.002", 0.001, 0.002},
 		{"power.draw=-5.5:-5.0", -5.5, -5.0},
 	} {
-		field := strings.SplitN(tc.field, "=", 2)[0]
+		field, _, _ := strings.Cut(tc.field, "=")
 		for _, cell := range dataRows(t, field, "--capture", h200Capture, "--seed", "2", "--set-range", tc.field) {
 			assert.NotContainsf(t, strings.ToLower(cell), "e", "no exponent, got %q", cell)
 

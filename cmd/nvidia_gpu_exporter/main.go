@@ -17,9 +17,7 @@ func main() {
 	if err := dispatch(); err != nil {
 		slog.Default().Error("failed to run", "err", err)
 
-		var exitErr *exec.ExitError
-
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			os.Exit(exitErr.ExitCode())
 		}
 
