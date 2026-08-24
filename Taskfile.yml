@@ -167,9 +167,11 @@ tasks:
     desc: release
     vars:
       NEXT:
-        # renovate: depName=caarlos0/svu datasource=docker
         # run from the primary checkout: a linked worktree's .git points at a
         # common directory outside this mount
+        #
+        # the marker has to sit immediately above the version it pins, so it
+        # goes last rather than at the top of this comment block
         # renovate: depName=caarlos0/svu datasource=docker
         sh: docker run --rm -v "$PWD":/src -w /src caarlos0/svu:3.4.1 next
     cmds:
