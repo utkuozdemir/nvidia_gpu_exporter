@@ -73,8 +73,7 @@ func execQuery(ctx context.Context, command string, run RunFunc, args ...string)
 	if err != nil {
 		exitCode := -1
 
-		var exitError *exec.ExitError
-		if errors.As(err, &exitError) {
+		if exitError, ok := errors.AsType[*exec.ExitError](err); ok {
 			exitCode = exitError.ExitCode()
 		}
 

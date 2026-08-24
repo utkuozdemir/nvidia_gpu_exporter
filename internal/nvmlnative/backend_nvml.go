@@ -388,8 +388,7 @@ func (b *Backend) collectTable(
 
 		values, err := b.collectDevice(ctx, dev, shared, plan)
 		if err != nil {
-			var lifecycleErr *lifecycleRetError
-			if errors.As(err, &lifecycleErr) {
+			if lifecycleErr, ok := errors.AsType[*lifecycleRetError](err); ok {
 				return nil, int(lifecycleErr.ret), b.lifecycle(lifecycleErr.ret, err)
 			}
 

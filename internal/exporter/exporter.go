@@ -1002,7 +1002,7 @@ func BuildFQNameAndMultiplier(
 	rFieldStr := string(rField)
 	suffixTransformed := rFieldStr
 	multiplier := 1.0
-	split := strings.Split(rFieldStr, " ")[0]
+	split, _, _ := strings.Cut(rFieldStr, " ")
 
 	for _, unit := range knownUnitSuffixes {
 		if strings.HasSuffix(rFieldStr, unit.suffix) {
