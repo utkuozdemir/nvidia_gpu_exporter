@@ -1,7 +1,7 @@
 module github.com/utkuozdemir/nvidia_gpu_exporter
 
 // renovate: go
-go 1.26.6
+go 1.27.0
 
 require (
 	github.com/NVIDIA/go-nvml v0.13.3-1
