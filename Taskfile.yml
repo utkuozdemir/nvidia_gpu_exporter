@@ -23,9 +23,17 @@ tasks:
         docker buildx build -f hack/dev.Dockerfile
         --build-arg GO_VERSION="$(sed -n 's/^go //p' go.mod)"
         --target fmt --load --tag nvidia-gpu-exporter-tools:local .
-      - "{{.FMT}} sh -c 'go mod tidy && go fix ./...'"
+      # Both go fix and the linter's analysis pass read only the files their
+      # build tags and target platform select, so each needs the two
+      # configurations that between them cover every tracked file: Linux with
+      # the GPU tag, and Windows. The GPU tag comes from the linter's own
+      # config. The formatters are not tag-filtered and need neither.
+      - >-
+        {{.FMT}} sh -c 'go mod tidy && go fix -tags gpu ./...
+        && GOOS=windows go fix ./...'
       # unfixable findings are reported by lint, not by fmt
       - "{{.FMT}} golangci-lint run --fix --issues-exit-code 0 ./..."
+      - "{{.FMT}} sh -c 'GOOS=windows golangci-lint run --fix --issues-exit-code 0 ./...'"
       - "{{.FMT}} golangci-lint fmt ./..."
       # tracked files only: a bare find would also rewrite scratch directories
       # and any other worktree checked out under this one
@@ -54,6 +62,9 @@ tasks:
         vars: {TARGET: lint-go-mod-tidy}
       - task: stage
         vars: {TARGET: lint-golangci-lint}
+      # the Windows service is invisible to a Linux analysis pass
+      - task: stage
+        vars: {TARGET: lint-golangci-lint-windows}
       # never runs without a GPU, but it must keep compiling
       - task: stage
         vars: {TARGET: lint-gpu-tagged-test}

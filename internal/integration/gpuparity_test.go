@@ -393,6 +393,16 @@ func TestBackendMetricFamilyParityOnRealGPU(t *testing.T) {
 		}
 	}
 
+	compareFamiliesExecToNVML(t, execFamilies, nativeFamilies)
+	compareFamiliesNVMLToExec(t, execFamilies, nativeFamilies)
+}
+
+// compareFamiliesExecToNVML requires every family and series the exec backend
+// exports to be exported by the nvml backend too, which is the direction the
+// compatibility contract is strict in.
+func compareFamiliesExecToNVML(t *testing.T, execFamilies, nativeFamilies map[string]map[string]bool) {
+	t.Helper()
+
 	for family, execSeries := range execFamilies {
 		nativeSeries, ok := nativeFamilies[family]
 		if !ok {
@@ -420,6 +430,12 @@ func TestBackendMetricFamilyParityOnRealGPU(t *testing.T) {
 			}
 		}
 	}
+}
+
+// compareFamiliesNVMLToExec reports families only the nvml backend exports,
+// which is allowed only for the families exec cannot reach at all.
+func compareFamiliesNVMLToExec(t *testing.T, execFamilies, nativeFamilies map[string]map[string]bool) {
+	t.Helper()
 
 	for family := range nativeFamilies {
 		if _, ok := execFamilies[family]; !ok && !isNVMLOnlyFamily(family) {
