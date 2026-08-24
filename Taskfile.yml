@@ -28,9 +28,16 @@ tasks:
       # configurations that between them cover every tracked file: Linux with
       # the GPU tag, and Windows. The GPU tag comes from the linter's own
       # config. The formatters are not tag-filtered and need neither.
+      #
+      # embedlit is disabled because it corrupts code in Go 1.27.0: where an
+      # embedded type's opening brace shares a line with its first field it
+      # drops that field, sometimes leaving the file unparseable and sometimes
+      # leaving it compiling with a field silently gone, which is the dangerous
+      # case in a test fixture. Fixed upstream for 1.27.1 (golang/go#80993), so
+      # drop the flag once the toolchain moves.
       - >-
-        {{.FMT}} sh -c 'go mod tidy && go fix -tags gpu ./...
-        && GOOS=windows go fix ./...'
+        {{.FMT}} sh -c 'go mod tidy && go fix -embedlit=false -tags gpu ./...
+        && GOOS=windows go fix -embedlit=false ./...'
       # unfixable findings are reported by lint, not by fmt
       - "{{.FMT}} golangci-lint run --fix --issues-exit-code 0 ./..."
       - "{{.FMT}} sh -c 'GOOS=windows golangci-lint run --fix --issues-exit-code 0 ./...'"
@@ -163,6 +170,7 @@ tasks:
         # renovate: depName=caarlos0/svu datasource=docker
         # run from the primary checkout: a linked worktree's .git points at a
         # common directory outside this mount
+        # renovate: depName=caarlos0/svu datasource=docker
         sh: docker run --rm -v "$PWD":/src -w /src caarlos0/svu:3.4.1 next
     cmds:
       - git tag -a {{.NEXT}} -m "{{.NEXT}}"
