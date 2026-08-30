@@ -1,154 +1,192 @@
 # Metrics
 
-This page describes the exported metrics and their semantics.
+This page describes the exported metrics and what they mean.
 
-Which metrics appear depends on your GPU, driver and operating system, since
-the query fields are auto-discovered by default (`AUTO`): the exporter picks
+Which metrics appear depends on your GPU, driver and operating system. The
+query fields are auto-discovered by default (`AUTO`), so the exporter picks
 up new fields and exposes them on a best-effort basis.
 
 For a complete, real example of what a scrape looks like, see the expected
 outputs the integration tests compare against, under
 [internal/integration/testdata](../internal/integration/testdata). There is
-one file per captured GPU, driver and load state, each the exact
+one file per captured GPU, driver and load state. Each is the exact
 `nvidia_smi_*` output the exporter produces for it, so they stay current by
-construction. The exporter additionally exposes the standard Go runtime,
-process and `promhttp` metric families, which are not shown there.
+construction.
+
+The exporter additionally exposes the standard Go runtime, process and
+`promhttp` metric families, which are not shown there.
 
 For every query field the NVML backend and the default backend both serve,
-the metric is identical, except that the NVML backend reports
-`nvidia_smi_nvml_return_code` in place of `nvidia_smi_command_exit_code`. On
-top of that shared core it serves the NVML-only families described in the
-next section. The demo backend approximates the NVML backend's surface with
-synthetic data (see the demo mode section in [CONFIGURE.md](CONFIGURE.md)).
+the metric is identical. The one exception is the collection status metric:
+the NVML backend reports `nvidia_smi_nvml_return_code` in place of
+`nvidia_smi_command_exit_code`.
+
+On top of that shared core, the NVML backend serves the NVML-only families
+described in the next section. The demo backend approximates the NVML
+backend's surface with synthetic data, see
+[CONFIGURE.md](CONFIGURE.md#demo-mode).
 
 ## NVML-only metrics
 
 Some readings exist in the driver library but not in the `nvidia-smi` query
-interface, so only the NVML backend can export them:
+interface, so only the NVML backend can export them.
+
+### Energy and PCIe throughput
 
 - `nvidia_smi_energy_joules_total{uuid}` (counter): total energy consumed by
   the GPU in joules since the driver was last loaded. Always on in the NVML
-  backend; absent on GPUs that cannot report it (older than the Volta
+  backend. Absent on GPUs that cannot report it (older than the Volta
   generation). The counter resets when the driver reloads or the GPU is
   reset, so read it through `rate()` or `increase()`.
 - `nvidia_smi_pcie_throughput_tx_bytes_per_second{uuid}` and
   `nvidia_smi_pcie_throughput_rx_bytes_per_second{uuid}` (gauges): PCIe
   traffic transmitted and received by the GPU. Opt-in via
-  `--collect.pcie-throughput` because of its collection cost; see
+  `--collect.pcie-throughput` because of its collection cost, see
   [CONFIGURE.md](CONFIGURE.md). The driver samples each direction over its
   own 20ms counter window, so the two values are consecutive samples, not a
   simultaneous pair.
 
+### MIG instances
+
 On GPUs with MIG mode enabled, the NVML backend also exports per-MIG-instance
-metrics (nothing to configure, they appear when MIG instances exist):
+metrics. Nothing to configure, they appear when MIG instances exist.
 
 - `nvidia_smi_mig_info{uuid, mig_uuid, gpu_instance_id, compute_instance_id, profile}`
   (constant `1`): the identity of each MIG device. `uuid` is the parent
-  GPU's, so MIG series join with all per-GPU series; `mig_uuid` is the MIG
+  GPU's, so MIG series join with all per-GPU series. `mig_uuid` is the MIG
   device's own.
 - `nvidia_smi_mig_memory_{total,used,free,reserved}_bytes{uuid, gpu_instance_id}`
   (gauges): the GPU instance's memory. The framebuffer belongs to the GPU
   instance and is shared by its compute instances, so memory is reported
-  once per GPU instance (labeling it per MIG device would double-count on
-  instances hosting several compute slices).
+  once per GPU instance. Labeling it per MIG device would double-count on
+  instances hosting several compute slices.
 - `nvidia_smi_mig_{graphics_activity,sm_activity,sm_occupancy,tensor_activity}_ratio{uuid, gpu_instance_id}`
   and `nvidia_smi_mig_pcie_throughput_{tx,rx}_bytes_per_second{uuid, gpu_instance_id}`
   (gauges): the GPU instance's activity, computed over the window between
-  the two most recent collections. They appear from the second collection
-  that sees a GPU instance, and only on GPUs whose driver supports the GPM
-  interface (the Hopper generation and later; A100-class MIG gets inventory
-  and memory only). The window is guarded on both ends: collections less
-  than a second apart keep serving the previous values over the anchored
-  window, and after a gap longer than ten minutes the sampling reseeds (the
-  next collection emits nothing for that instance, like a first sight). The utilization is attributed per GPU instance, not per
-  MIG device: a GPU instance hosting several compute instances reports one
-  set of values, and joining `mig_info` on `(uuid, gpu_instance_id)` maps
-  them back to the MIG devices. With several independent scrapers the
-  window follows whoever collected last, so for stable windows pair this
-  with `--collect.interval`. Destroying a GPU instance and recreating a
-  different shape under the same numeric id is detected and reseeds the
-  activity sampling; recreating the exact same shape in the same placement
-  is indistinguishable (MIG uuids are deterministic), so the one window
-  spanning such a swap may blend the two instances before self-correcting.
+  the two most recent collections.
+
+The activity metrics have a few details worth knowing:
+
+- They appear from the second collection that sees a GPU instance, and only
+  on GPUs whose driver supports the GPM interface (the Hopper generation and
+  later). A100-class MIG gets inventory and memory only.
+- The window is guarded on both ends. Collections less than a second apart
+  keep serving the previous values over the previous window. After a gap
+  longer than ten minutes the sampling starts over, and the next collection
+  emits nothing for that instance, like a first sight.
+- The utilization is attributed per GPU instance, not per MIG device. A GPU
+  instance hosting several compute instances reports one set of values.
+  Joining `mig_info` on `(uuid, gpu_instance_id)` maps them back to the MIG
+  devices.
+- With several independent scrapers the window follows whoever collected
+  last. For stable windows, pair this with `--collect.interval`.
+- Destroying a GPU instance and recreating a different shape under the same
+  numeric id is detected, and the activity sampling starts over. Recreating
+  the exact same shape in the same placement is indistinguishable, because
+  MIG uuids are deterministic. So the one window spanning such a swap may
+  blend the two instances before self-correcting.
 
 With `--collect.compute-apps-mig` (requires `--collect.compute-apps` and the
 NVML backend) the per-process metrics additionally carry `gpu_instance_id`
-and `compute_instance_id` labels attributing each process to its MIG
+and `compute_instance_id` labels, attributing each process to its MIG
 instance (empty for processes on non-MIG GPUs). It is opt-in because it
 changes the label set of the per-process series.
 
 Container note: like the per-process metrics under MIG, full function needs
-generous privileges (the exporter container may need to run privileged with
-`NVIDIA_MIG_MONITOR_DEVICES=all` and share the host PID namespace); MIG
+generous privileges. The exporter container may need to run privileged with
+`NVIDIA_MIG_MONITOR_DEVICES=all` and share the host PID namespace. MIG
 inventory and memory worked unprivileged in testing.
+
+### XID errors
 
 The NVML backend also watches for XID errors, the driver's numbered error
 events (a stuck kernel, an ECC failure, a fallen-off-the-bus GPU). These are
-invisible to `nvidia-smi` and to the query-field metrics, they only surface
-through driver events or the kernel log:
+invisible to `nvidia-smi` and to the query-field metrics. They only surface
+through driver events or the kernel log.
 
 - `nvidia_smi_xid_errors_total{uuid, xid}` (counter): XID error events
   observed since the exporter started. A series appears when its first
-  event arrives; history from before the exporter started cannot be
+  event arrives. History from before the exporter started cannot be
   replayed. The counters live outside the collection pipeline, so they stay
   visible while collections fail, which is exactly when XIDs happen.
 - `nvidia_smi_xid_last_timestamp_seconds{uuid, xid}` (gauge): when the most
-  recent event was received by the exporter (the driver events carry no
-  timestamp of their own).
+  recent event was received by the exporter. The driver events carry no
+  timestamp of their own.
 
 For alerting, prefer the timestamp and filter to an explicit code allowlist:
-`time() - nvidia_smi_xid_last_timestamp_seconds{xid=~"48|62|64|74|79|95|119|120"} < 300`
-fires for the reset/reboot-class XIDs in the last five minutes, including a
-series' very first event. Alerting on every code is noise: many XIDs are
-application faults (13, 31, 43) or informational (63, 92) with no operator
-action. A rate-based expression like
-`increase(nvidia_smi_xid_errors_total[5m]) > 0` also misses a series' first
-event, because Prometheus never observed the zero before it. The Helm chart
-ships ready-made rules built this way.
 
-Nothing needs configuring; on setups where the driver does not support
-event registration the families simply stay empty.
+```text
+time() - nvidia_smi_xid_last_timestamp_seconds{xid=~"48|62|64|74|79|95|119|120"} < 300
+```
 
-Both backends also stamp the CUDA version the installed driver supports onto
+This fires for the reset/reboot-class XIDs in the last five minutes,
+including a series' very first event.
+
+Alerting on every code is noise. Many XIDs are application faults (13, 31,
+43) or informational (63, 92), with no operator action.
+
+A rate-based expression like `increase(nvidia_smi_xid_errors_total[5m]) > 0`
+also misses a series' first event, because Prometheus never observed the
+zero before it. The Helm chart ships ready-made rules built the way described
+above.
+
+Nothing needs configuring. On setups where the driver does not support event
+registration, the families simply stay empty.
+
+## CUDA version
+
+Both backends stamp the CUDA version the installed driver supports onto
 `nvidia_smi_gpu_info` as the `cuda_version` label. This is the version of
-the CUDA API the driver carries, not an installed CUDA toolkit. The default
-backend reads it from `nvidia-smi --version` once at startup; the NVML
-backend asks the library directly. When it cannot be read, the label value
-is empty.
+the CUDA API the driver carries, not an installed CUDA toolkit.
+
+The default backend reads it from `nvidia-smi --version` once at startup. The
+NVML backend asks the library directly. When it cannot be read, the label
+value is empty.
 
 ## Enum-valued metrics
 
-Many `nvidia-smi` fields report a state rather than a number. The exporter maps
-those to a number so they can be scraped. A field that is unavailable, reading a
-value like `N/A`, `[Not Supported]` or `[Insufficient Permissions]`, is not
-exported. A value that is present but not recognized (an unexpected or brand-new
-state) is also skipped rather than guessed, and is logged so the gap is visible.
+Many `nvidia-smi` fields report a state rather than a number. The exporter
+maps those to a number so they can be scraped.
+
+A field that is unavailable, reading a value like `N/A`, `[Not Supported]`
+or `[Insufficient Permissions]`, is not exported. A value that is present but
+not recognized (an unexpected or brand-new state) is also skipped rather than
+guessed, and is logged so that the gap is visible.
 
 Two-state fields become `1`/`0`. This covers every field whose value is
-`Enabled`/`Disabled`, `Yes`/`No`, or `Active`/`Not Active`, for example
-`persistence_mode`, `accounting.mode`, `display_mode`, `display_active`,
-`ecc.mode.current`/`.pending`, `mig.mode.current`/`.pending`,
-`gsp.mode.current`/`.default`, `c2c.mode`, `remapped_rows.failure`/`.pending`,
-and every `clocks_event_reasons.*` throttle flag (`gpu_idle`, `hw_slowdown`,
-`sw_power_cap`, and so on). Which fields appear depends on the GPU and driver,
-because query fields are auto-discovered.
+`Enabled`/`Disabled`, `Yes`/`No` or `Active`/`Not Active`, for example:
+
+- `persistence_mode`, `accounting.mode`, `display_mode`, `display_active`
+- `ecc.mode.current`/`.pending`, `mig.mode.current`/`.pending`
+- `gsp.mode.current`/`.default`, `c2c.mode`
+- `remapped_rows.failure`/`.pending`
+- every `clocks_event_reasons.*` throttle flag (`gpu_idle`, `hw_slowdown`,
+  `sw_power_cap`, and so on)
+
+Which fields appear depends on the GPU and driver, because query fields are
+auto-discovered.
 
 Multi-state fields carry the state as their integer value:
 
 - `nvidia_smi_pstate`: the performance state, `0` (`P0`, maximum performance)
-  through `15` (`P15`, minimum). Lower means busier, so this is not a load gauge.
+  through `15` (`P15`, minimum). Lower means busier, so this is not a load
+  gauge.
 - `nvidia_smi_gpu_recovery_action`: `0` None (healthy), `1` GPU Reset,
   `2` Node Reboot, `3` Drain P2P, `4` Drain and Reset. A value `> 0` means the
-  driver recommends a recovery action, so it is a good "GPU is unhealthy" alert.
-- `nvidia_smi_fabric_state`: `0` Not Supported, `1` Not Started, `2` In Progress,
-  `3` Completed. Only present on GPUs that join an NVLink fabric.
-- `nvidia_smi_compute_mode`: `0` Default, `1` Exclusive Thread, `2` Prohibited,
-  `3` Exclusive Process.
+  driver recommends a recovery action, so it is a good "GPU is unhealthy"
+  alert.
+- `nvidia_smi_fabric_state`: `0` Not Supported, `1` Not Started,
+  `2` In Progress, `3` Completed. Only present on GPUs that join an NVLink
+  fabric.
+- `nvidia_smi_compute_mode`: `0` Default, `1` Exclusive Thread,
+  `2` Prohibited, `3` Exclusive Process.
 
-The last three map to their native NVML enum integer; `pstate` is the raw
-performance-state number. `gpu_recovery_action` and `fabric_state` only appear
-when the hardware and driver report them (recovery action needs a recent
-driver), so their absence from an exporter's output is expected, not a bug.
+The last three map to their native NVML enum integer. `pstate` is the raw
+performance-state number.
+
+`gpu_recovery_action` and `fabric_state` only appear when the hardware and
+driver report them (the recovery action needs a recent driver). Their absence
+from an exporter's output is expected, not a bug.
 
 ## What a scrape looks like
 
@@ -197,8 +235,8 @@ nvidia_smi_command_exit_code 0
 ```
 
 Note that `nvidia_smi_failed_scrapes_total` counts failed *collections*, not
-failed scrapes. The two came apart when background collection was added; the
-name is kept for compatibility.
+failed scrapes. The two came apart when background collection was added, and
+the name is kept for compatibility.
 
 The full set is much larger and varies by hardware. See
 [internal/integration/testdata](../internal/integration/testdata) for
@@ -206,10 +244,10 @@ complete outputs across every captured GPU.
 
 ## Per-process metrics (opt-in)
 
-With `--collect.compute-apps` enabled, the exporter additionally emits one set
-of series per process holding a compute context on a GPU (see the
+With `--collect.compute-apps` enabled, the exporter additionally emits one
+set of series per process holding a compute context on a GPU. See the
 [configuration reference](CONFIGURE.md#per-process-gpu-metrics) for the
-caveats around containers, Windows and MIG):
+caveats around containers, Windows and MIG.
 
 ```text
 # HELP nvidia_smi_compute_app_info A metric with a constant '1' value labeled by the identity of a process with a compute context on a GPU.
