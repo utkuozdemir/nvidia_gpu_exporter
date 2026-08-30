@@ -208,6 +208,7 @@ The individual `task lint:*` targets are the ones to reach for while iterating, 
 The Go toolchain version is pinned in `go.mod` and CI reads it from there, so there is one place to change it.
 Linting is `golangci-lint` configured to enable linters by default and disable a short, individually-justified list; new code is expected to satisfy it instead of accumulating suppressions.
 
+GitHub CodeQL scans the repository through the default setup, which is configured in the repository settings rather than a workflow file, so nothing in the checkout records it.
 CI additionally runs a goreleaser snapshot on every change.
 That is intentional: it validates the packaging inputs (the systemd unit, the package scriptlets, the archive layouts) in CI instead of letting them fail for the first time during a real release.
 It builds the container images for every platform without publishing them, which is what gates Renovate's automerged base-digest updates, and deliberately skips only the signing and SBOM stages, so those two paths are exercised only by a real release.
@@ -217,6 +218,8 @@ It builds the container images for every platform without publishing them, which
 Releases are cut by pushing a version tag, which triggers the release workflow; the Taskfile has a target that derives the next version from the commit history and pushes the tag.
 
 The pipeline builds two binary flavors from the same source: the fully static default build, and the cgo nvml flavor.
+The release builds are reproducible on purpose: no build paths in the binaries, and the commit time as every timestamp, so the same commit yields the same bytes.
+Keep new build steps deterministic.
 Keeping the two apart is a real invariant.
 The packages and the primary container image explicitly pin themselves to the static build, because a cgo binary silently reaching the deb, the rpm or the main image would ship something that cannot run where those artifacts are expected to run.
 The nvml flavor is published as its own archive and as a suffixed image tag.
@@ -265,6 +268,8 @@ The simulated machine configurations are re-read on every collection cycle, so e
 - Nothing carries AI attribution: no "generated with" lines, no AI co-author trailers, in commits, pull requests or anywhere else.
 - Documentation is split by audience: the README orients, `docs/` carries installation, configuration and metrics reference, and community files live under `.github/`.
   Deep, area-specific documentation lives next to the thing it documents, not in `docs/`.
+- `.bestpractices.json` at the repository root holds the answers to the OpenSSF Best Practices badge questionnaire.
+  Their site reads it from the default branch and proposes the answers in the form, so a change to how the project works (tests, releases, reporting) is reflected there, not in the web form. The live entry on bestpractices.dev and this file must be updated together.
 - Dependencies are updated by Renovate, configured to merge qualifying updates as branches without opening pull requests; `.renovaterc.json` is the authority on which update classes qualify.
   Branch automerge only works while the default branch has no rule requiring a pull request before merging, so if dependency pull requests start appearing for passing updates, that rule is the thing to look for.
   Required status checks are fine and are what actually gate those merges.
@@ -273,6 +278,7 @@ The simulated machine configurations are re-read on every collection cycle, so e
 
 - `README.md`: what the project is and who it is for.
 - `docs/INSTALL.md`, `docs/CONFIGURE.md`, `docs/METRICS.md`: the user-facing reference.
+- `docs/SECURITY_MODEL.md`: what the exporter promises security-wise, the trust boundaries and how they are checked. `docs/ROADMAP.md`: what is planned and what is deliberately not.
 - `docs/grafana/README.md`: dashboard query and panel conventions.
 - `internal/captures/README.md`: the capture format, contribution flow and how captures drive the tests.
 - `hack/compose/README.md`: the local dev stack, including how to provoke specific alerts.
