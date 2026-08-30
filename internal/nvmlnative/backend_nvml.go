@@ -1133,6 +1133,11 @@ func (b *Backend) collectDevice(
 //
 //nolint:cyclop,funlen // one linear pass over the batched entries and their outcomes
 func (b *Backend) collectFieldValues(dev device, coll *devCollector, reqs plan) {
+	// NVML serves the clocks-event-reason counters in nanoseconds, while
+	// nvidia-smi prints them in microseconds. Convert, so both backends emit
+	// identical values (verified against nvidia-smi on real hardware).
+	nsToUs := func(v float64) string { return fmt.Sprintf("%d us", int64(v)/1000) }
+
 	entries := []struct {
 		field  nvidiasmi.QField
 		id     uint32
@@ -1153,28 +1158,28 @@ func (b *Backend) collectFieldValues(dev device, coll *devCollector, reqs plan) 
 		},
 		{
 			"clocks_event_reasons_counters.sw_power_cap", nvml.FI_DEV_CLOCKS_EVENT_REASON_SW_POWER_CAP, false,
-			func(v float64) string { return fmt.Sprintf("%d us", int64(v)) },
+			nsToUs,
 		},
 		{
 			"clocks_event_reasons_counters.sync_boost", nvml.FI_DEV_CLOCKS_EVENT_REASON_SYNC_BOOST, false,
-			func(v float64) string { return fmt.Sprintf("%d us", int64(v)) },
+			nsToUs,
 		},
 		{
 			"clocks_event_reasons_counters.sw_thermal_slowdown",
 			nvml.FI_DEV_CLOCKS_EVENT_REASON_SW_THERM_SLOWDOWN,
 			false,
-			func(v float64) string { return fmt.Sprintf("%d us", int64(v)) },
+			nsToUs,
 		},
 		{
 			"clocks_event_reasons_counters.hw_thermal_slowdown",
 			nvml.FI_DEV_CLOCKS_EVENT_REASON_HW_THERM_SLOWDOWN,
 			false,
-			func(v float64) string { return fmt.Sprintf("%d us", int64(v)) },
+			nsToUs,
 		},
 		{
 			"clocks_event_reasons_counters.hw_power_brake_slowdown",
 			nvml.FI_DEV_CLOCKS_EVENT_REASON_HW_POWER_BRAKE_SLOWDOWN, false,
-			func(v float64) string { return fmt.Sprintf("%d us", int64(v)) },
+			nsToUs,
 		},
 		{
 			"gpu_recovery_action", nvml.FI_DEV_GET_GPU_RECOVERY_ACTION, false,
