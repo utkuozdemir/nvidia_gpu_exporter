@@ -8,13 +8,18 @@ builds:
   - id: nvidia_gpu_exporter
     main: ./cmd/nvidia_gpu_exporter
     binary: nvidia_gpu_exporter
+    # reproducible: no build paths in the binary, and the commit time as the
+    # file and build timestamp, so the same commit yields the same bytes
+    flags:
+      - -trimpath
+    mod_timestamp: "{{ .CommitTimestamp }}"
     ldflags:
       - -s -w
       - -X github.com/prometheus/common/version.Version={{.Version}}
       - -X github.com/prometheus/common/version.Revision={{.Commit}}
       - -X github.com/prometheus/common/version.Branch={{.Branch}}
       - -X github.com/prometheus/common/version.BuildUser=goreleaser
-      - -X github.com/prometheus/common/version.BuildDate={{.Date}}
+      - -X github.com/prometheus/common/version.BuildDate={{.CommitDate}}
     env:
       - CGO_ENABLED=0
     goos:
@@ -38,6 +43,11 @@ builds:
   - id: nvidia_gpu_exporter-nvml
     main: ./cmd/nvidia_gpu_exporter
     binary: nvidia_gpu_exporter
+    # reproducible: no build paths in the binary, and the commit time as the
+    # file and build timestamp, so the same commit yields the same bytes
+    flags:
+      - -trimpath
+    mod_timestamp: "{{ .CommitTimestamp }}"
     ldflags:
       - -s -w
       # this flavor exists for the nvml backend, so it defaults to it
@@ -46,7 +56,7 @@ builds:
       - -X github.com/prometheus/common/version.Revision={{.Commit}}
       - -X github.com/prometheus/common/version.Branch={{.Branch}}
       - -X github.com/prometheus/common/version.BuildUser=goreleaser
-      - -X github.com/prometheus/common/version.BuildDate={{.Date}}
+      - -X github.com/prometheus/common/version.BuildDate={{.CommitDate}}
     env:
       - CGO_ENABLED=1
     goos:
