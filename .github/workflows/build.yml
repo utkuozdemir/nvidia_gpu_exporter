@@ -24,6 +24,9 @@ on:
       - reopened
       - edited
 
+permissions:
+  contents: read
+
 concurrency:
   group: build-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -39,13 +42,13 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup Go
-        uses: actions/setup-go@v7.0.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
       - name: Set up Task
-        uses: arduino/setup-task@v3.0.0
+        uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       # every linter, at the versions pinned in hack/dev.Dockerfile, in the same
@@ -58,16 +61,16 @@ jobs:
       - name: Print coverage results
         run: go tool cover -func ./coverage.out
       - name: Send coverage
-        uses: codecov/codecov-action@v7.0.0
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: coverage.out
           token: ${{ secrets.CODECOV_TOKEN }}
       # qemu and buildx so the goreleaser snapshot below can build the
       # container images for all platforms
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4.2.0
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4.3.0
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
       # the goreleaser version is declared once, in hack/dev.Dockerfile, so the
       # version that validates the release config in lint is the version that
       # builds the release. Fail loudly rather than guessing if that
@@ -95,7 +98,7 @@ jobs:
       # Renovate, so this build is the only gate between a bad digest and a
       # failed release
       - name: Build and package with Goreleaser
-        uses: goreleaser/goreleaser-action@v7.2.3
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           version: ${{ steps.goreleaser_version.outputs.version }}
           args: release --snapshot --clean --skip=publish,sign,sbom
@@ -109,11 +112,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Set up chart-testing
-        uses: helm/chart-testing-action@v2.8.0
+        uses: helm/chart-testing-action@6ec842c01de15ebb84c8627d2744a0c2f2755c9f # v2.8.0
       - name: Check that the chart dashboards match docs/grafana/
         run: |
           cmp docs/grafana/dashboard.json charts/nvidia-gpu-exporter/dashboards/nvidia-gpu-metrics.json
@@ -128,6 +131,6 @@ jobs:
           docker run --rm -v "$(pwd):/helm-docs" -u "$(id -u)" jnorwood/helm-docs:v1.14.2
           git diff --exit-code charts/
       - name: Create kind cluster
-        uses: helm/kind-action@v1.14.0
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
       - name: Install chart
         run: ct install --config .ct.yaml --all

@@ -14,8 +14,7 @@ on:
         default: true
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 defaults:
   run:
@@ -23,16 +22,19 @@ defaults:
 
 jobs:
   screenshots:
+    permissions:
+      contents: write # push the regenerated images
+      pull-requests: write # open the pull request with them
     name: screenshots
     runs-on: ubuntu-24.04
     # a wedged renderer would otherwise hold a runner for the default six hours
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Task
-        uses: arduino/setup-task@v3.0.0
+        uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -43,7 +45,7 @@ jobs:
         run: task screenshots
 
       - name: Upload the images
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dashboard-images
           path: docs/grafana/dashboard*.png
