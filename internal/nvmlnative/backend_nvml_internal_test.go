@@ -4,6 +4,7 @@ package nvmlnative
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"log/slog"
 	"sync/atomic"
@@ -211,6 +212,38 @@ func TestUnknownFieldValueTypeDoesNotPanic(t *testing.T) {
 	reading, _, err := backend.QueryFunc(resolveFields(t, "power.draw.average"), CollectOptions{})(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, "[N/A]", cellValue(t, reading.Table, "power.draw.average"))
+}
+
+func TestClocksEventReasonCountersConvertNanosecondsToMicroseconds(t *testing.T) {
+	t.Parallel()
+
+	// the raw value NVML serves is in nanoseconds; nvidia-smi prints the same
+	// counter in microseconds, and the two backends must emit identical values.
+	// 109042687680 ns is a real reading from an RTX 2080 SUPER on driver 610.57.04.
+	dev := identityDevice()
+	dev.GetFieldValuesFunc = func(values []nvml.FieldValue) nvml.Return {
+		for i := range values {
+			values[i].NvmlReturn = uint32(nvml.SUCCESS)
+			values[i].ValueType = uint32(nvml.VALUE_TYPE_UNSIGNED_LONG_LONG)
+			binary.LittleEndian.PutUint64(values[i].Value[:], 109042687680)
+		}
+
+		return nvml.SUCCESS
+	}
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
+
+	reading, _, err := backend.QueryFunc(
+		resolveFields(t, "clocks_event_reasons_counters.sw_power_cap"),
+		CollectOptions{},
+	)(t.Context())
+	require.NoError(t, err)
+	assert.Equal(
+		t,
+		"109042687 us",
+		cellValue(t, reading.Table, "clocks_event_reasons_counters.sw_power_cap"),
+	)
 }
 
 func TestComputeAppsFailSoftlyButMarkLifecycle(t *testing.T) {
