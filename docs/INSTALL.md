@@ -203,7 +203,7 @@ small and keeps scanner findings near zero.
 It also means there is no shell to `docker exec` into, and an image derived
 from it cannot run shell commands in `RUN` steps. Running a binary that exists
 in the image still works, e.g., `docker exec <container> nvidia-smi` to check
-that the driver injection worked.
+that the driver injection worked; add `-u 0` to run it as root.
 
 If you need extra tools next to the exporter, e.g., a wrapper for
 `--nvidia-smi-command`, start from a fuller base image and copy the binary in:
@@ -213,6 +213,15 @@ FROM debian:stable-slim
 COPY --from=utkuozdemir/nvidia_gpu_exporter:latest /usr/bin/nvidia_gpu_exporter /usr/bin/
 ENTRYPOINT ["/usr/bin/nvidia_gpu_exporter"]
 ```
+
+The exporter needs no privileges, so the images run as uid 65534 (`nobody`)
+rather than root, and a derived image inherits that user. Wrapper images
+usually need root back: `sudo` needs a sudoers entry for the uid, and an ssh
+wrapper looks for its key and `known_hosts` under the uid's home, which is
+`/nonexistent` for `nobody`. Add an explicit `USER 0` in that case. If you do
+set a non-root `USER`, keep the numeric form: Kubernetes cannot verify a
+`runAsNonRoot` guarantee against a name-based image user and refuses to start
+such a container.
 
 When deriving from the `-nvml` variant this way, also carry over its
 `NVIDIA_VISIBLE_DEVICES=all` and `NVIDIA_DRIVER_CAPABILITIES=utility`
@@ -237,6 +246,14 @@ location. Alternatively, set `LD_LIBRARY_PATH` to the directory you chose.
 This is fragile: the library symlink chain breaks on driver upgrades, the
 device list varies with the GPU count, and library paths differ per
 distribution and architecture. Prefer the toolkit whenever possible.
+
+Whichever mechanism injects the devices, the container user has to be able to
+read them. The NVIDIA driver creates `/dev/nvidia*` world-accessible by
+default, so uid 65534 is fine. A host that restricts them (the
+`NVreg_DeviceFileMode` module parameter, a udev rule, or an `nvidia-modprobe`
+setting) leaves the exporter running but reporting
+`nvidia_smi_last_collect_success 0`. Relax the device mode, add the owning
+group to the container, or run the container as root with `--user 0`.
 
 ## Kubernetes
 

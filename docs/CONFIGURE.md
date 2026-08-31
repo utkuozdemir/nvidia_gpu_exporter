@@ -351,7 +351,11 @@ Things to keep in mind:
   additionally needs to run privileged with the
   `NVIDIA_MIG_MONITOR_DEVICES=all` environment variable (plus host PID
   sharing). Otherwise the per-process list and even some GPU-level fields
-  read `[Insufficient Permissions]`.
+  read `[Insufficient Permissions]`. Privileged means root here, so on
+  Kubernetes this path also needs the chart's non-root defaults turned off.
+  The [chart README](../charts/nvidia-gpu-exporter/README.md) carries the
+  exact values, because setting `privileged` on its own is rejected by the
+  API server.
 - The `pid` label changes constantly. Every new process creates new series,
   and they disappear with the process. On machines where processes come and
   go a lot, this can bloat the time series database. This is one of the

@@ -95,7 +95,9 @@ changes the label set of the per-process series.
 Container note: like the per-process metrics under MIG, full function needs
 generous privileges. The exporter container may need to run privileged with
 `NVIDIA_MIG_MONITOR_DEVICES=all` and share the host PID namespace. MIG
-inventory and memory worked unprivileged in testing.
+inventory and memory worked unprivileged in testing. On Kubernetes, privileged
+has to be requested together with the rest of the security context; see the
+[chart README](../charts/nvidia-gpu-exporter/README.md).
 
 ### XID errors
 

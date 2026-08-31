@@ -90,7 +90,7 @@
   "warnings_strict_status": "Met",
   "warnings_strict_justification": "golangci-lint with `default: all`. Each disabled linter has a reason next to it.",
   "know_secure_design_status": "Met",
-  "know_secure_design_justification": "The maintainer builds infrastructure software professionally. The exporter follows least privilege: the packages run it as a dedicated unprivileged user, the container image is distroless, and no GPU is reserved. The image still runs as root by default, tracked in #463. It fails safe: a failed collection publishes no data instead of stale data. The attack surface is small: a read-only subprocess and an HTTP endpoint, with optional TLS and basic auth via the Prometheus exporter toolkit. Written up in https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/docs/SECURITY_MODEL.md",
+  "know_secure_design_justification": "The maintainer builds infrastructure software professionally. The exporter follows least privilege: the packages run it as a dedicated unprivileged user, the container image is distroless, and no GPU is reserved. The container image runs as a non-root uid and the chart's default security contexts satisfy the restricted Pod Security Standard. It fails safe: a failed collection publishes no data instead of stale data. The attack surface is small: a read-only subprocess and an HTTP endpoint, with optional TLS and basic auth via the Prometheus exporter toolkit. Written up in https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/docs/SECURITY_MODEL.md",
   "know_common_errors_status": "Met",
   "know_common_errors_justification": "The relevant error classes for this software, and what is done about them. Command injection via the configurable `nvidia-smi` command: no shell is involved, the exporter splits the arguments itself. Untrusted parser input from any driver or wrapper: every parser has a fuzz target, and a panic is treated as a bug. Resource exhaustion from a stuck subprocess: collection timeout and a scrape concurrency limit. Supply chain: actions pinned by commit, images pinned by digest, signed releases.",
   "crypto_published_status": "Met",
@@ -230,7 +230,7 @@
   "input_validation_status": "Met",
   "input_validation_justification": "Flags are validated at startup and an impossible combination is an error, not a silent ignore. Unknown query fields fail loudly. Parser output is checked before use: unrecognized state values are skipped and logged, a derived metric name that is empty or collides is dropped. All of it fuzzed.",
   "hardening_status": "Met",
-  "hardening_justification": "Static binary with no cgo in the default build. Distroless image with no shell. The packages run the service as a dedicated user. Collection timeout and scrape concurrency limit bound resource use.",
+  "hardening_justification": "Static binary with no cgo in the default build. Distroless image with no shell, running as a non-root uid. The packages run the service as a dedicated user. The chart drops all capabilities and disallows privilege escalation by default. Collection timeout and scrape concurrency limit bound resource use.",
   "assurance_case_status": "Met",
   "assurance_case_justification": "https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/docs/SECURITY_MODEL.md: security requirements, trust boundaries, threats with their mitigations, and how each is checked.",
   "general_comments": "This entry is generated from the .bestpractices.json file in the repository. The file and this entry must be updated together."

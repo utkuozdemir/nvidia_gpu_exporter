@@ -82,9 +82,28 @@ helm upgrade nvidia-gpu-exporter oci://ghcr.io/utkuozdemir/charts/nvidia-gpu-exp
 On MIG-enabled GPUs the requirements are steeper: the exporter container must
 run privileged with the `NVIDIA_MIG_MONITOR_DEVICES=all` environment variable
 (via `securityContext` and `extraEnv`) on top of `hostPID`, otherwise even
-GPU-level memory fields read `[Insufficient Permissions]`. By default
-processes are attributed to the parent GPU's UUID, not to individual MIG
-instances; on the `-nvml` image the attribution labels can be added with
+GPU-level memory fields read `[Insufficient Permissions]`.
+Set it together with the rest of the security context rather than on its own:
+your values merge onto the chart defaults key by key, and Kubernetes rejects a
+pod that asks for `privileged` while `allowPrivilegeEscalation` is false. This
+also keeps the MIG path running as root, the way it did before the images moved
+to a non-root user. `runAsUser: 0` is the part that does that: clearing
+`runAsNonRoot` only drops the check, it does not change the uid, which
+otherwise stays the image's 65534 and leaves the MIG monitor devices
+unreadable.
+
+```yaml
+securityContext:
+  privileged: true
+  allowPrivilegeEscalation: true
+  capabilities: null
+  runAsUser: 0
+podSecurityContext:
+  runAsNonRoot: null
+```
+
+By default processes are attributed to the parent GPU's UUID, not to individual
+MIG instances; on the `-nvml` image the attribution labels can be added with
 
 ```yaml
 extraArgs:
@@ -137,30 +156,48 @@ To replace dcgm-exporter instead of running both, disable it with
 
 ## Restricted namespaces
 
-The pods run unprivileged, but the default security contexts are empty and
-the image runs as root, which the `restricted`
+A default install is admitted in namespaces enforcing the `restricted`
 [Pod Security Standard](https://kubernetes.io/docs/concepts/security/pod-security-standards/)
-rejects at admission. GPU access via the NVIDIA runtime does not require
-root (the injected device nodes are world-accessible on standard driver
-installs), so in enforcing namespaces set a compliant security context:
+with no extra configuration. The image runs as uid 65534 and the chart defaults
+declare the settings that level requires:
 
 ```yaml
-securityContext:
+podSecurityContext:
   runAsNonRoot: true
-  runAsUser: 65534
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
   allowPrivilegeEscalation: false
   capabilities:
     drop:
       - ALL
-  seccompProfile:
-    type: RuntimeDefault
 ```
 
-Note that `hostNetwork` and `hostPort` are rejected in such namespaces no
-matter the security context (the `baseline` level already forbids them), and
-`computeApps` needs `hostPID`, which they forbid too. On OpenShift, leave
-`runAsUser` unset and let the namespace SCC assign one; the default
-`restricted-v2` SCC fits this workload.
+None of this takes anything away from the exporter: it writes no files, binds a
+port above 1024, and GPU access comes from the NVIDIA runtime, which needs no
+privileges or capabilities of its own.
+
+Overriding these values is a merge, not a replacement, so `securityContext: {}`
+does not clear the defaults. Set the whole key to `null` to drop a block, or a
+sub-key to `null` to drop one setting.
+
+Things this does not solve:
+
+- `hostNetwork`, `hostPort` and `hostPID` (which `computeApps` needs) are
+  rejected in such namespaces whatever the security context, since `baseline`
+  already forbids them.
+- A policy engine that wants an explicit uid rather than just `runAsNonRoot`
+  needs `securityContext.runAsUser: 65534`.
+- `last_collect_success 0` after the switch usually means restricted driver
+  device nodes. `/dev/nvidia*` is world-accessible by default, but a host using
+  `NVreg_DeviceFileMode`, a udev rule or `nvidia-modprobe` may not be. Relax the
+  mode, add the owning group via `podSecurityContext.supplementalGroups`, or go
+  back to root with `podSecurityContext.runAsNonRoot: null` and
+  `securityContext.runAsUser: 0`.
+- TLS material for `--web.config.file` mounted at `defaultMode: 0400` is
+  root-owned and unreadable to uid 65534; use `0444` or an `fsGroup`.
+- A `port` below 1024 needs `NET_BIND_SERVICE` added back, since the default
+  drops all capabilities. `restricted` permits it.
 
 ## Upgrading from chart 1.x
 

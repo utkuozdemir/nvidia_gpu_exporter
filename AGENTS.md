@@ -194,6 +194,8 @@ Other things that are easy to trip over:
   Edit whichever of the two is appropriate, then regenerate.
 - `values.schema.json` validates the values strictly and rejects unknown keys.
   A new value subtree added without a matching schema entry survives review and then fails chart linting and installation, so the two change together.
+- The security context values deliberately skip the defaulted-lookup convention below, so a `--reuse-values` upgrade keeps the old empty ones and stays unhardened.
+  That is the safe direction: backfilling them would hand a `runAsNonRoot` guarantee to anyone still pinning an older root image tag and break their pods at upgrade time.
 - The alert rules are values-driven, and `hack/alerts/verify.sh` renders and unit-tests them without a cluster.
   It also simulates an upgrade that reuses a previous release's values, because Helm does not backfill new chart defaults on `--reuse-values`; that is why the templates use defaulted lookups instead of direct value references, and why new value subtrees must stay nil-safe.
 - Alert rules ship with corrective actions in their annotations, and the verification script asserts the load-bearing ones survive rewording.
@@ -240,6 +242,7 @@ A hand-assembled libc-only rootfs would shave a few more megabytes but means own
 The cgo nvml flavor links against the glibc of the release build runner, so the base's glibc must be at least as new as the runner's, an invariant to re-check on any base swap or runner upgrade.
 The base carries no version tags, so it is pinned by digest and Renovate keeps the digest fresh, gated by CI building the images.
 There is no shell in the image: derived images cannot use shell-form `RUN`, and wrapper commands need an image that copies the exporter binary onto a fuller base (documented in the install guide).
+The images run as uid 65534, and the `USER` directive has to stay numeric: the kubelet cannot verify a `runAsNonRoot` guarantee against a name-based image user and refuses to start the container, which is also why the base stays the plain digest-pinned image rather than a `nonroot` tag variant whose form is not ours to control.
 Executing a binary that exists in the image still works, e.g., `docker exec <container> nvidia-smi`, and fuller live debugging uses ephemeral debug containers (`kubectl debug`, or a `--pid=container:...` helper container under plain Docker).
 
 One packaging footgun: the nvml image tag suffix parses as a semver pre-release.
