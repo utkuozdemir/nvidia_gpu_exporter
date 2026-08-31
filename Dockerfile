@@ -6,9 +6,10 @@ FROM gcr.io/distroless/base-nossl-debian13:latest@sha256:e50761cbc75cbd24ed76553
 ARG TARGETPLATFORM
 COPY ${TARGETPLATFORM}/nvidia_gpu_exporter /usr/bin/nvidia_gpu_exporter
 
-# stays root (the base default) on purpose: changing the execution identity
-# of a widely deployed image is a migration of its own. GPU access itself
-# does not need root, and the chart documents a nonroot security context
+# nothing the exporter does needs root. Keep the uid numeric: the kubelet
+# cannot verify runAsNonRoot against a named image user and refuses to start
+# the container, so `USER nobody` would break every pod that asks for one
+USER 65534:65534
 
 EXPOSE 9835
 ENTRYPOINT ["/usr/bin/nvidia_gpu_exporter"]

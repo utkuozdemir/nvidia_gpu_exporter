@@ -276,7 +276,7 @@ grafanaDashboard:
 | podMonitor.metricRelabelings | list | `[]` | Relabelings to apply to the scraped metrics |
 | podMonitor.relabelings | list | `[]` | Relabelings to apply to the scraped targets |
 | podMonitor.scrapeTimeout | string | `""` | Scrape timeout |
-| podSecurityContext | object | `{}` | Security context for the pods |
+| podSecurityContext | object | `{"runAsNonRoot":true,"seccompProfile":{"type":"RuntimeDefault"}}` | Security context for the pods. The defaults pass `restricted` Pod Security Standard admission. `runAsUser` is unset on purpose: the image's own uid applies, and an OpenShift SCC can still assign one. |
 | port | int | `9835` | Port to listen on |
 | priorityClassName | string | `""` | Priority class name for the pods |
 | prometheusRule.additionalLabels | object | `{}` | Additional labels for the PrometheusRule, e.g. to match your Prometheus instance's rule selector |
@@ -310,7 +310,7 @@ grafanaDashboard:
 | resources | object | `{}` | Resources for the exporter container |
 | revisionHistoryLimit | string | `""` | How many old DaemonSet history revisions to retain for rollbacks. Empty means the Kubernetes default (10). |
 | runtimeClassName | string | `""` | Name of the RuntimeClass to run the pods with. GPU access is injected by the NVIDIA container runtime, so the pods must run with it: either set this to the name of your NVIDIA RuntimeClass (usually `nvidia`), or leave it empty if the NVIDIA runtime is the default runtime of your nodes. If neither is the case, the exporter will come up but serve no GPU metrics, reporting `nvidia_smi_last_collect_success 0`. |
-| securityContext | object | `{}` | Security context for the exporter container. The default is unprivileged: GPU access comes from the NVIDIA runtime, which requires no privileges. |
+| securityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}` | Security context for the exporter container. Unprivileged: GPU access comes from the NVIDIA runtime, which needs no privileges or capabilities. |
 | service.annotations | object | `{}` | Annotations to add to the Service |
 | service.enabled | bool | `true` | Create a Service for the exporter |
 | service.nodePort | string | `""` | Node port to use for NodePort/LoadBalancer service types |

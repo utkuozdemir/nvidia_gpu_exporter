@@ -10,9 +10,10 @@ COPY ${TARGETPLATFORM}/nvidia_gpu_exporter /usr/bin/nvidia_gpu_exporter
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=utility
 
-# stays root (the base default) on purpose: changing the execution identity
-# of a widely deployed image is a migration of its own. GPU access itself
-# does not need root, and the chart documents a nonroot security context
+# nothing the exporter does needs root. Keep the uid numeric: the kubelet
+# cannot verify runAsNonRoot against a named image user and refuses to start
+# the container, so `USER nobody` would break every pod that asks for one
+USER 65534:65534
 
 EXPOSE 9835
 # the binary in this image is the nvml flavor and defaults to the nvml
