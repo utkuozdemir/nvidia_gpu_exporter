@@ -75,7 +75,10 @@ archives:
     ids:
       - nvidia_gpu_exporter-nvml
     files:
-      - LICENSE
+      # the checkout time of this file would otherwise end up in the archive
+      - src: LICENSE
+        info:
+          mtime: "{{ .CommitDate }}"
 
   - id: nvidia_gpu_exporter-archive
     name_template: >-
@@ -95,7 +98,10 @@ archives:
         formats:
           - zip
     files:
-      - LICENSE
+      # the checkout time of this file would otherwise end up in the archive
+      - src: LICENSE
+        info:
+          mtime: "{{ .CommitDate }}"
 
 nfpms:
   - id: nvidia_gpu_exporter
@@ -130,12 +136,14 @@ nfpms:
           owner: root
           group: root
           mode: 0644
+          mtime: "{{ .CommitDate }}"
       - src: ./LICENSE
         dst: /usr/share/doc/nvidia-gpu-exporter/copyright
         file_info:
           owner: root
           group: root
           mode: 0644
+          mtime: "{{ .CommitDate }}"
     scripts:
       preinstall: install/scripts/pre-install.sh
       postinstall: install/scripts/post-install.sh
