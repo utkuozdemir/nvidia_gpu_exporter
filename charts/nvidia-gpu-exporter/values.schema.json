@@ -464,16 +464,10 @@
       }
     },
     "podSecurityContext": {
-      "type": [
-        "object",
-        "null"
-      ]
+      "type": "object"
     },
     "securityContext": {
-      "type": [
-        "object",
-        "null"
-      ]
+      "type": "object"
     },
     "resources": {
       "type": "object"

@@ -79,20 +79,22 @@ helm upgrade nvidia-gpu-exporter oci://ghcr.io/utkuozdemir/charts/nvidia-gpu-exp
   --set hostPID=true
 ```
 
-On MIG-enabled GPUs the requirements are steeper: the exporter container must
-run privileged with the `NVIDIA_MIG_MONITOR_DEVICES=all` environment variable
-(via `securityContext` and `extraEnv`) on top of `hostPID`, otherwise even
-GPU-level memory fields read `[Insufficient Permissions]`.
-Set it together with the rest of the security context rather than on its own:
-your values merge onto the chart defaults key by key, and Kubernetes rejects a
-pod that asks for `privileged` while `allowPrivilegeEscalation` is false. This
-also keeps the MIG path running as root, the way it did before the images moved
-to a non-root user. `runAsUser: 0` is the part that does that: clearing
-`runAsNonRoot` only drops the check, it does not change the uid, which
-otherwise stays the image's 65534 and leaves the MIG monitor devices
-unreadable.
+On MIG-enabled GPUs the requirements are steeper: on top of `hostPID`, the
+exporter container needs the `NVIDIA_MIG_MONITOR_DEVICES=all` environment
+variable and a privileged container running as root, otherwise even GPU-level
+memory fields read `[Insufficient Permissions]`.
+
+Use the whole block below. Your values merge onto the chart defaults key by
+key, so setting `privileged` on its own conflicts with the default
+`allowPrivilegeEscalation: false`, and the chart refuses to render it.
+`runAsUser: 0` is required as well: without it the process stays uid 65534,
+which cannot read the MIG monitor devices.
 
 ```yaml
+hostPID: true
+extraEnv:
+  - name: NVIDIA_MIG_MONITOR_DEVICES
+    value: all
 securityContext:
   privileged: true
   allowPrivilegeEscalation: true
@@ -156,10 +158,10 @@ To replace dcgm-exporter instead of running both, disable it with
 
 ## Restricted namespaces
 
-A default install is admitted in namespaces enforcing the `restricted`
-[Pod Security Standard](https://kubernetes.io/docs/concepts/security/pod-security-standards/)
-with no extra configuration. The image runs as uid 65534 and the chart defaults
-declare the settings that level requires:
+A default install passes admission in namespaces enforcing the `restricted`
+[Pod Security Standard](https://kubernetes.io/docs/concepts/security/pod-security-standards/).
+The image runs as uid 65534, and the chart defaults declare what that level
+requires:
 
 ```yaml
 podSecurityContext:
@@ -173,31 +175,46 @@ securityContext:
       - ALL
 ```
 
-None of this takes anything away from the exporter: it writes no files, binds a
-port above 1024, and GPU access comes from the NVIDIA runtime, which needs no
-privileges or capabilities of its own.
+None of it takes anything away from the exporter: it writes no files, it
+listens above port 1024, and GPU access comes from the NVIDIA runtime, which
+needs no privileges.
 
-Overriding these values is a merge, not a replacement, so `securityContext: {}`
-does not clear the defaults. Set the whole key to `null` to drop a block, or a
-sub-key to `null` to drop one setting.
+Two limits remain. `hostNetwork`, `hostPort` and `hostPID` (which
+`computeApps` needs) are rejected in such namespaces whatever the security
+context, since the `baseline` level already forbids them. And a policy engine
+that wants an explicit uid rather than `runAsNonRoot` needs
+`securityContext.runAsUser: 65534`, except on OpenShift: there, leave
+`runAsUser` unset and let the namespace SCC assign one, the default
+`restricted-v2` SCC fits this workload.
 
-Things this does not solve:
+## Upgrading to the non-root images
 
-- `hostNetwork`, `hostPort` and `hostPID` (which `computeApps` needs) are
-  rejected in such namespaces whatever the security context, since `baseline`
-  already forbids them.
-- A policy engine that wants an explicit uid rather than just `runAsNonRoot`
-  needs `securityContext.runAsUser: 65534`.
-- `last_collect_success 0` after the switch usually means restricted driver
-  device nodes. `/dev/nvidia*` is world-accessible by default, but a host using
-  `NVreg_DeviceFileMode`, a udev rule or `nvidia-modprobe` may not be. Relax the
-  mode, add the owning group via `podSecurityContext.supplementalGroups`, or go
-  back to root with `podSecurityContext.runAsNonRoot: null` and
-  `securityContext.runAsUser: 0`.
-- TLS material for `--web.config.file` mounted at `defaultMode: 0400` is
-  root-owned and unreadable to uid 65534; use `0444` or an `fsGroup`.
-- A `port` below 1024 needs `NET_BIND_SERVICE` added back, since the default
-  drops all capabilities. `restricted` permits it.
+Starting with app version 1.15.0 the container images run as uid 65534
+instead of root, and the chart ships the security context defaults shown
+above. For an upgrade this means:
+
+- A plain `helm upgrade` works unchanged for the common setups. An upgrade
+  with `--reuse-values` keeps your old (empty) security contexts, so nothing
+  hardens behind your back.
+- An `image.tag` pinned to a release older than 1.15.0 fails to start under
+  the new defaults. The kubelet reports `CreateContainerConfigError` with
+  "container has runAsNonRoot and image will run as root". Unpin the tag, or
+  set `securityContext.runAsUser: 65534`, or drop the check with
+  `podSecurityContext.runAsNonRoot: null`.
+- `securityContext.privileged: true` on its own, the old MIG guidance,
+  conflicts with the new defaults. The chart fails the render and points at
+  the full block in the [per-process section](#per-process-gpu-metrics).
+- Overriding these values is a merge, not a replacement, so
+  `securityContext: {}` changes nothing. Set a sub-key to `null` to drop one
+  setting, or the whole key to `null` to drop the block.
+- Two host-side details can surface after the uid change. A host that
+  restricts `/dev/nvidia*` (the `NVreg_DeviceFileMode` module parameter, a
+  udev rule) makes collections fail with `nvidia_smi_last_collect_success 0`:
+  relax the device mode, add the owning group via
+  `podSecurityContext.supplementalGroups`, or go back to root with
+  `securityContext.runAsUser: 0` plus `podSecurityContext.runAsNonRoot: null`.
+  And TLS material for `--web.config.file` mounted root-owned with
+  `defaultMode: 0400` is unreadable to uid 65534: use `0444` or an `fsGroup`.
 
 ## Upgrading from chart 1.x
 
