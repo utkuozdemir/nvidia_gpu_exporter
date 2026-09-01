@@ -23,29 +23,43 @@ jobs:
       # the release tag must carry a signature GitHub verifies against the
       # pusher's registered keys (any type: SSH, GPG or S/MIME). Checked before
       # anything is built or published, so an unsigned tag fails fast
-      - name: Check that the release tag is signed and verified
+      - name: Check that the release tag is signed, verified and bound to this build
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ref="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${GITHUB_REF_NAME}")"
-          type="$(jq -r .object.type <<<"${ref}")"
-          if [ "${type}" != "tag" ]; then
-            echo "release tag ${GITHUB_REF_NAME} is a lightweight tag (${type}); releases need an annotated, signed tag" >&2
+          if [ "$(jq -r .object.type <<<"${ref}")" != "tag" ]; then
+            echo "release tag ${GITHUB_REF_NAME} is a lightweight tag; releases need an annotated, signed tag" >&2
             exit 1
           fi
-          sha="$(jq -r .object.sha <<<"${ref}")"
-          verification="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${sha}" -q .verification)"
-          if [ "$(jq -r .verified <<<"${verification}")" != "true" ]; then
-            echo "release tag ${GITHUB_REF_NAME} has no verified signature: $(jq -r .reason <<<"${verification}")" >&2
+          tag="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/$(jq -r .object.sha <<<"${ref}")")"
+          # the signed object must name this tag and point at the commit this
+          # run builds, so a re-pointed ref cannot reuse another tag's signature
+          if [ "$(jq -r .tag <<<"${tag}")" != "${GITHUB_REF_NAME}" ]; then
+            echo "the signed tag object is named '$(jq -r .tag <<<"${tag}")', not ${GITHUB_REF_NAME}" >&2
             exit 1
           fi
-          echo "tag ${GITHUB_REF_NAME} carries a verified signature"
+          if [ "$(jq -r .object.type <<<"${tag}")" != "commit" ] || [ "$(jq -r .object.sha <<<"${tag}")" != "${GITHUB_SHA}" ]; then
+            echo "the signed tag points at $(jq -r .object.sha <<<"${tag}"), this run builds ${GITHUB_SHA}" >&2
+            exit 1
+          fi
+          if [ "$(jq -r .verification.verified <<<"${tag}")" != "true" ]; then
+            echo "release tag ${GITHUB_REF_NAME} has no verified signature: $(jq -r .verification.reason <<<"${tag}")" >&2
+            exit 1
+          fi
+          echo "tag ${GITHUB_REF_NAME} carries a verified signature and points at ${GITHUB_SHA}"
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # to be able to generate the full changelog:
           # https://github.com/goreleaser/goreleaser-action/issues/56#issuecomment-568718162
           fetch-depth: 0
+      - name: Check that the released commit is on main
+        run: |
+          if ! git merge-base --is-ancestor "${GITHUB_SHA}" origin/main; then
+            echo "commit ${GITHUB_SHA} is not on main; releases are cut from main only" >&2
+            exit 1
+          fi
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:

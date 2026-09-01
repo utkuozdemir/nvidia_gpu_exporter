@@ -219,7 +219,8 @@ It builds the container images for every platform without publishing them, which
 
 Releases are cut by pushing a version tag, which triggers the release workflow; the Taskfile has a target that derives the next version from the commit history and pushes the tag.
 The tag is signed, and the workflow's first step refuses a tag that GitHub does not report as verified, so an unsigned tag fails before anything is built or published.
-A tag ruleset additionally rejects unsigned release tags at push time.
+A tag ruleset makes release tags immutable (no update, no deletion), so a signature cannot be reused by re-pointing a tag. The ruleset does not check the tag signature itself, GitHub's signature rule looks at commits, not tag objects, so the workflow check is the enforcement.
+The release task only tags the tip of the main branch, and the workflow refuses a tagged commit that is not on the main branch.
 
 The pipeline builds two binary flavors from the same source: the fully static default build, and the cgo nvml flavor.
 The release builds are reproducible on purpose: no build paths in the binaries, and the commit time as every timestamp, so the same commit yields the same bytes.

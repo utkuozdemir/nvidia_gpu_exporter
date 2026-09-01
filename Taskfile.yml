@@ -175,8 +175,14 @@ tasks:
         # renovate: depName=caarlos0/svu datasource=docker
         sh: docker run --rm -v "$PWD":/src -w /src caarlos0/svu:3.4.1 next
     cmds:
+      # releases are cut from the tip of main, with a clean tree
+      - git fetch origin main
+      - test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" || { echo "HEAD is not the tip of origin/main" >&2; exit 1; }
+      - git diff --quiet || { echo "the working tree is not clean" >&2; exit 1; }
       # signed tag: the release workflow refuses a tag GitHub cannot verify,
-      # and the tag ruleset rejects an unsigned push, so this has to be -s
+      # so this has to be -s. Release tags are immutable by ruleset, so a
+      # tag that fails there is fixed by disabling the ruleset briefly, not by
+      # force-pushing over it.
       - git tag -s {{.NEXT}} -m "{{.NEXT}}"
       - echo {{.NEXT}}
       - git push origin {{.NEXT}}
