@@ -14,6 +14,7 @@ import (
 	"github.com/neilotoole/slogt/v2"
 	"github.com/stretchr/testify/require"
 
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvidiasmi"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvmlnative"
 )
@@ -74,7 +75,7 @@ func TestBackendParityOnRealGPU(t *testing.T) {
 		require.True(t, ok, "GPU %s is missing from the second exec sample", uuid)
 
 		for _, qField := range resolved.Query {
-			failures += compareField(t, uuid, qField, beforeRow, nativeRow, afterRow)
+			failures += compareField(t, uuid, qField, beforeRow, nativeRow, afterRow, backend.DriverVersion())
 			if failures > maxReportedMismatches {
 				t.Fatalf("too many mismatches (%d); aborting the field walk", failures)
 			}
@@ -113,6 +114,7 @@ func compareField(
 	uuid string,
 	qField nvidiasmi.QField,
 	before, native, after nvidiasmi.Row,
+	driverVersion string,
 ) int {
 	t.Helper()
 
@@ -147,6 +149,16 @@ func compareField(
 
 	execAbsent := isAbsentValue(beforeCell.RawValue) && isAbsentValue(afterCell.RawValue)
 	nativeAbsent := isAbsentValue(nativeCell.RawValue)
+
+	// a deprecated field on a driver older than the one that deprecated it:
+	// exec still serves a value, the nvml backend reports the deprecation
+	// token. That split is expected (see IsExecOnlyDeprecatedField), not drift.
+	// Require the exact token, so a regression to a different absent value
+	// (a broken getter returning [N/A]) still fails.
+	if !execAbsent && nativeCell.RawValue == nvmlnative.TokenDeprecated &&
+		nvmlnative.IsExecOnlyDeprecatedField(qField, driverVersion) {
+		return 0
+	}
 
 	if execAbsent != nativeAbsent {
 		t.Errorf("absence mismatch between the backends\n"+
@@ -393,19 +405,39 @@ func TestBackendMetricFamilyParityOnRealGPU(t *testing.T) {
 		}
 	}
 
-	compareFamiliesExecToNVML(t, execFamilies, nativeFamilies)
+	// families the exec backend serves but the nvml backend reports deprecated
+	// below the deprecation driver generation: the same accepted split the
+	// field-level parity test exempts, see IsExecOnlyDeprecatedField.
+	execOnlyDeprecated := map[string]bool{}
+
+	for _, rField := range nvmlnative.ExecOnlyDeprecatedRFields(backendDriverVersion(t)) {
+		name, _ := exporter.BuildFQNameAndMultiplier(exporter.DefaultPrefix, rField, slogt.New(t))
+		execOnlyDeprecated[name] = true
+	}
+
+	compareFamiliesExecToNVML(t, execFamilies, nativeFamilies, execOnlyDeprecated)
 	compareFamiliesNVMLToExec(t, execFamilies, nativeFamilies)
 }
 
 // compareFamiliesExecToNVML requires every family and series the exec backend
 // exports to be exported by the nvml backend too, which is the direction the
 // compatibility contract is strict in.
-func compareFamiliesExecToNVML(t *testing.T, execFamilies, nativeFamilies map[string]map[string]bool) {
+func compareFamiliesExecToNVML(
+	t *testing.T,
+	execFamilies, nativeFamilies map[string]map[string]bool,
+	execOnlyDeprecated map[string]bool,
+) {
 	t.Helper()
 
 	for family, execSeries := range execFamilies {
 		nativeSeries, ok := nativeFamilies[family]
 		if !ok {
+			if execOnlyDeprecated[family] {
+				t.Logf("family only exec serves, deprecated in the nvml backend on this driver: %s", family)
+
+				continue
+			}
+
 			t.Errorf("metric family missing from the nvml backend\n"+
 				"  family: %s (%d exec series, e.g. %s)\n"+
 				"  fix: the catalog or collector in internal/nvmlnative; if the family comes from a "+
@@ -524,6 +556,19 @@ func anySeries(series map[string]bool) string {
 
 // scrapeBackend runs the exporter in-process with the given backend and
 // returns nvidia_smi_* family -> set of series signatures (name{labels}).
+// backendDriverVersion opens the nvml backend once to read the driver version,
+// which the metric-family parity test needs to know the deprecation boundary.
+func backendDriverVersion(t *testing.T) string {
+	t.Helper()
+
+	backend, err := nvmlnative.New(slogt.New(t))
+	require.NoError(t, err, "is the NVIDIA driver library available on this machine?")
+
+	t.Cleanup(backend.Close)
+
+	return backend.DriverVersion()
+}
+
 func scrapeBackend(t *testing.T, backend string, extraArgs ...string) map[string]map[string]bool {
 	t.Helper()
 
