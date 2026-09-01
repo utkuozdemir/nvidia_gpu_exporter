@@ -15,6 +15,9 @@ defaults:
 jobs:
   release:
     runs-on: ubuntu-24.04
+    # the release environment holds the signing and publishing secrets and
+    # only admits v* tags, so no other workflow or ref can read them
+    environment: release
     permissions:
       contents: write # create the GitHub release
       packages: write # push images to GHCR
@@ -219,6 +222,7 @@ jobs:
   helm-chart:
     runs-on: ubuntu-24.04
     needs: release
+    environment: release
     permissions:
       contents: write
       packages: write
