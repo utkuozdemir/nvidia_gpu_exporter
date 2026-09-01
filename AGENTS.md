@@ -225,6 +225,7 @@ The release task only tags the tip of the main branch, and the workflow refuses 
 The pipeline builds two binary flavors from the same source: the fully static default build, and the cgo nvml flavor.
 The release builds are reproducible on purpose: no build paths in the binaries, and the commit time as every timestamp, so the same commit yields the same bytes.
 Keep new build steps deterministic.
+The container images are reproducible too: the commit time goes in as a build argument for the image timestamps, and the release build rewrites the layer timestamps to it, because the copy of the binary would otherwise stamp its layer with the build time. Snapshot builds cannot carry that exporter option (a multi-platform build loaded into the daemon), so image reproducibility is checked by hand with two cold builds, not by the CI guard.
 Keeping the two apart is a real invariant.
 The packages and the primary container image explicitly pin themselves to the static build, because a cgo binary silently reaching the deb, the rpm or the main image would ship something that cannot run where those artifacts are expected to run.
 The nvml flavor is published as its own archive and as a suffixed image tag.
