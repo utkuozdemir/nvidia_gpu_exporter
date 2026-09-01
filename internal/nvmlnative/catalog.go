@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -508,6 +509,64 @@ var deprecatedFields = []nvidiasmi.QField{
 // deprecation list was verified against; the drift test enforces the list on
 // every capture from this generation on.
 const deprecatedFieldsMinDriverMajor = 590
+
+// IsExecOnlyDeprecatedField reports whether qField is one the exec backend
+// still serves while the nvml backend reports it deprecated on the given
+// driver. It is true for a field in the deprecated family on a driver older
+// than the generation that deprecated it (see deprecatedFieldsMinDriverMajor):
+// nvidia-smi has not deprecated it there yet, so exec returns a value, while
+// the nvml backend reports the deprecation token unconditionally. The two
+// backends declining or serving a field differently is normally a bug, but
+// this split is expected and the GPU parity test exempts it. The field family
+// is on its way out: once nvidia-smi drops it on the older drivers too, both
+// backends decline it everywhere and this exemption stops mattering, so it is
+// not worth teaching the nvml backend to serve these.
+func IsExecOnlyDeprecatedField(qField nvidiasmi.QField, driverVersion string) bool {
+	major := driverMajor(driverVersion)
+	if major == 0 || major >= deprecatedFieldsMinDriverMajor {
+		return false
+	}
+
+	return slices.Contains(deprecatedFields, qField)
+}
+
+// TokenDeprecated is the raw value the nvml backend reports for a deprecated
+// field, exposed so the parity test can require it exactly rather than accept
+// any absent value in the exec-only-deprecated exemption.
+const TokenDeprecated = tokenDeprecated
+
+// ExecOnlyDeprecatedRFields returns the returned (header) names of the fields
+// the exec backend still serves while the nvml backend reports them deprecated
+// on the given driver, empty when there are none. The metric-family parity
+// test turns these into family names (via the exporter's own name builder) to
+// exempt the same split IsExecOnlyDeprecatedField covers at field granularity.
+func ExecOnlyDeprecatedRFields(driverVersion string) []nvidiasmi.RField {
+	if major := driverMajor(driverVersion); major == 0 || major >= deprecatedFieldsMinDriverMajor {
+		return nil
+	}
+
+	rFields := make([]nvidiasmi.RField, 0, len(deprecatedFields))
+	for _, field := range deprecatedFields {
+		if rField, ok := catalogRFields[field]; ok {
+			rFields = append(rFields, rField)
+		}
+	}
+
+	return rFields
+}
+
+// driverMajor parses the leading integer of a driver version like "580.173.02".
+// It returns 0 when the version is empty or unparseable.
+func driverMajor(driverVersion string) int {
+	major, _, _ := strings.Cut(driverVersion, ".")
+
+	n, err := strconv.Atoi(major)
+	if err != nil {
+		return 0
+	}
+
+	return n
+}
 
 // deferredFields are query fields nvidia-smi advertises that this backend
 // consciously does not serve yet: no verified NVML mapping exists, or the
