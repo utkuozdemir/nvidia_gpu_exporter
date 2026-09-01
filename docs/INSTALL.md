@@ -144,6 +144,9 @@ docker run -d \
   utkuozdemir/nvidia_gpu_exporter:latest
 ```
 
+The container runs as uid 65534 (`nobody`), not root. GPU access does not
+need root, so nothing else changes because of it.
+
 `--gpus all` turns on Docker's NVIDIA integration for the container and
 exposes all GPUs to it.
 
@@ -203,7 +206,7 @@ small and keeps scanner findings near zero.
 It also means there is no shell to `docker exec` into, and an image derived
 from it cannot run shell commands in `RUN` steps. Running a binary that exists
 in the image still works, e.g., `docker exec <container> nvidia-smi` to check
-that the driver injection worked; add `-u 0` to run it as root.
+that the driver injection worked.
 
 If you need extra tools next to the exporter, e.g., a wrapper for
 `--nvidia-smi-command`, start from a fuller base image and copy the binary in:
@@ -214,14 +217,13 @@ COPY --from=utkuozdemir/nvidia_gpu_exporter:latest /usr/bin/nvidia_gpu_exporter 
 ENTRYPOINT ["/usr/bin/nvidia_gpu_exporter"]
 ```
 
-The exporter needs no privileges, so the images run as uid 65534 (`nobody`)
-rather than root, and a derived image inherits that user. Wrapper images
-usually need root back: `sudo` needs a sudoers entry for the uid, and an ssh
-wrapper looks for its key and `known_hosts` under the uid's home, which is
-`/nonexistent` for `nobody`. Add an explicit `USER 0` in that case. If you do
-set a non-root `USER`, keep the numeric form: Kubernetes cannot verify a
-`runAsNonRoot` guarantee against a name-based image user and refuses to start
-such a container.
+A wrapper image built this way runs as its own base's default user (root for
+`debian`), not as the exporter image's uid 65534, so set up its user, home
+and any `sudo` or ssh configuration like in any other image. Only an image
+built directly `FROM` the exporter image keeps uid 65534. If you give a
+wrapper image a non-root `USER` of its own, keep it numeric: Kubernetes
+cannot verify `runAsNonRoot` against a name-based image user and refuses to
+start such a container.
 
 When deriving from the `-nvml` variant this way, also carry over its
 `NVIDIA_VISIBLE_DEVICES=all` and `NVIDIA_DRIVER_CAPABILITIES=utility`
@@ -247,13 +249,12 @@ This is fragile: the library symlink chain breaks on driver upgrades, the
 device list varies with the GPU count, and library paths differ per
 distribution and architecture. Prefer the toolkit whenever possible.
 
-Whichever mechanism injects the devices, the container user has to be able to
-read them. The NVIDIA driver creates `/dev/nvidia*` world-accessible by
-default, so uid 65534 is fine. A host that restricts them (the
-`NVreg_DeviceFileMode` module parameter, a udev rule, or an `nvidia-modprobe`
-setting) leaves the exporter running but reporting
-`nvidia_smi_last_collect_success 0`. Relax the device mode, add the owning
-group to the container, or run the container as root with `--user 0`.
+Whichever mechanism injects the devices, the container's uid 65534 must be
+able to read them. The driver creates `/dev/nvidia*` world-accessible by
+default, so this just works. A host that restricts them (the
+`NVreg_DeviceFileMode` module parameter, a udev rule) shows up as
+`nvidia_smi_last_collect_success 0`: relax the device mode, add the owning
+group with `--group-add`, or run the container with `--user 0`.
 
 ## Kubernetes
 
@@ -290,7 +291,10 @@ from the old chart repository.
 
 ### Plain DaemonSet
 
-If you prefer not to use Helm, a minimal DaemonSet:
+If you prefer not to use Helm, a minimal DaemonSet. In a namespace enforcing
+the `restricted` Pod Security Standard, also add the security contexts the
+chart sets by default (see the
+[chart README](../charts/nvidia-gpu-exporter/README.md#restricted-namespaces)):
 
 ```yaml
 apiVersion: apps/v1
