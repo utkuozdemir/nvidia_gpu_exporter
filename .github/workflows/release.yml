@@ -217,6 +217,9 @@ jobs:
           umask 077
           trap 'rm -f /tmp/passphrase.txt' EXIT
           echo "${GPG_PASSPHRASE}" > /tmp/passphrase.txt
+          # reproducible package: helm keeps the checkout's file mtimes in the
+          # tgz, so set them to the commit time first, like every other artifact
+          find charts/nvidia-gpu-exporter -exec touch -d "$(git log -1 --format=%cI)" {} +
           helm package charts/nvidia-gpu-exporter \
             --version "${CHART_VERSION}" \
             --app-version "${APP_VERSION}" \
