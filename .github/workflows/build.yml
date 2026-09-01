@@ -29,7 +29,10 @@ permissions:
 
 concurrency:
   group: build-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # an "edited" event that did not change the base branch is skipped by the
+  # job guard below, so it must not cancel the real run that is in progress,
+  # or a title or description edit leaves the pull request with no build at all
+  cancel-in-progress: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
 
 defaults:
   run:
