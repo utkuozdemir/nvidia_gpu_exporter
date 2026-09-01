@@ -353,10 +353,10 @@ Things to keep in mind:
   additionally needs to run privileged with the
   `NVIDIA_MIG_MONITOR_DEVICES=all` environment variable (plus host PID
   sharing). Otherwise the per-process list and even some GPU-level fields
-  read `[Insufficient Permissions]`. This path needs root, not just
-  privileged: a privileged container whose process is not root still cannot
-  read the MIG monitor devices. On Kubernetes, use the complete values block
-  from the [chart README](../charts/nvidia-gpu-exporter/README.md), setting
+  read `[Insufficient Permissions]`. Root is not needed, the container's
+  non-root uid can read the MIG monitor device (world-readable by default).
+  On Kubernetes, use the complete values block from the
+  [chart README](../charts/nvidia-gpu-exporter/README.md), setting
   `privileged` on its own does not pass validation.
 - The `pid` label changes constantly. Every new process creates new series,
   and they disappear with the process. On machines where processes come and

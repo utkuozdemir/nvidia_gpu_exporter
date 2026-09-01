@@ -92,11 +92,13 @@ and `compute_instance_id` labels, attributing each process to its MIG
 instance (empty for processes on non-MIG GPUs). It is opt-in because it
 changes the label set of the per-process series.
 
-Container note: like the per-process metrics under MIG, full function needs
-generous privileges. The exporter container may need to run privileged with
-`NVIDIA_MIG_MONITOR_DEVICES=all` and share the host PID namespace. MIG
-inventory and memory worked unprivileged in testing. On Kubernetes, privileged
-has to be requested together with the rest of the security context; see the
+Container note: full function, the per-process metrics under MIG included,
+needs a privileged container with `NVIDIA_MIG_MONITOR_DEVICES=all` and the
+host PID namespace. Root is not needed, the exporter stays on its non-root
+uid (verified on an H200). Unprivileged, with just the environment variable,
+the per-MIG inventory, memory and activity metrics still work and only the
+GPU-level memory fields go absent. On Kubernetes, privileged has to be
+requested together with the rest of the security context; see the
 [chart README](../charts/nvidia-gpu-exporter/README.md).
 
 ### XID errors

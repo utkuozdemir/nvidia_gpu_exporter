@@ -81,14 +81,14 @@ helm upgrade nvidia-gpu-exporter oci://ghcr.io/utkuozdemir/charts/nvidia-gpu-exp
 
 On MIG-enabled GPUs the requirements are steeper: on top of `hostPID`, the
 exporter container needs the `NVIDIA_MIG_MONITOR_DEVICES=all` environment
-variable and a privileged container running as root, otherwise even GPU-level
-memory fields read `[Insufficient Permissions]`.
+variable and privileged mode, otherwise the GPU-level memory fields read
+`[Insufficient Permissions]`. Root is not needed: the driver's MIG monitor
+device is world-readable by default, so the exporter keeps running as uid
+65534 (verified on an H200, including per-process MIG attribution).
 
 Use the whole block below. Your values merge onto the chart defaults key by
 key, so setting `privileged` on its own conflicts with the default
 `allowPrivilegeEscalation: false`, and the chart refuses to render it.
-`runAsUser: 0` is required as well: without it the process stays uid 65534,
-which cannot read the MIG monitor devices.
 
 ```yaml
 hostPID: true
@@ -99,10 +99,11 @@ securityContext:
   privileged: true
   allowPrivilegeEscalation: true
   capabilities: null
-  runAsUser: 0
-podSecurityContext:
-  runAsNonRoot: null
 ```
+
+Without privileged mode (just the environment variable), the per-MIG-instance
+inventory, memory and activity metrics still work, only the GPU-level memory
+fields go absent.
 
 By default processes are attributed to the parent GPU's UUID, not to individual
 MIG instances; on the `-nvml` image the attribution labels can be added with
