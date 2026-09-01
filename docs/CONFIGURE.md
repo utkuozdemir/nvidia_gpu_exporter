@@ -338,7 +338,9 @@ Things to keep in mind:
   other workloads. Run with `--pid=host` (Docker) or `hostPID: true`
   (Kubernetes, the `hostPID` value in the Helm chart) to see everything. The
   tradeoff is that the exporter pod can then see all host process names,
-  which some security policies forbid.
+  which some security policies forbid. A host that mounts `/proc` with
+  `hidepid` hides other users' process names from the exporter's non-root
+  uid, so those series lose their names or disappear.
 - Windows in WDDM mode reports no per-process memory. The driver does not
   manage the memory there, so `used_gpu_memory` is not available. The
   `compute_app_info` and `compute_apps` metrics still work, the
@@ -351,7 +353,11 @@ Things to keep in mind:
   additionally needs to run privileged with the
   `NVIDIA_MIG_MONITOR_DEVICES=all` environment variable (plus host PID
   sharing). Otherwise the per-process list and even some GPU-level fields
-  read `[Insufficient Permissions]`.
+  read `[Insufficient Permissions]`. Root is not needed, the container's
+  non-root uid can read the MIG monitor device (world-readable by default).
+  On Kubernetes, use the complete values block from the
+  [chart README](../charts/nvidia-gpu-exporter/README.md), setting
+  `privileged` on its own does not pass validation.
 - The `pid` label changes constantly. Every new process creates new series,
   and they disappear with the process. On machines where processes come and
   go a lot, this can bloat the time series database. This is one of the

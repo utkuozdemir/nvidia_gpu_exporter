@@ -1,3 +1,9 @@
+{{- /* a privileged override merges with the default allowPrivilegeEscalation=false
+     into a pod spec the API server rejects; fail here with a usable message instead */}}
+{{- $sc := .Values.securityContext | default dict }}
+{{- if and (dig "privileged" false $sc) (not (dig "allowPrivilegeEscalation" true $sc)) }}
+{{- fail "securityContext.privileged=true conflicts with the chart's default allowPrivilegeEscalation=false. Use the full MIG security context block from the chart README." }}
+{{- end }}
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:

@@ -4,6 +4,11 @@
 # in-repo appVersion is a placeholder.
 image:
   tag: "1.11.0"
+# The pinned image above still runs as root, which the chart's default
+# runAsNonRoot rejects; an explicit runAsUser satisfies the check either way.
+# Drop this once the tag is bumped to a release with the non-root image.
+securityContext:
+  runAsUser: 65534
 serviceMonitor:
   enabled: false
 podMonitor:

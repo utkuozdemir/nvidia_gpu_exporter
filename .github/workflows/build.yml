@@ -56,6 +56,13 @@ jobs:
       # and a workstation cannot drift apart.
       - name: Lint
         run: task lint
+      # the chart's default runAsNonRoot relies on the images carrying a
+      # numeric non-root user. A refactor that drops the directive would pass
+      # every other check and then break every pod at container start.
+      - name: Check that the images keep their non-root user
+        run: |
+          grep -q '^USER 65534:65534$' Dockerfile
+          grep -q '^USER 65534:65534$' Dockerfile.nvml
       - name: Run tests
         run: go test -v -race -coverpkg=./... -coverprofile ./coverage.out -covermode=atomic -timeout 20m ./...
       - name: Print coverage results

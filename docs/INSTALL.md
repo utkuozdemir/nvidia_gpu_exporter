@@ -144,6 +144,9 @@ docker run -d \
   utkuozdemir/nvidia_gpu_exporter:latest
 ```
 
+The container runs as uid 65534 (`nobody`), not root. GPU access does not
+need root, so nothing else changes because of it.
+
 `--gpus all` turns on Docker's NVIDIA integration for the container and
 exposes all GPUs to it.
 
@@ -214,6 +217,14 @@ COPY --from=utkuozdemir/nvidia_gpu_exporter:latest /usr/bin/nvidia_gpu_exporter 
 ENTRYPOINT ["/usr/bin/nvidia_gpu_exporter"]
 ```
 
+A wrapper image built this way runs as its own base's default user (root for
+`debian`), not as the exporter image's uid 65534, so set up its user, home
+and any `sudo` or ssh configuration like in any other image. Only an image
+built directly `FROM` the exporter image keeps uid 65534. If you give a
+wrapper image a non-root `USER` of its own, keep it numeric: Kubernetes
+cannot verify `runAsNonRoot` against a name-based image user and refuses to
+start such a container.
+
 When deriving from the `-nvml` variant this way, also carry over its
 `NVIDIA_VISIBLE_DEVICES=all` and `NVIDIA_DRIVER_CAPABILITIES=utility`
 environment variables. They are what makes the NVIDIA runtime inject the
@@ -237,6 +248,13 @@ location. Alternatively, set `LD_LIBRARY_PATH` to the directory you chose.
 This is fragile: the library symlink chain breaks on driver upgrades, the
 device list varies with the GPU count, and library paths differ per
 distribution and architecture. Prefer the toolkit whenever possible.
+
+Whichever mechanism injects the devices, the container's uid 65534 must be
+able to read them. The driver creates `/dev/nvidia*` world-accessible by
+default, so this just works. A host that restricts them (the
+`NVreg_DeviceFileMode` module parameter, a udev rule) shows up as
+`nvidia_smi_last_collect_success 0`: relax the device mode, add the owning
+group with `--group-add`, or run the container with `--user 0`.
 
 ## Kubernetes
 
@@ -273,7 +291,10 @@ from the old chart repository.
 
 ### Plain DaemonSet
 
-If you prefer not to use Helm, a minimal DaemonSet:
+If you prefer not to use Helm, a minimal DaemonSet. In a namespace enforcing
+the `restricted` Pod Security Standard, also add the security contexts the
+chart sets by default (see the
+[chart README](../charts/nvidia-gpu-exporter/README.md#restricted-namespaces)):
 
 ```yaml
 apiVersion: apps/v1

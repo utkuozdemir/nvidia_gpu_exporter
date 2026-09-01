@@ -79,12 +79,34 @@ helm upgrade nvidia-gpu-exporter oci://ghcr.io/utkuozdemir/charts/nvidia-gpu-exp
   --set hostPID=true
 ```
 
-On MIG-enabled GPUs the requirements are steeper: the exporter container must
-run privileged with the `NVIDIA_MIG_MONITOR_DEVICES=all` environment variable
-(via `securityContext` and `extraEnv`) on top of `hostPID`, otherwise even
-GPU-level memory fields read `[Insufficient Permissions]`. By default
-processes are attributed to the parent GPU's UUID, not to individual MIG
-instances; on the `-nvml` image the attribution labels can be added with
+On MIG-enabled GPUs the requirements are steeper: on top of `hostPID`, the
+exporter container needs the `NVIDIA_MIG_MONITOR_DEVICES=all` environment
+variable and privileged mode, otherwise the GPU-level memory fields read
+`[Insufficient Permissions]`. Root is not needed: the driver's MIG monitor
+device is world-readable by default, so the exporter keeps running as uid
+65534 (verified on an H200, including per-process MIG attribution).
+
+Use the whole block below. Your values merge onto the chart defaults key by
+key, so setting `privileged` on its own conflicts with the default
+`allowPrivilegeEscalation: false`, and the chart refuses to render it.
+
+```yaml
+hostPID: true
+extraEnv:
+  - name: NVIDIA_MIG_MONITOR_DEVICES
+    value: all
+securityContext:
+  privileged: true
+  allowPrivilegeEscalation: true
+  capabilities: null
+```
+
+Without privileged mode (just the environment variable), the per-MIG-instance
+inventory, memory and activity metrics still work, only the GPU-level memory
+fields go absent.
+
+By default processes are attributed to the parent GPU's UUID, not to individual
+MIG instances; on the `-nvml` image the attribution labels can be added with
 
 ```yaml
 extraArgs:
@@ -137,30 +159,63 @@ To replace dcgm-exporter instead of running both, disable it with
 
 ## Restricted namespaces
 
-The pods run unprivileged, but the default security contexts are empty and
-the image runs as root, which the `restricted`
-[Pod Security Standard](https://kubernetes.io/docs/concepts/security/pod-security-standards/)
-rejects at admission. GPU access via the NVIDIA runtime does not require
-root (the injected device nodes are world-accessible on standard driver
-installs), so in enforcing namespaces set a compliant security context:
+A default install passes admission in namespaces enforcing the `restricted`
+[Pod Security Standard](https://kubernetes.io/docs/concepts/security/pod-security-standards/).
+The image runs as uid 65534, and the chart defaults declare what that level
+requires:
 
 ```yaml
-securityContext:
+podSecurityContext:
   runAsNonRoot: true
-  runAsUser: 65534
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
   allowPrivilegeEscalation: false
   capabilities:
     drop:
       - ALL
-  seccompProfile:
-    type: RuntimeDefault
 ```
 
-Note that `hostNetwork` and `hostPort` are rejected in such namespaces no
-matter the security context (the `baseline` level already forbids them), and
-`computeApps` needs `hostPID`, which they forbid too. On OpenShift, leave
-`runAsUser` unset and let the namespace SCC assign one; the default
+None of it takes anything away from the exporter: it writes no files, it
+listens above port 1024, and GPU access comes from the NVIDIA runtime, which
+needs no privileges.
+
+Two limits remain. `hostNetwork`, `hostPort` and `hostPID` (which
+`computeApps` needs) are rejected in such namespaces whatever the security
+context, since the `baseline` level already forbids them. And a policy engine
+that wants an explicit uid rather than `runAsNonRoot` needs
+`securityContext.runAsUser: 65534`, except on OpenShift: there, leave
+`runAsUser` unset and let the namespace SCC assign one, the default
 `restricted-v2` SCC fits this workload.
+
+## Upgrading to the non-root images
+
+Starting with app version 1.15.0 the container images run as uid 65534
+instead of root, and the chart ships the security context defaults shown
+above. For an upgrade this means:
+
+- A plain `helm upgrade` works unchanged for the common setups. An upgrade
+  with `--reuse-values` keeps your old (empty) security contexts, so nothing
+  hardens behind your back.
+- An `image.tag` pinned to a release older than 1.15.0 fails to start under
+  the new defaults. The kubelet reports `CreateContainerConfigError` with
+  "container has runAsNonRoot and image will run as root". Unpin the tag, or
+  set `securityContext.runAsUser: 65534`, or drop the check with
+  `podSecurityContext.runAsNonRoot: null`.
+- `securityContext.privileged: true` on its own, the old MIG guidance,
+  conflicts with the new defaults. The chart fails the render and points at
+  the full block in the [per-process section](#per-process-gpu-metrics).
+- Overriding these values is a merge, not a replacement, so
+  `securityContext: {}` changes nothing. Set a sub-key to `null` to drop one
+  setting, or the whole key to `null` to drop the block.
+- Two host-side details can surface after the uid change. A host that
+  restricts `/dev/nvidia*` (the `NVreg_DeviceFileMode` module parameter, a
+  udev rule) makes collections fail with `nvidia_smi_last_collect_success 0`:
+  relax the device mode, add the owning group via
+  `podSecurityContext.supplementalGroups`, or go back to root with
+  `securityContext.runAsUser: 0` plus `podSecurityContext.runAsNonRoot: null`.
+  And TLS material for `--web.config.file` mounted root-owned with
+  `defaultMode: 0400` is unreadable to uid 65534: use `0444` or an `fsGroup`.
 
 ## Upgrading from chart 1.x
 
@@ -276,7 +331,7 @@ grafanaDashboard:
 | podMonitor.metricRelabelings | list | `[]` | Relabelings to apply to the scraped metrics |
 | podMonitor.relabelings | list | `[]` | Relabelings to apply to the scraped targets |
 | podMonitor.scrapeTimeout | string | `""` | Scrape timeout |
-| podSecurityContext | object | `{}` | Security context for the pods |
+| podSecurityContext | object | `{"runAsNonRoot":true,"seccompProfile":{"type":"RuntimeDefault"}}` | Security context for the pods. The defaults pass `restricted` Pod Security Standard admission. `runAsUser` is unset on purpose: the image's own uid applies, and an OpenShift SCC can still assign one. |
 | port | int | `9835` | Port to listen on |
 | priorityClassName | string | `""` | Priority class name for the pods |
 | prometheusRule.additionalLabels | object | `{}` | Additional labels for the PrometheusRule, e.g. to match your Prometheus instance's rule selector |
@@ -310,7 +365,7 @@ grafanaDashboard:
 | resources | object | `{}` | Resources for the exporter container |
 | revisionHistoryLimit | string | `""` | How many old DaemonSet history revisions to retain for rollbacks. Empty means the Kubernetes default (10). |
 | runtimeClassName | string | `""` | Name of the RuntimeClass to run the pods with. GPU access is injected by the NVIDIA container runtime, so the pods must run with it: either set this to the name of your NVIDIA RuntimeClass (usually `nvidia`), or leave it empty if the NVIDIA runtime is the default runtime of your nodes. If neither is the case, the exporter will come up but serve no GPU metrics, reporting `nvidia_smi_last_collect_success 0`. |
-| securityContext | object | `{}` | Security context for the exporter container. The default is unprivileged: GPU access comes from the NVIDIA runtime, which requires no privileges. |
+| securityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}` | Security context for the exporter container. Unprivileged: GPU access comes from the NVIDIA runtime, which needs no privileges or capabilities. |
 | service.annotations | object | `{}` | Annotations to add to the Service |
 | service.enabled | bool | `true` | Create a Service for the exporter |
 | service.nodePort | string | `""` | Node port to use for NodePort/LoadBalancer service types |

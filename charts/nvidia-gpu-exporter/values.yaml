@@ -266,12 +266,21 @@ podAnnotations: {}
 # -- Extra labels to add to the pods
 podLabels: {}
 
-# -- Security context for the pods
-podSecurityContext: {}
+# -- Security context for the pods. The defaults pass `restricted` Pod Security
+# Standard admission. `runAsUser` is unset on purpose: the image's own uid
+# applies, and an OpenShift SCC can still assign one.
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
 
-# -- Security context for the exporter container. The default is unprivileged:
-# GPU access comes from the NVIDIA runtime, which requires no privileges.
-securityContext: {}
+# -- Security context for the exporter container. Unprivileged: GPU access
+# comes from the NVIDIA runtime, which needs no privileges or capabilities.
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
 
 # -- Resources for the exporter container
 resources: {}
