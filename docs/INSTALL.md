@@ -557,3 +557,28 @@ cosign verify \
 The chart is signed too, with GPG provenance for the classic repository and
 cosign for the OCI artifact. The commands are in the
 [chart README](../charts/nvidia-gpu-exporter/README.md).
+
+### Build provenance
+
+Every release file, image and chart also carries a build provenance
+attestation. It is a signed statement, made by GitHub during the release
+workflow, that ties the artifact's digest to this repository, the exact
+commit, the workflow and the run that produced it. It answers a different
+question than the signatures above: not only "is this the maintainer's
+release", but "was this built by the release workflow from that commit".
+
+Verify a downloaded file with the GitHub CLI:
+
+```bash
+gh attestation verify nvidia_gpu_exporter_X.Y.Z_linux_x86_64.tar.gz --repo utkuozdemir/nvidia_gpu_exporter
+```
+
+And an image or the chart by reference:
+
+```bash
+gh attestation verify oci://docker.io/utkuozdemir/nvidia_gpu_exporter:X.Y.Z --repo utkuozdemir/nvidia_gpu_exporter
+gh attestation verify oci://ghcr.io/utkuozdemir/charts/nvidia-gpu-exporter:X.Y.Z --repo utkuozdemir/nvidia_gpu_exporter
+```
+
+The output names the commit and the workflow run, so you can follow it back
+to the source and the build log.

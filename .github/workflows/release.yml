@@ -18,7 +18,8 @@ jobs:
     permissions:
       contents: write # create the GitHub release
       packages: write # push images to GHCR
-      id-token: write # cosign keyless image signing (OIDC)
+      id-token: write # cosign keyless image signing and the provenance attestations (OIDC)
+      attestations: write # store the provenance attestations
     steps:
       # the release tag must carry a signature GitHub verifies against the
       # pusher's registered keys (any type: SSH, GPG or S/MIME). Checked before
@@ -131,7 +132,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PRIVATE_ACCESS_TOKEN: ${{ secrets.PRIVATE_ACCESS_TOKEN }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      # build provenance for every archive and package: a signed statement that
+      # ties each file's digest to this repository, commit, workflow and run.
+      # Verify with: gh attestation verify <file> --repo utkuozdemir/nvidia_gpu_exporter
+      - name: Attest the release files
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: dist/checksums.txt
       - name: Sign the container images
+        id: images
         run: |
           version="${GITHUB_REF_NAME#v}"
           for repo in \
@@ -153,8 +162,37 @@ jobs:
                 exit 1
               fi
               cosign sign --yes "${repo}@${digest}"
+              # hand the digest to the attestation steps below
+              key="$(printf '%s_%s' "${repo%%/*}" "${tag#"${version}"}" | tr -c 'a-zA-Z0-9_\n' '_')"
+              echo "${key}=${digest}" >>"${GITHUB_OUTPUT}"
             done
           done
+      # build provenance for the images, stored next to them in the registries.
+      # Verify with: gh attestation verify oci://<image>:<tag> --repo utkuozdemir/nvidia_gpu_exporter
+      - name: Attest the Docker Hub images
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: docker.io/utkuozdemir/nvidia_gpu_exporter
+          subject-digest: ${{ steps.images.outputs.docker_io_ }}
+          push-to-registry: true
+      - name: Attest the Docker Hub nvml images
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: docker.io/utkuozdemir/nvidia_gpu_exporter
+          subject-digest: ${{ steps.images.outputs.docker_io__nvml }}
+          push-to-registry: true
+      - name: Attest the GHCR images
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/utkuozdemir/nvidia_gpu_exporter
+          subject-digest: ${{ steps.images.outputs.ghcr_io_ }}
+          push-to-registry: true
+      - name: Attest the GHCR nvml images
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/utkuozdemir/nvidia_gpu_exporter
+          subject-digest: ${{ steps.images.outputs.ghcr_io__nvml }}
+          push-to-registry: true
 
   helm-chart:
     runs-on: ubuntu-24.04
@@ -162,7 +200,8 @@ jobs:
     permissions:
       contents: write
       packages: write
-      id-token: write # cosign keyless chart signing (OIDC)
+      id-token: write # cosign keyless chart signing and the provenance attestation (OIDC)
+      attestations: write # store the provenance attestation
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -240,6 +279,7 @@ jobs:
         env:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Push and sign the chart on GHCR
+        id: chart
         # no xtrace: the registry login reads the token on stdin
         shell: bash --noprofile --norc -euo pipefail {0}
         run: |
@@ -256,8 +296,21 @@ jobs:
           fi
           cosign sign --yes \
             "ghcr.io/${{ github.repository_owner }}/charts/nvidia-gpu-exporter@${digest}"
+          echo "digest=${digest}" >>"${GITHUB_OUTPUT}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # build provenance for the chart, both the OCI artifact (stored in the
+      # registry) and the packaged file published to the Helm repository
+      - name: Attest the OCI chart
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/charts/nvidia-gpu-exporter
+          subject-digest: ${{ steps.chart.outputs.digest }}
+          push-to-registry: true
+      - name: Attest the packaged chart
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: /tmp/chart-dist/*.tgz
       - name: Publish chart to the Helm repository on gh-pages
         run: |
           git config user.name "github-actions[bot]"
