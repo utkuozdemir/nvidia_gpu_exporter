@@ -103,6 +103,9 @@ nfpms:
     ids:
       - nvidia_gpu_exporter
     package_name: nvidia-gpu-exporter
+    # reproducible packages: the commit time as the file and build timestamp,
+    # like the archives, so the deb and rpm are byte-identical across builds
+    mtime: "{{ .CommitDate }}"
     bindir: /usr/bin
     vendor: Utku Ozdemir
     homepage: https://github.com/utkuozdemir/nvidia_gpu_exporter
