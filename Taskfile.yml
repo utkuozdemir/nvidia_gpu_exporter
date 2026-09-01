@@ -175,6 +175,8 @@ tasks:
         # renovate: depName=caarlos0/svu datasource=docker
         sh: docker run --rm -v "$PWD":/src -w /src caarlos0/svu:3.4.1 next
     cmds:
-      - git tag -a {{.NEXT}} -m "{{.NEXT}}"
+      # signed tag: the release workflow refuses a tag GitHub cannot verify,
+      # and the tag ruleset rejects an unsigned push, so this has to be -s
+      - git tag -s {{.NEXT}} -m "{{.NEXT}}"
       - echo {{.NEXT}}
       - git push origin {{.NEXT}}

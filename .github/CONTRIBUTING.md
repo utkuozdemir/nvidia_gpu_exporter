@@ -62,3 +62,4 @@ task release
 
 It needs [task](https://github.com/go-task/task) and Docker, [svu](https://github.com/caarlos0/svu) runs containerized.
 The version is derived from the commit history.
+The tag is signed, and the release workflow refuses to build from a tag that GitHub does not show as verified.

@@ -20,6 +20,26 @@ jobs:
       packages: write # push images to GHCR
       id-token: write # cosign keyless image signing (OIDC)
     steps:
+      # the release tag must carry a signature GitHub verifies against the
+      # pusher's registered keys (any type: SSH, GPG or S/MIME). Checked before
+      # anything is built or published, so an unsigned tag fails fast
+      - name: Check that the release tag is signed and verified
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ref="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${GITHUB_REF_NAME}")"
+          type="$(jq -r .object.type <<<"${ref}")"
+          if [ "${type}" != "tag" ]; then
+            echo "release tag ${GITHUB_REF_NAME} is a lightweight tag (${type}); releases need an annotated, signed tag" >&2
+            exit 1
+          fi
+          sha="$(jq -r .object.sha <<<"${ref}")"
+          verification="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${sha}" -q .verification)"
+          if [ "$(jq -r .verified <<<"${verification}")" != "true" ]; then
+            echo "release tag ${GITHUB_REF_NAME} has no verified signature: $(jq -r .reason <<<"${verification}")" >&2
+            exit 1
+          fi
+          echo "tag ${GITHUB_REF_NAME} carries a verified signature"
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
