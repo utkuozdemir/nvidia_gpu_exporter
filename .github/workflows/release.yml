@@ -205,8 +205,12 @@ jobs:
           GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PRIVATE_ACCESS_TOKEN: ${{ secrets.PRIVATE_ACCESS_TOKEN }}
+      # also when goreleaser failed at a late step (a package manager), after
+      # the release and the images were already published: what is out there
+      # still gets signed and attested
       - name: Sign the container images
         id: images
+        if: ${{ !cancelled() }}
         run: |
           version="${GITHUB_REF_NAME#v}"
           for repo in \
@@ -214,7 +218,7 @@ jobs:
             ghcr.io/utkuozdemir/nvidia_gpu_exporter; do
             # sign every published tag variant of this release
             for tag in "${version}" "${version}-nvml"; do
-              # the tag was just pushed; retry the registry read to avoid a race
+              # the tag was just pushed, so the registry read is retried to avoid a race
               digest=""
               for _ in 1 2 3 4 5; do
                 if digest="$(docker buildx imagetools inspect "${repo}:${tag}" \
@@ -236,6 +240,7 @@ jobs:
       # the checksums list feeds the attestation job, which must be able to
       # run again on its own if the attestation service has a bad moment
       - name: Upload the checksums for attestation
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: checksums
@@ -252,6 +257,9 @@ jobs:
   attest:
     runs-on: ubuntu-24.04
     needs: release
+    # whenever the images were signed, even if the release job then failed at
+    # a package manager step
+    if: ${{ !cancelled() && needs.release.outputs.docker_io_ != '' }}
     permissions:
       id-token: write
       attestations: write
@@ -287,7 +295,7 @@ jobs:
 
   # rebuild the release files from the tag on a second runner and compare
   # them with what was just published. Identical means this release is
-  # reproducible, shown by a second machine; a difference fails this job
+  # reproducible, shown by a second machine. A difference fails this job
   # loudly and leaves the published release alone
   verify-reproducible:
     runs-on: ubuntu-24.04
@@ -314,8 +322,8 @@ jobs:
         with:
           go-version-file: go.mod
           # no cache: the point of this job is to rebuild from scratch on a
-          # runner that shares nothing with the release build. The cache is
-          # keyed by go.sum alone, so the release job's compiled packages
+          # runner that shares nothing with the release build. The cache key
+          # is only the go.sum hash, so the release job's compiled packages
           # would otherwise be restored here and the comparison would only
           # cover the packaging
           cache: false

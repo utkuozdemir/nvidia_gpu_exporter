@@ -223,12 +223,17 @@ A tag ruleset makes release tags immutable (no update, no deletion), so a signat
 The release task only tags the tip of the main branch, and the workflow refuses a tagged commit that is not on the main branch.
 
 The pipeline builds two binary flavors from the same source: the fully static default build, and the cgo nvml flavor.
-The release builds are reproducible on purpose: no build paths in the binaries, the commit time as every timestamp, and a fixed owner and mode on every archive entry, so the same commit yields the same bytes for every static artifact on any machine, and for the cgo flavor on a builder with the same C toolchain.
-The owner matters because an archive entry records the builder's uid, gid and user name, which is what made the first release with this setup reproduce only under the release runner's user. The mode is fixed too, because the checkout's file mode follows the builder's umask and would have been the next difference.
+The release builds are reproducible on purpose: no build paths in the binaries, the commit time as every timestamp, and a fixed owner and mode on every archive entry.
+The same commit yields the same bytes for every static artifact on any machine, and for the cgo flavor on a builder with the same C toolchain.
+The owner matters because an archive entry records the builder's uid, gid and user name.
+This is what made the first release with this setup reproduce only under the release runner's user.
+The mode is fixed too, because the checkout's file mode follows the builder's umask and would have been the next difference.
 Keep new build steps deterministic.
 A separate workflow builds the release artifacts twice on two runners and fails on any checksum difference, so a build that starts depending on the hostname or the time is caught before a release.
-That workflow and the post-release rebuild run without the Go cache on purpose: the cache is keyed by `go.sum` alone, so the rebuild would otherwise restore the compiled packages of the build it is meant to check and compare only the packaging.
-It cannot catch a dependence on the user or the umask, and neither can the post-release rebuild, because every runner builds as the same user. That class is covered only by the fixed owner and mode above, so do not drop them as redundant.
+That workflow and the post-release rebuild run without the Go cache on purpose.
+The cache key is only the `go.sum` hash, so the rebuild would otherwise restore the compiled packages of the build it is meant to check and compare only the packaging.
+Neither of them can catch a dependence on the user or the umask, because every runner builds as the same user.
+That class is covered only by the fixed owner and mode above, so do not drop them as redundant.
 The container images are reproducible too: the commit time goes in as a build argument for the image timestamps, and the release build rewrites the layer timestamps to it, because the copy of the binary would otherwise stamp its layer with the build time. buildkit's own provenance and SBOM attestations are switched off for the images: both carry wall-clock timestamps and change the published index digest on every build, and the release workflow attaches GitHub's build provenance instead. Snapshot builds cannot carry the exporter option (a multi-platform build loaded into the daemon), so image reproducibility is checked by hand: two cold builds pushed to a scratch registry must give the same index digest, not just the same local image ID.
 Keeping the two apart is a real invariant.
 The packages and the primary container image explicitly pin themselves to the static build, because a cgo binary silently reaching the deb, the rpm or the main image would ship something that cannot run where those artifacts are expected to run.

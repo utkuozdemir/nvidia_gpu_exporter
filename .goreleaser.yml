@@ -256,8 +256,8 @@ dockers_v2:
     # pushed release image: a snapshot loads a multi-platform build into the
     # daemon, which cannot carry it, so snapshot images stay non-reproducible.
     # buildkit's own provenance and SBOM attestations carry wall-clock times
-    # and change the published index digest on every build, so they are off;
-    # the release workflow attaches GitHub's build provenance instead.
+    # and change the published index digest on every build, so they are off.
+    # The release workflow attaches GitHub's build provenance instead.
     sbom: false
     build_args:
       SOURCE_DATE_EPOCH: "{{ .CommitTimestamp }}"
@@ -286,8 +286,8 @@ dockers_v2:
     # pushed release image: a snapshot loads a multi-platform build into the
     # daemon, which cannot carry it, so snapshot images stay non-reproducible.
     # buildkit's own provenance and SBOM attestations carry wall-clock times
-    # and change the published index digest on every build, so they are off;
-    # the release workflow attaches GitHub's build provenance instead.
+    # and change the published index digest on every build, so they are off.
+    # The release workflow attaches GitHub's build provenance instead.
     sbom: false
     build_args:
       SOURCE_DATE_EPOCH: "{{ .CommitTimestamp }}"

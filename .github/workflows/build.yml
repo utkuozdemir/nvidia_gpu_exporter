@@ -14,34 +14,20 @@ on:
   pull_request:
     branches:
       - main
-    # the default types miss the base-branch change of a retargeted PR (it
-    # arrives as "edited"), so a stacked PR that lands on main after its
-    # parent merges would never get a run. The job-level guard below skips
-    # the title/description edits that also arrive as "edited".
-    types:
-      - opened
-      - synchronize
-      - reopened
-      - edited
 
 permissions:
   contents: read
 
 concurrency:
   group: build-${{ github.event.pull_request.number || github.ref }}
-  # an "edited" event that did not change the base branch is skipped by the
-  # job guard below, so it must not cancel the real run that is in progress,
-  # or a title or description edit leaves the pull request with no build at all
-  cancel-in-progress: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
+  cancel-in-progress: true
 
 defaults:
   run:
     shell: bash --noprofile --norc -euox pipefail {0}
 
-# run edited-events only when the edit changed the base branch
 jobs:
   build:
-    if: github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -118,7 +104,6 @@ jobs:
         run: git diff --exit-code
 
   chart:
-    if: github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
