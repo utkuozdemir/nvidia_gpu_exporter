@@ -220,11 +220,13 @@ jobs:
     permissions:
       contents: read
     steps:
-      # first, so that a run whose release never got published stops here
+      # first, so that a run whose release never got published stops here.
+      # Outside the workspace: the checkout below cleans the workspace and
+      # would delete the download
       - name: Download the published checksums
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release download "${GITHUB_REF_NAME}" -R "${GITHUB_REPOSITORY}" --pattern checksums.txt --output published-checksums.txt
+        run: gh release download "${GITHUB_REF_NAME}" -R "${GITHUB_REPOSITORY}" --pattern checksums.txt --output "${RUNNER_TEMP}/published-checksums.txt"
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -246,12 +248,23 @@ jobs:
           PRIVATE_ACCESS_TOKEN: placeholder
       - name: Compare with the published checksums
         run: |
-          if diff published-checksums.txt dist/checksums.txt; then
+          if diff "${RUNNER_TEMP}/published-checksums.txt" dist/checksums.txt; then
             echo "release ${GITHUB_REF_NAME} reproduced byte for byte on a second runner"
           else
-            echo "release ${GITHUB_REF_NAME} did not reproduce: the artifacts above differ from the published ones" >&2
+            echo "release ${GITHUB_REF_NAME} did not reproduce: the artifacts above differ from the published ones, see the rebuilt-release-files artifact of this run" >&2
             exit 1
           fi
+      # the whole rebuilt dist, so a difference can be diffed against the
+      # published files without rebuilding anything. artifacts.json in there
+      # records the file info goreleaser applied to every entry. Only when a
+      # rebuild exists, a run whose release was never published stops earlier
+      - name: Keep the rebuilt files for inspection
+        if: failure() && hashFiles('dist/checksums.txt') != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rebuilt-release-files
+          path: dist
+          retention-days: 7
 
   helm-chart:
     runs-on: ubuntu-24.04

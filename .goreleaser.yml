@@ -74,10 +74,21 @@ archives:
       {{- else }}{{ .Arch }}{{ end }}
     ids:
       - nvidia_gpu_exporter-nvml
+    # the archive entries would otherwise carry the builder's uid, gid and
+    # user name (1001 "runner" on the release runner) and the checkout's file
+    # mode, which follows the umask, so the archives reproduced only under
+    # that same user. Fixed owner and mode for every entry, and the commit
+    # time on the extra files; the binaries get their mode (0755) from
+    # goreleaser and their time from mod_timestamp above
+    builds_info:
+      owner: root
+      group: root
     files:
-      # the checkout time of this file would otherwise end up in the archive
       - src: LICENSE
         info:
+          owner: root
+          group: root
+          mode: 0644
           mtime: "{{ .CommitDate }}"
 
   - id: nvidia_gpu_exporter-archive
@@ -97,10 +108,21 @@ archives:
       - goos: windows
         formats:
           - zip
+    # the archive entries would otherwise carry the builder's uid, gid and
+    # user name (1001 "runner" on the release runner) and the checkout's file
+    # mode, which follows the umask, so the archives reproduced only under
+    # that same user. Fixed owner and mode for every entry, and the commit
+    # time on the extra files; the binaries get their mode (0755) from
+    # goreleaser and their time from mod_timestamp above
+    builds_info:
+      owner: root
+      group: root
     files:
-      # the checkout time of this file would otherwise end up in the archive
       - src: LICENSE
         info:
+          owner: root
+          group: root
+          mode: 0644
           mtime: "{{ .CommitDate }}"
 
 nfpms:
