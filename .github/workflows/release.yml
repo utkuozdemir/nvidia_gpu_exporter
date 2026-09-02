@@ -235,6 +235,12 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          # no cache: the point of this job is to rebuild from scratch on a
+          # runner that shares nothing with the release build. The cache is
+          # keyed by go.sum alone, so the release job's compiled packages
+          # would otherwise be restored here and the comparison would only
+          # cover the packaging
+          cache: false
       - name: Resolve goreleaser version
         id: goreleaser_version
         run: echo "version=$(sed -n 's/^ARG GORELEASER_VERSION=//p' hack/dev.Dockerfile)" >>"${GITHUB_OUTPUT}"

@@ -43,6 +43,11 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          # no cache: the point is that the two legs compile from scratch and
+          # share nothing. The cache is keyed by go.sum alone, so both legs
+          # would otherwise restore the same compiled packages from an earlier
+          # run and the comparison would only cover the packaging
+          cache: false
       # the build workflow enforces that this declaration is exactly one line
       - name: Resolve goreleaser version
         id: goreleaser_version
