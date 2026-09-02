@@ -44,7 +44,7 @@ jobs:
         with:
           go-version-file: go.mod
           # no cache: the point is that the two legs compile from scratch and
-          # share nothing. The cache is keyed by go.sum alone, so both legs
+          # share nothing. The cache key is only the go.sum hash, so both legs
           # would otherwise restore the same compiled packages from an earlier
           # run and the comparison would only cover the packaging
           cache: false

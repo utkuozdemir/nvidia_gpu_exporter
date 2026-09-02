@@ -545,6 +545,10 @@ cosign verify-blob checksums.txt \
 sha256sum --ignore-missing -c checksums.txt
 ```
 
+The `&&` keeps a failed signature check from being followed by a passing
+checksum line. On macOS, `shasum -a 256 --ignore-missing -c checksums.txt`
+replaces the last line.
+
 Releases with no `checksums.txt.sigstore.json` attached shipped a detached GPG
 signature `checksums.txt.asc` instead, made with the key that still signs the
 chart provenance. For those, import the key and check the two files. The

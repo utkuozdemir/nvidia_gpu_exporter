@@ -186,12 +186,12 @@ tasks:
       # disabling the ruleset first
       - |
         t="sigcheck-$(date +%s)"
+        # removed again whatever happens below, so an aborted check leaves no tag behind
+        trap 'git push -q origin --delete "$t" >/dev/null 2>&1 || true; git tag -d "$t" >/dev/null 2>&1 || true' EXIT
         git tag -s "$t" -m "$t"
         git push -q origin "$t"
         sha="$(gh api "repos/utkuozdemir/nvidia_gpu_exporter/git/ref/tags/$t" -q .object.sha)"
         verified="$(gh api "repos/utkuozdemir/nvidia_gpu_exporter/git/tags/$sha" -q .verification.verified)"
-        git push -q origin --delete "$t"
-        git tag -d "$t" >/dev/null
         test "$verified" = "true" || { echo "GitHub does not verify tags signed here. Is the signing key registered on the GitHub account as a signing key?" >&2; exit 1; }
       # signed tag: the release workflow refuses a tag GitHub cannot verify,
       # so this has to be -s. Release tags are immutable by ruleset, so a
