@@ -95,6 +95,84 @@ jobs:
         with:
           # renovate: depName=sigstore/cosign datasource=github-releases
           cosign-release: v3.1.3
+      # The chart is packaged and signed here, before anything is published,
+      # so a packaging failure aborts a clean run, and so that the chart job
+      # below needs no secret: this is the only job that reads the GPG key,
+      # and the only one the release environment has to hold for approval.
+      - name: Compute chart and app versions from the tag
+        run: |
+          app_version="${GITHUB_REF_NAME#v}"
+          IFS=. read -r major minor patch <<<"${app_version}"
+          chart_version="$((major + 1)).${minor}.${patch}"
+          echo "APP_VERSION=${app_version}" >>"${GITHUB_ENV}"
+          echo "CHART_VERSION=${chart_version}" >>"${GITHUB_ENV}"
+      # a pinned helm, not the runner image's: the packaged chart must not
+      # change because the runner picked up a new helm
+      - name: Install helm
+        uses: Azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          # renovate: depName=helm/helm datasource=github-releases
+          version: v4.2.4
+      - name: Import the signing key
+        # no xtrace: this step handles the private key and passphrase. Every
+        # third-party action of this job has run by now, and the key is
+        # removed again before the next one (goreleaser) starts
+        shell: bash --noprofile --norc -euo pipefail {0}
+        run: |
+          mkdir -p ~/.gnupg && chmod 700 ~/.gnupg
+          echo "allow-loopback-pinentry" >> ~/.gnupg/gpg-agent.conf
+          gpgconf --kill gpg-agent || true
+          echo "${GPG_PRIVATE_KEY}" | gpg --batch --import
+          fpr="$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/{print $10; exit}')"
+          # fail loudly if the secret is not the key the docs and chart advertise
+          expected="$(awk '/signKey:/{f=1} f&&/fingerprint:/{print $2; exit}' charts/nvidia-gpu-exporter/Chart.yaml)"
+          if [ "${fpr}" != "${expected}" ]; then
+            echo "imported key ${fpr} does not match the documented fingerprint ${expected}" >&2
+            exit 1
+          fi
+          # helm reads the pre-2.1 keyring format, so export the key into one
+          umask 077
+          gpg --batch --pinentry-mode loopback \
+            --passphrase "${GPG_PASSPHRASE}" \
+            --export-secret-keys "${fpr}" > /tmp/secring.gpg
+          gpg --armor --export "${fpr}" > /tmp/pubkey.asc
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      - name: Package and sign chart
+        # no xtrace: this step handles the passphrase
+        shell: bash --noprofile --norc -euo pipefail {0}
+        run: |
+          umask 077
+          trap 'rm -f /tmp/passphrase.txt' EXIT
+          echo "${GPG_PASSPHRASE}" > /tmp/passphrase.txt
+          # reproducible package: helm keeps the checkout's file mtimes in the
+          # tgz, so set them to the commit time first, like every other artifact
+          find charts/nvidia-gpu-exporter -exec touch -d "$(git log -1 --format=%cI)" {} +
+          helm package charts/nvidia-gpu-exporter \
+            --version "${CHART_VERSION}" \
+            --app-version "${APP_VERSION}" \
+            --destination /tmp/chart-dist \
+            --sign \
+            --key "nvidia_gpu_exporter release signing" \
+            --keyring /tmp/secring.gpg \
+            --passphrase-file /tmp/passphrase.txt
+          cp charts/artifacthub-repo.yml /tmp/chart-dist/
+          cp /tmp/pubkey.asc /tmp/chart-dist/
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      # the private key is not needed past this point; remove it before any
+      # further action runs in this job
+      - name: Remove the signing key material
+        run: rm -rf ~/.gnupg /tmp/secring.gpg
+      # the packaged chart, its provenance file and the repository files, for
+      # the chart job to publish and the attestation job to attest
+      - name: Upload the packaged chart
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: chart
+          path: /tmp/chart-dist/
+          if-no-files-found: error
       # the goreleaser version is declared once, in hack/dev.Dockerfile, so the
       # version that validates the release config in lint is the version that
       # builds the release. Fail loudly rather than guessing if that
@@ -272,13 +350,17 @@ jobs:
           path: dist
           retention-days: 7
 
+  # Publishes the chart the release job packaged and signed. No secret from
+  # the release environment is needed here, the workflow token pushes to GHCR
+  # and gh-pages and cosign signs keyless, so this job does not wait for a
+  # second approval. Still its own job: publishing fails for reasons of its
+  # own (registry, gh-pages) and is then re-run without redoing the release.
   helm-chart:
     runs-on: ubuntu-24.04
     needs: release
-    environment: release
     permissions:
-      contents: write
-      packages: write
+      contents: write # push to gh-pages
+      packages: write # push the chart to GHCR
       id-token: write # cosign keyless chart signing (OIDC)
     outputs:
       digest: ${{ steps.chart.outputs.digest }}
@@ -292,8 +374,11 @@ jobs:
           chart_version="$((major + 1)).${minor}.${patch}"
           echo "APP_VERSION=${app_version}" >>"${GITHUB_ENV}"
           echo "CHART_VERSION=${chart_version}" >>"${GITHUB_ENV}"
-      # a pinned helm, not the runner image's: the packaged chart must not
-      # change because the runner picked up a new helm
+      - name: Download the packaged chart
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: chart
+          path: /tmp/chart-dist
       - name: Install helm
         uses: Azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
@@ -305,69 +390,11 @@ jobs:
           # renovate: depName=sigstore/cosign datasource=github-releases
           cosign-release: v3.1.3
       - name: Log in to GHCR
-        # before importing the key, so no third-party action runs while the
-        # private key material is present on disk
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Import the signing key
-        # no xtrace: this step handles the private key and passphrase
-        shell: bash --noprofile --norc -euo pipefail {0}
-        run: |
-          mkdir -p ~/.gnupg && chmod 700 ~/.gnupg
-          echo "allow-loopback-pinentry" >> ~/.gnupg/gpg-agent.conf
-          gpgconf --kill gpg-agent || true
-          echo "${GPG_PRIVATE_KEY}" | gpg --batch --import
-          fpr="$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/{print $10; exit}')"
-          # fail loudly if the secret is not the key the docs and chart advertise
-          expected="$(awk '/signKey:/{f=1} f&&/fingerprint:/{print $2; exit}' charts/nvidia-gpu-exporter/Chart.yaml)"
-          if [ "${fpr}" != "${expected}" ]; then
-            echo "imported key ${fpr} does not match the documented fingerprint ${expected}" >&2
-            exit 1
-          fi
-          # helm reads the pre-2.1 keyring format, so export the key into one
-          umask 077
-          gpg --batch --pinentry-mode loopback \
-            --passphrase "${GPG_PASSPHRASE}" \
-            --export-secret-keys "${fpr}" > /tmp/secring.gpg
-          gpg --armor --export "${fpr}" > /tmp/pubkey.asc
-        env:
-          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      - name: Package and sign chart
-        # no xtrace: this step handles the passphrase
-        shell: bash --noprofile --norc -euo pipefail {0}
-        run: |
-          umask 077
-          trap 'rm -f /tmp/passphrase.txt' EXIT
-          echo "${GPG_PASSPHRASE}" > /tmp/passphrase.txt
-          # reproducible package: helm keeps the checkout's file mtimes in the
-          # tgz, so set them to the commit time first, like every other artifact
-          find charts/nvidia-gpu-exporter -exec touch -d "$(git log -1 --format=%cI)" {} +
-          helm package charts/nvidia-gpu-exporter \
-            --version "${CHART_VERSION}" \
-            --app-version "${APP_VERSION}" \
-            --destination /tmp/chart-dist \
-            --sign \
-            --key "nvidia_gpu_exporter release signing" \
-            --keyring /tmp/secring.gpg \
-            --passphrase-file /tmp/passphrase.txt
-          cp charts/artifacthub-repo.yml /tmp/chart-dist/
-          cp /tmp/pubkey.asc /tmp/chart-dist/
-        env:
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      # the private key is not needed past this point; remove it before any
-      # further action runs in this job
-      - name: Remove the signing key material
-        run: rm -rf ~/.gnupg /tmp/secring.gpg
-      - name: Upload the packaged chart for attestation
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: chart
-          path: /tmp/chart-dist/*.tgz
-          if-no-files-found: error
       - name: Push and sign the chart on GHCR
         id: chart
         # no xtrace: the registry login reads the token on stdin
