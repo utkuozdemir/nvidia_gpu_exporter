@@ -1,26 +1,25 @@
 ---
 name: reproducibility
 
-# Builds the release artifacts twice, on two different runners, and fails if
-# any checksum differs. Two runners have different hostnames and different
-# checkout times, which is what catches a build that depends on either: the
-# rpm build host once slipped past a double build on one machine. Runs when
-# the release inputs change and weekly, because the runner image moves too.
+# Builds the release artifacts (the files, not the images) twice, on two
+# different runners, and fails if any checksum differs. Two runners have
+# different hostnames and different checkout times, which is what catches a
+# build that depends on either: the rpm build host and the archive mtimes both
+# slipped past a double build on one machine. Runs on every change that can
+# reach a release, including the Renovate branches that merge without a pull
+# request, and weekly, because the runner image moves on its own too. The
+# images are checked by hand, see AGENTS.md.
 on:
   workflow_dispatch: {}
   schedule:
     - cron: "17 6 * * 1"
+  push:
+    branches:
+      - main
+      - renovate/**
   pull_request:
     branches:
       - main
-    paths:
-      - .goreleaser.yml
-      - Dockerfile
-      - Dockerfile.nvml
-      - go.mod
-      - go.sum
-      - hack/dev.Dockerfile
-      - .github/workflows/reproducibility.yml
 
 permissions:
   contents: read
