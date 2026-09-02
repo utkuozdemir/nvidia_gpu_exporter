@@ -19,6 +19,11 @@ jobs:
       contents: write # create the GitHub release
       packages: write # push images to GHCR
       id-token: write # cosign keyless image signing (OIDC)
+    outputs:
+      docker_io_: ${{ steps.images.outputs.docker_io_ }}
+      docker_io__nvml: ${{ steps.images.outputs.docker_io__nvml }}
+      ghcr_io_: ${{ steps.images.outputs.ghcr_io_ }}
+      ghcr_io__nvml: ${{ steps.images.outputs.ghcr_io__nvml }}
     steps:
       # the release tag must carry a signature GitHub verifies against the
       # pusher's registered keys (any type: SSH, GPG or S/MIME). Checked before
@@ -132,6 +137,7 @@ jobs:
           PRIVATE_ACCESS_TOKEN: ${{ secrets.PRIVATE_ACCESS_TOKEN }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Sign the container images
+        id: images
         run: |
           version="${GITHUB_REF_NAME#v}"
           for repo in \
@@ -153,8 +159,62 @@ jobs:
                 exit 1
               fi
               cosign sign --yes "${repo}@${digest}"
+              # hand the digest to the attestation steps below
+              key="$(printf '%s_%s' "${repo%%/*}" "${tag#"${version}"}" | tr -c 'a-zA-Z0-9_\n' '_')"
+              echo "${key}=${digest}" >>"${GITHUB_OUTPUT}"
             done
           done
+      # the checksums list feeds the attestation job, which must be able to
+      # run again on its own if the attestation service has a bad moment
+      - name: Upload the checksums for attestation
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: checksums
+          path: dist/checksums.txt
+          if-no-files-found: error
+
+  # build provenance for every archive and package and for the four image
+  # digests: a signed statement tying each digest to this repository, commit,
+  # workflow and run. A separate job, after publishing and signing, so that
+  # a failure here never leaves a published release unsigned and can be
+  # retried without redoing the release. The images' attestations are stored
+  # in GitHub's attestation store, not pushed to the registries: that is what
+  # `gh attestation verify` reads, and GHCR does not serve the referrers API.
+  attest:
+    runs-on: ubuntu-24.04
+    needs: release
+    permissions:
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download the checksums
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: checksums
+      - name: Attest the release files
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: checksums.txt
+      - name: Attest the Docker Hub image
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: docker.io/utkuozdemir/nvidia_gpu_exporter
+          subject-digest: ${{ needs.release.outputs.docker_io_ }}
+      - name: Attest the Docker Hub nvml image
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: docker.io/utkuozdemir/nvidia_gpu_exporter
+          subject-digest: ${{ needs.release.outputs.docker_io__nvml }}
+      - name: Attest the GHCR image
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/utkuozdemir/nvidia_gpu_exporter
+          subject-digest: ${{ needs.release.outputs.ghcr_io_ }}
+      - name: Attest the GHCR nvml image
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/utkuozdemir/nvidia_gpu_exporter
+          subject-digest: ${{ needs.release.outputs.ghcr_io__nvml }}
 
   helm-chart:
     runs-on: ubuntu-24.04
@@ -163,6 +223,8 @@ jobs:
       contents: write
       packages: write
       id-token: write # cosign keyless chart signing (OIDC)
+    outputs:
+      digest: ${{ steps.chart.outputs.digest }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -239,7 +301,18 @@ jobs:
           cp /tmp/pubkey.asc /tmp/chart-dist/
         env:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      # the private key is not needed past this point; remove it before any
+      # further action runs in this job
+      - name: Remove the signing key material
+        run: rm -rf ~/.gnupg /tmp/secring.gpg
+      - name: Upload the packaged chart for attestation
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: chart
+          path: /tmp/chart-dist/*.tgz
+          if-no-files-found: error
       - name: Push and sign the chart on GHCR
+        id: chart
         # no xtrace: the registry login reads the token on stdin
         shell: bash --noprofile --norc -euo pipefail {0}
         run: |
@@ -256,6 +329,7 @@ jobs:
           fi
           cosign sign --yes \
             "ghcr.io/${{ github.repository_owner }}/charts/nvidia-gpu-exporter@${digest}"
+          echo "digest=${digest}" >>"${GITHUB_OUTPUT}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish chart to the Helm repository on gh-pages
@@ -281,3 +355,26 @@ jobs:
           git add ./*.tgz ./*.tgz.prov index.yaml artifacthub-repo.yml pubkey.asc
           git commit -m "publish chart ${CHART_VERSION} (app ${APP_VERSION})"
           git push origin gh-pages
+
+  # build provenance for the chart, the OCI artifact by digest and the
+  # packaged file. Separate job for the same reasons as the attest job above.
+  attest-chart:
+    runs-on: ubuntu-24.04
+    needs: helm-chart
+    permissions:
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download the packaged chart
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: chart
+      - name: Attest the OCI chart
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/utkuozdemir/charts/nvidia-gpu-exporter
+          subject-digest: ${{ needs.helm-chart.outputs.digest }}
+      - name: Attest the packaged chart
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: "*.tgz"
