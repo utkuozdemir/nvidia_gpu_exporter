@@ -88,7 +88,12 @@ func (s *Cached) Latest(_ context.Context) Snapshot {
 // is immutable: it is never modified after Store, which is what makes the
 // lock-free reads in Latest safe.
 func (s *Cached) tick(ctx context.Context) {
-	snapshot := collectOnce(ctx, s.query, s.timeout, s.onFatal, s.logger)
+	snapshot, fatal := collectOnce(ctx, s.query, s.timeout, s.logger)
 	foldCumulative(&snapshot, &s.failures, &s.lastOK)
 	s.cur.Store(&snapshot)
+
+	// only after the outcome is published, see collectOnce
+	if fatal != nil && s.onFatal != nil {
+		s.onFatal(fatal)
+	}
 }

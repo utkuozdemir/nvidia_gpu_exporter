@@ -120,14 +120,15 @@ func (s *Live) leave(shared *flight) {
 // run performs the collection and publishes the outcome. The fold into the
 // cumulative counters, the release of the joinable slot and the publication
 // happen as one locked transition, so a waiter deciding between the result
-// and noResult (in leave) never observes them half-done.
+// and noResult (in leave) never observes them half-done. Shutdown-on-error
+// is notified only after that publication: the callback cancels the process
+// context, and the scrape that hit the fatal error must still get its data.
 func (s *Live) run(ctx context.Context, shared *flight) {
 	defer shared.cancel()
 
-	snapshot := collectOnce(ctx, s.query, s.timeout, s.onFatal, s.logger)
+	snapshot, fatal := collectOnce(ctx, s.query, s.timeout, s.logger)
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	foldCumulative(&snapshot, &s.failures, &s.lastOK)
 
@@ -137,6 +138,12 @@ func (s *Live) run(ctx context.Context, shared *flight) {
 
 	shared.snapshot = snapshot
 	close(shared.done)
+
+	s.mu.Unlock()
+
+	if fatal != nil && s.onFatal != nil {
+		s.onFatal(fatal)
+	}
 }
 
 // noResult is what a caller that could not get a collection outcome serves:

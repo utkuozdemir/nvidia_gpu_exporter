@@ -105,16 +105,21 @@ func (e *FatalError) Unwrap() error {
 // as a Snapshot with the cumulative fields (Failures, LastSuccess) not yet
 // folded in: that is the caller's job, via foldCumulative, under whatever
 // synchronization owns those counters. A failed attempt is logged here,
-// exactly once, so failures are neither logged per scrape nor lost. The
-// onFatal callback implements shutdown-on-error: it fires only on a genuine
-// non-zero exit of the command, not on a timeout the collector caused itself.
+// exactly once, so failures are neither logged per scrape nor lost.
+//
+// The second return value is the error to hand to the shutdown-on-error
+// callback, or nil: a genuine non-zero exit of the command or a lifecycle
+// error, never a timeout the collector caused itself. It is returned rather
+// than reported from here on purpose: the caller must publish the outcome
+// first and notify afterwards, because the callback cancels the process
+// context, and a scrape that sees that cancellation before the publication
+// would serve no data for the very collection that failed.
 func collectOnce(
 	ctx context.Context,
 	query QueryFunc,
 	timeout time.Duration,
-	onFatal func(error),
 	logger *slog.Logger,
-) Snapshot {
+) (Snapshot, error) {
 	callCtx, cancel := withOptionalTimeout(ctx, timeout)
 	defer cancel()
 
@@ -136,12 +141,11 @@ func collectOnce(
 
 		var fatalErr *FatalError
 
-		if callCtx.Err() == nil && onFatal != nil &&
-			(errors.As(err, &exitErr) || errors.As(err, &fatalErr)) {
-			onFatal(err)
+		if callCtx.Err() == nil && (errors.As(err, &exitErr) || errors.As(err, &fatalErr)) {
+			return snapshot, err
 		}
 
-		return snapshot
+		return snapshot, nil
 	}
 
 	// The per-process query fails softly: it is logged here (once per attempt,
@@ -159,7 +163,7 @@ func collectOnce(
 	snapshot.Extras = reading.Extras
 	snapshot.LastSuccess = now
 
-	return snapshot
+	return snapshot, nil
 }
 
 // foldCumulative merges one collection outcome into the cumulative failure

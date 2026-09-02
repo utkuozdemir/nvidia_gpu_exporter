@@ -563,7 +563,9 @@ func TestCollectDeliversMetricsOnFatalError(t *testing.T) {
 
 	families := gatherFamilies(t, exp)
 
-	// the context is cancelled by now, and the metrics still made it out
+	// the metrics made it out, and shutdown-on-error follows: the callback
+	// fires after the outcome is published, so wait for it
+	<-ctx.Done()
 	require.Error(t, context.Cause(ctx))
 
 	failed, ok := families["aaa_failed_scrapes_total"]

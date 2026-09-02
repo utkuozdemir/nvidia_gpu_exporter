@@ -158,17 +158,27 @@ func TestLiveOnFatal(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			var gotFatal error
-
-			onFatal := func(err error) { gotFatal = err }
+			// the callback fires after the outcome is published, so it may
+			// still be on its way when Latest returns: wait for it instead of
+			// reading a flag
+			fatal := make(chan error, 1)
+			onFatal := func(err error) { fatal <- err }
 
 			live := collect.NewLive(staticQuery(nil, 3, tt.err), 0, onFatal, slogt.New(t))
 			live.Latest(t.Context())
 
 			if tt.wantFatal {
-				require.ErrorIs(t, gotFatal, tt.err)
-			} else {
-				require.NoError(t, gotFatal)
+				require.ErrorIs(t, <-fatal, tt.err)
+
+				return
+			}
+
+			// a non-fatal error never schedules the callback at all, the
+			// decision is made before the outcome is published
+			select {
+			case err := <-fatal:
+				t.Fatalf("shutdown-on-error fired for a non-fatal error: %v", err)
+			default:
 			}
 		})
 	}
