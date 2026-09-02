@@ -15,8 +15,11 @@ defaults:
 jobs:
   release:
     runs-on: ubuntu-24.04
-    # the release environment holds the signing and publishing secrets and
-    # only admits v* tags, so no other workflow or ref can read them
+    # the release environment holds the signing and publishing secrets. It
+    # admits only v* tags and waits for the maintainer's approval, so a
+    # workflow on any other ref, or a tag pushed with a leaked token, cannot
+    # read them. The tag pattern alone would not be a boundary: a pushed tag
+    # brings its own workflow definition.
     environment: release
     permissions:
       contents: write # create the GitHub release
