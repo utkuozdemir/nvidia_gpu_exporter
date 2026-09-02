@@ -139,6 +139,8 @@ jobs:
           version: ${{ steps.goreleaser_version.outputs.version }}
           args: release --clean
         env:
+          # the tag this run is for, in case another tag lands on the same commit
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PRIVATE_ACCESS_TOKEN: ${{ secrets.PRIVATE_ACCESS_TOKEN }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
@@ -229,9 +231,17 @@ jobs:
   verify-reproducible:
     runs-on: ubuntu-24.04
     needs: release
+    # also when the release job failed after publishing (e.g. at a package
+    # manager step): what is published still gets checked
+    if: ${{ !cancelled() }}
     permissions:
       contents: read
     steps:
+      # first, so that a run whose release never got published stops here
+      - name: Download the published checksums
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release download "${GITHUB_REF_NAME}" -R "${GITHUB_REPOSITORY}" --pattern checksums.txt --output published-checksums.txt
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -249,12 +259,10 @@ jobs:
           version: ${{ steps.goreleaser_version.outputs.version }}
           args: release --clean --skip=publish,sign,sbom,docker,announce
         env:
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
           PRIVATE_ACCESS_TOKEN: placeholder
       - name: Compare with the published checksums
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release download "${GITHUB_REF_NAME}" --pattern checksums.txt --output published-checksums.txt
           if diff published-checksums.txt dist/checksums.txt; then
             echo "release ${GITHUB_REF_NAME} reproduced byte for byte on a second runner"
           else
