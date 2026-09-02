@@ -23,14 +23,14 @@ With the NVML backend it reads the driver library instead.
 - The NVML backend cannot kill a stuck driver call the way a subprocess can be killed. This is one of the reasons it is experimental.
 - The exporter itself needs no privileges. The Linux packages run it as a dedicated system user. Two opt-in setups need more: per-process metrics need host PID sharing to see other workloads' processes, and per-process metrics on MIG GPUs may need a privileged container, see [CONFIGURE.md](CONFIGURE.md#per-process-gpu-metrics).
 - The container image runs as uid 65534 (`nobody`), not root. The `USER` directive is numeric because the kubelet cannot verify a `runAsNonRoot` guarantee against a name-based image user. The chart's default pod and container security contexts match, so a default install is admitted in namespaces enforcing the `restricted` Pod Security Standard, see the [chart README](../charts/nvidia-gpu-exporter/README.md).
-- The release artifacts are signed: the GPG-signed checksums file covers every binary, archive and package, and the container images and the Helm chart are signed with cosign. Release tags are signed, and the release workflow checks that GitHub verifies the tag's signature, that the signed tag names the release and points at the commit being built, and that the commit is on the main branch, before it builds anything. Release tags cannot be moved or deleted. The auto-generated GitHub source archives are not covered. See [Verifying what you downloaded](INSTALL.md#verifying-what-you-downloaded).
+- The release artifacts are signed keyless with cosign: a signature bundle over the checksums file covers every binary, archive and package, and the container images and the Helm chart are signed by digest. The chart's classic repository additionally carries GPG provenance files, because Helm verifies only those. Release tags are signed, and the release workflow checks that GitHub verifies the tag's signature, that the signed tag names the release and points at the commit being built, and that the commit is on the main branch, before it builds anything. Release tags cannot be moved or deleted. The auto-generated GitHub source archives are not covered. See [Verifying what you downloaded](INSTALL.md#verifying-what-you-downloaded).
 
 ## Trust boundaries
 
 1. The network. Clients of the metrics endpoint are untrusted. They can only read.
 2. The `nvidia-smi` output. The flags are trusted, since whoever sets them controls the machine anyway. The output is not: it comes from whatever driver, wrapper or remote machine the command runs against. Every parser is fuzzed, and a panic is treated as a bug.
 3. The host. The exporter is a normal user process. In a container, the NVIDIA runtime injects the GPU devices and the driver userspace from the host: the driver libraries and utilities, `nvidia-smi` among them. The exporter uses the devices and `nvidia-smi`, or `libnvidia-ml` in nvml mode.
-4. The supply chain. Releases are built by the release workflow from a tag. Actions are pinned by commit and base images by digest. The checksums file is GPG-signed in that workflow, and the images and the chart are signed with cosign, tied to the workflow's identity.
+4. The supply chain. Releases are built by the release workflow from a tag. Actions are pinned by commit and base images by digest. The checksums file, the images and the chart are signed with cosign in that workflow, tied to the workflow's identity, and the chart provenance is signed with the project's GPG key.
 
 ## Threats and what is done about them
 
@@ -40,7 +40,7 @@ With the NVML backend it reads the driver library instead.
 | Malformed driver output crashes the exporter | Every parser has a fuzz target, and the seed corpora are replayed in every test run. Unknown state values are skipped and logged, never guessed. |
 | A stuck `nvidia-smi` exhausts the exporter | The collection timeout kills the subprocess, best-effort as described above. Scrapes beyond the concurrency limit get a 503. Health endpoints do not depend on collection. A wrapper that floods stdout can still grow memory, a known residual risk. |
 | Information exposure through the endpoint | Documented above. TLS and auth are available. Per-process metrics and pprof are opt-in. |
-| Tampered release artifact | The GPG-signed checksums file covers every built artifact. Images and chart are cosign-signed. The install guide has the verification commands. |
+| Tampered release artifact | The cosign-signed checksums file covers every built artifact. Images and chart are cosign-signed too, the classic chart repository carries GPG provenance. The install guide has the verification commands. |
 | Compromised dependency or action | Renovate updates, Dependabot alerts, actions pinned by commit, images pinned by digest. gosec runs on every change, CodeQL on pull requests and weekly. |
 | Endpoint exposed by accident | The default listen address binds all interfaces, like every Prometheus exporter. The install guide covers the Windows firewall rule and the container network settings. |
 

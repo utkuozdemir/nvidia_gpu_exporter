@@ -232,9 +232,9 @@ The packages and the primary container image explicitly pin themselves to the st
 The nvml flavor is published as its own archive and as a suffixed image tag.
 
 Release artifacts are signed two ways.
-The GPG key signs the checksums file, which transitively covers every binary, archive and package, and it also signs the packaged Helm chart's provenance file.
-Cosign signs the container images and the OCI chart keyless, tied to the release workflow's identity.
-The release job verifies that the imported signing key matches the fingerprint the chart advertises, and fails loudly if it does not.
+Cosign signs the checksums file (which transitively covers every binary, archive and package), the container images and the OCI chart keyless, tied to the release workflow's identity, so no key is involved there.
+The GPG key exists for one thing only: the packaged Helm chart's provenance files in the classic repository, because Helm's `--verify` accepts nothing else.
+Only the chart job imports it, and it verifies that the imported key matches the fingerprint the chart advertises, failing loudly if it does not.
 `hack/generate-signing-key.sh` documents and performs key generation and rotation.
 
 The chart is published twice: to GHCR as an OCI artifact, and to a Helm repository on the `gh-pages` branch.
