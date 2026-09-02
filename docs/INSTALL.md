@@ -525,17 +525,34 @@ set that up.
 ## Verifying what you downloaded
 
 Everything the release pipeline publishes is signed, so you can check that a
-file or an image really came from this project.
+file or an image really came from this project's release workflow. The
+signatures are keyless (Sigstore): they are tied to the identity of the
+release workflow, which is what the commands below check. The Helm chart's
+classic repository is the exception, since Helm verifies GPG provenance only.
 
 ### Release archives and packages
 
-Each release ships a `checksums.txt` and a detached GPG signature
-`checksums.txt.asc` that covers it. Import the public key once, then check
-the signature and the checksum of what you downloaded:
+Each release ships a `checksums.txt` with the sha256 sums of every binary,
+archive and package, and a signature bundle `checksums.txt.sigstore.json` that
+covers it. Check the signature with cosign v3 or newer, then the checksum of
+what you downloaded:
 
 ```bash
-curl -fsSL https://utkuozdemir.github.io/nvidia_gpu_exporter/pubkey.asc | gpg --import
-gpg --verify checksums.txt.asc checksums.txt
+cosign verify-blob checksums.txt \
+  --bundle checksums.txt.sigstore.json \
+  --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp='^https://github\.com/utkuozdemir/nvidia_gpu_exporter/\.github/workflows/release\.yml@refs/tags/v.*$' &&
+sha256sum --ignore-missing -c checksums.txt
+```
+
+Releases with no `checksums.txt.sigstore.json` attached shipped a detached GPG
+signature `checksums.txt.asc` instead, made with the key that still signs the
+chart provenance. For those, import the key and check the two files. The
+earliest releases have neither file, only the checksums.
+
+```bash
+curl -fsSL https://utkuozdemir.github.io/nvidia_gpu_exporter/pubkey.asc | gpg --import &&
+gpg --verify checksums.txt.asc checksums.txt &&
 sha256sum --ignore-missing -c checksums.txt
 ```
 
@@ -596,4 +613,4 @@ gh attestation verify oci://ghcr.io/utkuozdemir/charts/nvidia-gpu-exporter:CHART
 
 The output names the commit and the workflow run, so you can follow it back
 to the source and the build log. `checksums.txt` itself is not attested, it
-is covered by its GPG signature.
+is covered by its signature bundle.

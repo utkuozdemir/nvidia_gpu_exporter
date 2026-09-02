@@ -24,7 +24,7 @@ jobs:
     permissions:
       contents: write # create the GitHub release
       packages: write # push images to GHCR
-      id-token: write # cosign keyless image signing (OIDC)
+      id-token: write # cosign keyless signing (OIDC)
     outputs:
       docker_io_: ${{ steps.images.outputs.docker_io_ }}
       docker_io__nvml: ${{ steps.images.outputs.docker_io__nvml }}
@@ -95,24 +95,6 @@ jobs:
         with:
           # renovate: depName=sigstore/cosign datasource=github-releases
           cosign-release: v3.1.3
-      - name: Import the signing key
-        # no xtrace: this step handles the private key
-        shell: bash --noprofile --norc -euo pipefail {0}
-        run: |
-          mkdir -p ~/.gnupg && chmod 700 ~/.gnupg
-          echo "allow-loopback-pinentry" >> ~/.gnupg/gpg-agent.conf
-          gpgconf --kill gpg-agent || true
-          echo "${GPG_PRIVATE_KEY}" | gpg --batch --import
-          fpr="$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/{print $10; exit}')"
-          # fail loudly if the secret is not the key the docs and chart advertise
-          expected="$(awk '/signKey:/{f=1} f&&/fingerprint:/{print $2; exit}' charts/nvidia-gpu-exporter/Chart.yaml)"
-          if [ "${fpr}" != "${expected}" ]; then
-            echo "imported key ${fpr} does not match the documented fingerprint ${expected}" >&2
-            exit 1
-          fi
-          echo "GPG_FINGERPRINT=${fpr}" >>"${GITHUB_ENV}"
-        env:
-          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
       # the goreleaser version is declared once, in hack/dev.Dockerfile, so the
       # version that validates the release config in lint is the version that
       # builds the release. Fail loudly rather than guessing if that
@@ -133,6 +115,8 @@ jobs:
             exit 1
           fi
           echo "version=${version}" >>"${GITHUB_OUTPUT}"
+      # goreleaser also signs the checksums file here, keyless with cosign,
+      # see .goreleaser.yml
       - name: GoReleaser
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
@@ -143,7 +127,6 @@ jobs:
           GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PRIVATE_ACCESS_TOKEN: ${{ secrets.PRIVATE_ACCESS_TOKEN }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Sign the container images
         id: images
         run: |

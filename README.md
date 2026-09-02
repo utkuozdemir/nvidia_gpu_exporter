@@ -164,11 +164,14 @@ and the binaries and packages are on the
 Release artifacts are signed so you can check they came from this project's
 release pipeline:
 
-- The `checksums.txt` file attached to each release is signed with GPG
-  (`checksums.txt.asc`), which covers every binary, archive and package.
-- The container images and the Helm chart are signed keyless with
-  [cosign](https://github.com/sigstore/cosign), tied to the release workflow's
-  identity.
+- The `checksums.txt` file attached to a release carries a keyless
+  [cosign](https://github.com/sigstore/cosign) signature bundle
+  (`checksums.txt.sigstore.json`), which covers every binary, archive and
+  package. Releases without that file have a GPG signature instead, see the
+  install guide.
+- The container images and the Helm chart are signed keyless with cosign too,
+  tied to the release workflow's identity. The chart's classic repository
+  additionally carries GPG provenance files, since Helm verifies only those.
 
 See [INSTALL.md](docs/INSTALL.md) for the exact verification commands, and the
 [chart README](charts/nvidia-gpu-exporter/README.md) for the chart.

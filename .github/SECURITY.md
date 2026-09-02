@@ -21,6 +21,6 @@ There are no maintenance branches for older versions.
 
 ## Verifying what you run
 
-The checksums file of every release is signed with GPG, which covers the binaries, archives and packages.
-The container images and the Helm chart are signed keyless with cosign.
+The checksums file of a release carries a keyless cosign signature, which covers the binaries, archives and packages. Releases without that signature bundle carry a GPG signature instead.
+The container images and the Helm chart are signed keyless with cosign as well, and the chart's classic repository additionally carries GPG provenance files.
 See [Verifying what you downloaded](../docs/INSTALL.md#verifying-what-you-downloaded) for the commands.

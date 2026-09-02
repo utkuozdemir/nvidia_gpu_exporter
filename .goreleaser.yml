@@ -161,28 +161,21 @@ checksum:
   name_template: checksums.txt
   algorithm: sha256
 
-# One detached signature over checksums.txt covers every binary, archive and
-# package, since the file lists their sha256 sums. The passphrase comes in on
-# stdin so it never lands on the process command line or in the logs. Skipped
-# in snapshot builds, so no key is needed for PR CI.
+# One keyless cosign signature over checksums.txt covers every binary, archive
+# and package, since the file lists their sha256 sums. The bundle carries the
+# signature and the short-lived certificate, which names the release workflow
+# as the signer, so there is no key to store or rotate. Signing is skipped in
+# the snapshot and rebuild jobs, which have no OIDC identity to sign with.
 signs:
   - id: checksums
-    cmd: gpg
+    cmd: cosign
     artifacts: checksum
-    signature: "${artifact}.asc"
-    stdin: "{{ .Env.GPG_PASSPHRASE }}"
+    signature: "${artifact}.sigstore.json"
     args:
-      - "--batch"
-      - "--no-tty"
-      - "--pinentry-mode=loopback"
-      - "--passphrase-fd=0"
-      - "--local-user"
-      - "{{ .Env.GPG_FINGERPRINT }}"
-      - "--armor"
-      - "--output"
-      - "${signature}"
-      - "--detach-sign"
-      - "${artifact}"
+      - sign-blob
+      - --yes
+      - --bundle=${signature}
+      - ${artifact}
 
 git:
   ignore_tags: # skip prereleases when finding the previous tag for the changelog

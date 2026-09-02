@@ -2,9 +2,10 @@
 #
 # Generates the repo-wide GPG signing key and wires up the public parts.
 #
-# This key signs the released helm chart provenance files and the release
-# checksums. Container images and the OCI chart are signed keyless with cosign
-# and need no key, so this is the only signing key the project has.
+# This key signs the released helm chart provenance files, and nothing else.
+# The release checksums, the container images and the OCI chart are signed
+# keyless with cosign and need no key, so this is the only signing key the
+# project has.
 #
 # What it does:
 #   - generates an RSA-4096, sign-only, non-expiring key in a throwaway keyring
