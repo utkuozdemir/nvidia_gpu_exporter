@@ -213,7 +213,7 @@ Linting is `golangci-lint` configured to enable linters by default and disable a
 GitHub CodeQL scans the repository through the default setup, which is configured in the repository settings rather than a workflow file, so nothing in the checkout records it.
 CI additionally runs a goreleaser snapshot on every change.
 That is intentional: it validates the packaging inputs (the systemd unit, the package scriptlets, the archive layouts) in CI instead of letting them fail for the first time during a real release.
-It builds the container images for every platform without publishing them, which is what gates Renovate's automerged base-digest updates, and deliberately skips only the signing and SBOM stages, so those two paths are exercised only by a real release.
+It builds the container images for every platform without publishing them, which is what gates Renovate's automerged base-digest updates, and deliberately skips only the signing stage, so that path is exercised only by a real release. There is no SBOM stage: the module graph in `go.mod` and `go.sum` is the bill of materials, and it is in the commit the provenance attestation names.
 
 ## Release pipeline
 
@@ -225,7 +225,7 @@ The release task only tags the tip of the main branch, and the workflow refuses 
 The pipeline builds two binary flavors from the same source: the fully static default build, and the cgo nvml flavor.
 The release builds are reproducible on purpose: no build paths in the binaries, and the commit time as every timestamp, so the same commit yields the same bytes.
 Keep new build steps deterministic.
-The container images are reproducible too: the commit time goes in as a build argument for the image timestamps, and the release build rewrites the layer timestamps to it, because the copy of the binary would otherwise stamp its layer with the build time. Snapshot builds cannot carry that exporter option (a multi-platform build loaded into the daemon), so image reproducibility is checked by hand with two cold builds, not by the CI guard.
+The container images are reproducible too: the commit time goes in as a build argument for the image timestamps, and the release build rewrites the layer timestamps to it, because the copy of the binary would otherwise stamp its layer with the build time. buildkit's own provenance and SBOM attestations are switched off for the images: both carry wall-clock timestamps and change the published index digest on every build, and the release workflow attaches GitHub's build provenance instead. Snapshot builds cannot carry the exporter option (a multi-platform build loaded into the daemon), so image reproducibility is checked by hand: two cold builds pushed to a scratch registry must give the same index digest, not just the same local image ID.
 Keeping the two apart is a real invariant.
 The packages and the primary container image explicitly pin themselves to the static build, because a cgo binary silently reaching the deb, the rpm or the main image would ship something that cannot run where those artifacts are expected to run.
 The nvml flavor is published as its own archive and as a suffixed image tag.

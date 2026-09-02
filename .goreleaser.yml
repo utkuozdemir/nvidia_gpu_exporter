@@ -240,10 +240,15 @@ dockers_v2:
     # stamps with the build time. The exporter option only applies to the
     # pushed release image: a snapshot loads a multi-platform build into the
     # daemon, which cannot carry it, so snapshot images stay non-reproducible.
+    # buildkit's own provenance and SBOM attestations carry wall-clock times
+    # and change the published index digest on every build, so they are off;
+    # the release workflow attaches GitHub's build provenance instead.
+    sbom: false
     build_args:
       SOURCE_DATE_EPOCH: "{{ .CommitTimestamp }}"
     flags:
       - "{{ if not .IsSnapshot }}--output=type=image,rewrite-timestamp=true,push=true{{ end }}"
+      - "{{ if not .IsSnapshot }}--provenance=false{{ end }}"
 
   # The nvml flavor as a tag variant of the same image (postgres:16-alpine
   # style): carries the cgo binary and defaults to the nvml backend.
@@ -265,10 +270,15 @@ dockers_v2:
     # stamps with the build time. The exporter option only applies to the
     # pushed release image: a snapshot loads a multi-platform build into the
     # daemon, which cannot carry it, so snapshot images stay non-reproducible.
+    # buildkit's own provenance and SBOM attestations carry wall-clock times
+    # and change the published index digest on every build, so they are off;
+    # the release workflow attaches GitHub's build provenance instead.
+    sbom: false
     build_args:
       SOURCE_DATE_EPOCH: "{{ .CommitTimestamp }}"
     flags:
       - "{{ if not .IsSnapshot }}--output=type=image,rewrite-timestamp=true,push=true{{ end }}"
+      - "{{ if not .IsSnapshot }}--provenance=false{{ end }}"
 
 scoops:
     # only the static build, like every other publisher; the cgo nvml flavor
