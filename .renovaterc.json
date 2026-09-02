@@ -31,6 +31,16 @@
         ".github/workflows/**"
       ],
       "groupName": "github actions"
+    },
+    {
+      "description": "the helm used to package the chart is a pin, not a floating dependency: a major is a deliberate change with a dry run first, so it gets a pull request instead of a branch automerge",
+      "matchDepNames": [
+        "helm/helm"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "automerge": false
     }
   ],
   "customManagers": [
