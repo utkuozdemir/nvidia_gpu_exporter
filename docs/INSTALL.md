@@ -614,3 +614,32 @@ gh attestation verify oci://ghcr.io/utkuozdemir/charts/nvidia-gpu-exporter:CHART
 The output names the commit and the workflow run, so you can follow it back
 to the source and the build log. `checksums.txt` itself is not attested, it
 is covered by its signature bundle.
+
+### Reproducing a release
+
+From v1.15.1 on, the release files are built reproducibly. The same commit
+gives the same bytes for every binary, archive and package, on any machine.
+
+One exception: the nvml flavor is a cgo build. Its binary carries the C
+compiler of the builder, so it reproduces only on a matching toolchain. The
+release runner is Ubuntu 24.04 with its default GCC.
+
+The release workflow rebuilds every release on a second runner, from scratch,
+and fails if a checksum differs. You can do the same:
+
+1. Clone the repository and check out the release tag.
+2. Install the Go version `go.mod` declares and the goreleaser version
+   `hack/dev.Dockerfile` pins (the `GORELEASER_VERSION` line).
+3. Build the release files without publishing anything, and compare:
+
+```bash
+PRIVATE_ACCESS_TOKEN=placeholder goreleaser release --clean --skip=publish,sign,sbom,docker,announce
+diff dist/checksums.txt <(curl -fsSL https://github.com/utkuozdemir/nvidia_gpu_exporter/releases/download/vX.Y.Z/checksums.txt)
+```
+
+An empty diff means every file you built is byte for byte the one that was
+published. On a machine with another C toolchain, the nvml archive is the one
+line that differs.
+
+The container images are reproducible too. Comparing them needs a push to a
+registry, see `AGENTS.md`.
