@@ -139,6 +139,8 @@ jobs:
           version: ${{ steps.goreleaser_version.outputs.version }}
           args: release --clean
         env:
+          # the tag this run is for, in case another tag lands on the same commit
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PRIVATE_ACCESS_TOKEN: ${{ secrets.PRIVATE_ACCESS_TOKEN }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
@@ -221,6 +223,52 @@ jobs:
         with:
           subject-name: ghcr.io/utkuozdemir/nvidia_gpu_exporter
           subject-digest: ${{ needs.release.outputs.ghcr_io__nvml }}
+
+  # rebuild the release files from the tag on a second runner and compare
+  # them with what was just published. Identical means this release is
+  # reproducible, shown by a second machine; a difference fails this job
+  # loudly and leaves the published release alone
+  verify-reproducible:
+    runs-on: ubuntu-24.04
+    needs: release
+    # also when the release job failed after publishing (e.g. at a package
+    # manager step): what is published still gets checked
+    if: ${{ !cancelled() }}
+    permissions:
+      contents: read
+    steps:
+      # first, so that a run whose release never got published stops here
+      - name: Download the published checksums
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release download "${GITHUB_REF_NAME}" -R "${GITHUB_REPOSITORY}" --pattern checksums.txt --output published-checksums.txt
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Resolve goreleaser version
+        id: goreleaser_version
+        run: echo "version=$(sed -n 's/^ARG GORELEASER_VERSION=//p' hack/dev.Dockerfile)" >>"${GITHUB_OUTPUT}"
+      - name: Rebuild the release files
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          version: ${{ steps.goreleaser_version.outputs.version }}
+          args: release --clean --skip=publish,sign,sbom,docker,announce
+        env:
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
+          PRIVATE_ACCESS_TOKEN: placeholder
+      - name: Compare with the published checksums
+        run: |
+          if diff published-checksums.txt dist/checksums.txt; then
+            echo "release ${GITHUB_REF_NAME} reproduced byte for byte on a second runner"
+          else
+            echo "release ${GITHUB_REF_NAME} did not reproduce: the artifacts above differ from the published ones" >&2
+            exit 1
+          fi
 
   helm-chart:
     runs-on: ubuntu-24.04
