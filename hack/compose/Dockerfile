@@ -2,7 +2,7 @@
 # from source, so the whole stack runs on a machine with no GPU: the exporter
 # scrapes the fake, which replays an embedded capture. Not a release artifact
 # (goreleaser builds those); this exists only for hack/compose.
-FROM golang:1.27-alpine@sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc AS build
+FROM golang:1.27-alpine@sha256:26402d86be3d72e6a9410afa0108f03529f51f0c1b5eb7f503d0bc44cc7857ac AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
