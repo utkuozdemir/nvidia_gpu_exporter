@@ -5,3 +5,5 @@ coverage:
       default:
         target: 50%
   range: 30..70
+comment:
+  require_changes: true
