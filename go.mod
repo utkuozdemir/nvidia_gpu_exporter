@@ -15,8 +15,8 @@ require (
 	github.com/prometheus/exporter-toolkit v0.19.0
 	github.com/stretchr/testify v1.12.1
 	github.com/thejerf/slogassert v0.3.4
-	golang.org/x/sync v0.22.0
-	golang.org/x/sys v0.47.0
+	golang.org/x/sync v0.23.0
+	golang.org/x/sys v0.48.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
