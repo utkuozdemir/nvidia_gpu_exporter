@@ -106,7 +106,7 @@ services:
       - nvml-datacenter
 
   alertmanager:
-    image: prom/alertmanager:v0.34.0
+    image: prom/alertmanager:v0.34.1
     command:
       - "--config.file=/etc/alertmanager/alertmanager.yml"
     ports:

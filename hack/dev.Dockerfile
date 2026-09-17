@@ -39,7 +39,7 @@ ARG SHELLCHECK_VERSION=v0.11.0
 # here rather than carrying their own, so the version that validates the release
 # config is always the version that performs the release
 # renovate: depName=goreleaser/goreleaser datasource=docker
-ARG GORELEASER_VERSION=v2.18.1
+ARG GORELEASER_VERSION=v2.18.2
 
 FROM koalaman/shellcheck:${SHELLCHECK_VERSION} AS shellcheck-bin
 FROM goreleaser/goreleaser:${GORELEASER_VERSION} AS goreleaser-bin
