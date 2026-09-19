@@ -14,7 +14,7 @@ defaults:
 
 jobs:
   release:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     # the release environment holds the signing and publishing secrets. It
     # admits only v* tags and waits for the maintainer's approval, so a
     # workflow on any other ref, or a tag pushed with a leaked token, cannot
@@ -255,7 +255,7 @@ jobs:
   # in GitHub's attestation store, not pushed to the registries: that is what
   # `gh attestation verify` reads, and GHCR does not serve the referrers API.
   attest:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: release
     # whenever the images were signed, even if the release job then failed at
     # a package manager step
@@ -298,7 +298,7 @@ jobs:
   # reproducible, shown by a second machine. A difference fails this job
   # loudly and leaves the published release alone
   verify-reproducible:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: release
     # also when the release job failed after publishing (e.g. at a package
     # manager step): what is published still gets checked
@@ -364,7 +364,7 @@ jobs:
   # second approval. Still its own job: publishing fails for reasons of its
   # own (registry, gh-pages) and is then re-run without redoing the release.
   helm-chart:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: release
     permissions:
       contents: write # push to gh-pages
@@ -451,7 +451,7 @@ jobs:
   # build provenance for the chart, the OCI artifact by digest and the
   # packaged file. Separate job for the same reasons as the attest job above.
   attest-chart:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: helm-chart
     permissions:
       id-token: write
