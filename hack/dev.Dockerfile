@@ -24,7 +24,7 @@
 
 ARG GO_VERSION
 # renovate: depName=golangci/golangci-lint datasource=github-releases
-ARG GOLANGCI_LINT_VERSION=2.13.2
+ARG GOLANGCI_LINT_VERSION=2.14.0
 # renovate: depName=mvdan/sh datasource=github-releases
 ARG SHFMT_VERSION=3.14.1
 # renovate: depName=grafana/dashboard-linter datasource=github-releases
