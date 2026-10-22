@@ -39,7 +39,7 @@ ARG SHELLCHECK_VERSION=v0.11.0
 # here rather than carrying their own, so the version that validates the release
 # config is always the version that performs the release
 # renovate: depName=goreleaser/goreleaser datasource=docker
-ARG GORELEASER_VERSION=v2.18.3
+ARG GORELEASER_VERSION=v2.19.0
 
 FROM koalaman/shellcheck:${SHELLCHECK_VERSION} AS shellcheck-bin
 FROM goreleaser/goreleaser:${GORELEASER_VERSION} AS goreleaser-bin
@@ -48,7 +48,7 @@ FROM goreleaser/goreleaser:${GORELEASER_VERSION} AS goreleaser-bin
 # toolchain build. The downloads are a linear chain: bumping an earlier tool
 # re-fetches the later ones, which is a few seconds and not worth a stage per
 # tool.
-FROM alpine:3@sha256:c6b073f8e9e58d881f6ffba6ebf3b9ebd60b9e7d6e8337018c0e68bb5c356873 AS tools
+FROM alpine:3@sha256:71e9b7bae160ba167fa17414401b94cbcdaf3c32feeab9298bd794a2a0614c35 AS tools
 RUN apk add --no-cache curl tar git
 ARG TARGETARCH
 ARG GOLANGCI_LINT_VERSION
