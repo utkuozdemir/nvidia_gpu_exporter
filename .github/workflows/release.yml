@@ -62,6 +62,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           # to be able to generate the full changelog:
           # https://github.com/goreleaser/goreleaser-action/issues/56#issuecomment-568718162
           fetch-depth: 0
@@ -75,6 +76,10 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          # no cache: the published binaries are compiled from scratch rather
+          # than linked from packages an earlier run restored, since nothing
+          # checks what a cache entry holds
+          cache: false
       - name: Set up QEMU
         uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - name: Set up Docker Buildx
@@ -261,8 +266,8 @@ jobs:
     # a package manager step
     if: ${{ !cancelled() && needs.release.outputs.docker_io_ != '' }}
     permissions:
-      id-token: write
-      attestations: write
+      id-token: write # sign the attestations (OIDC)
+      attestations: write # store them with the repository
     steps:
       - name: Download the checksums
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -316,6 +321,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -323,7 +329,7 @@ jobs:
           go-version-file: go.mod
           # no cache: the point of this job is to rebuild from scratch on a
           # runner that shares nothing with the release build. The cache key
-          # is only the go.sum hash, so the release job's compiled packages
+          # is only the go.sum hash, so a cached build's compiled packages
           # would otherwise be restored here and the comparison would only
           # cover the packaging
           cache: false
@@ -373,7 +379,7 @@ jobs:
     outputs:
       digest: ${{ steps.chart.outputs.digest }}
     steps:
-      - name: Checkout
+      - name: Checkout # zizmor: ignore[artipacked] the gh-pages push below needs the token
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Compute chart and app versions from the tag
         run: |
@@ -409,9 +415,9 @@ jobs:
         shell: bash --noprofile --norc -euo pipefail {0}
         run: |
           printf '%s' "${GH_TOKEN}" | helm registry login ghcr.io \
-            --username "${{ github.repository_owner }}" \
+            --username "${GITHUB_REPOSITORY_OWNER}" \
             --password-stdin
-          push_output="$(helm push /tmp/chart-dist/*.tgz "oci://ghcr.io/${{ github.repository_owner }}/charts" 2>&1)"
+          push_output="$(helm push /tmp/chart-dist/*.tgz "oci://ghcr.io/${GITHUB_REPOSITORY_OWNER}/charts" 2>&1)"
           echo "${push_output}"
           # sign the immutable digest, not the mutable tag
           digest="$(echo "${push_output}" | awk '/[Dd]igest:/{print $2; exit}')"
@@ -420,7 +426,7 @@ jobs:
             exit 1
           fi
           cosign sign --yes \
-            "ghcr.io/${{ github.repository_owner }}/charts/nvidia-gpu-exporter@${digest}"
+            "ghcr.io/${GITHUB_REPOSITORY_OWNER}/charts/nvidia-gpu-exporter@${digest}"
           echo "digest=${digest}" >>"${GITHUB_OUTPUT}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -454,8 +460,8 @@ jobs:
     runs-on: ubuntu-26.04
     needs: helm-chart
     permissions:
-      id-token: write
-      attestations: write
+      id-token: write # sign the attestations (OIDC)
+      attestations: write # store them with the repository
     steps:
       - name: Download the packaged chart
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2

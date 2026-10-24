@@ -1,0 +1,14 @@
+# zizmor audits the workflows in `task lint`. An exception listed here carries
+# its reason, because the audit is otherwise right.
+rules:
+  artipacked:
+    # the screenshots job pushes a branch with the images, so its checkout has
+    # to keep the credentials
+    ignore:
+      - screenshots.yml
+  cache-poisoning:
+    # the build job publishes nothing: its goreleaser run is a snapshot release
+    # that checks the packaging, so a poisoned cache can reach no release. The
+    # release build itself runs without a cache.
+    ignore:
+      - build.yml

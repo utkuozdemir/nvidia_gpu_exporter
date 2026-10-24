@@ -148,6 +148,16 @@ RUN git init -q . \
     && git remote add origin https://github.com/utkuozdemir/nvidia_gpu_exporter.git \
     && goreleaser check
 
+# the workflows, audited offline: the audits that ask GitHub about an action's
+# pin are skipped, and Renovate keeps those fresh anyway. Every finding fails
+# the stage, and an accepted one carries its reason, in .github/zizmor.yml or
+# in an ignore comment on the line. Its own image rather than the tools stage:
+# the binary is built against glibc and does not run on alpine.
+FROM ghcr.io/zizmorcore/zizmor:1.31.1@sha256:42d409dbb851d4c5d35a058cf042b828bea1e3f2884378c526eb0974780e18d9 AS lint-workflows
+WORKDIR /src
+COPY .github ./.github
+RUN zizmor --offline --config .github/zizmor.yml .github
+
 # the formatters run against a bind-mounted working tree rather than a stage
 # export, so this stage carries the tools and the Go toolchain but no sources
 FROM deps AS fmt
