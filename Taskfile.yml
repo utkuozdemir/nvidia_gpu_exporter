@@ -55,12 +55,13 @@ tasks:
         -v "$PWD":/src -w /src nvidia-gpu-exporter-tools:local
 
   lint:
-    desc: lint everything (code, docs, scripts, dashboards, release config)
+    desc: lint everything (code, docs, scripts, dashboards, release config, workflows)
     cmds:
       - task: lint:go
       - task: lint:assets
       - task: lint:dashboard
       - task: lint:release
+      - task: lint:workflows
 
   lint:go:
     desc: lint go code and module tidiness
@@ -95,6 +96,12 @@ tasks:
     cmds:
       - task: stage
         vars: {TARGET: lint-goreleaser}
+
+  lint:workflows:
+    desc: audit the GitHub Actions workflows
+    cmds:
+      - task: stage
+        vars: {TARGET: lint-workflows}
 
   test:
     desc: run the unit and integration tests

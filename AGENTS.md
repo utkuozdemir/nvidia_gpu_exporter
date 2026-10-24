@@ -203,7 +203,7 @@ Other things that are easy to trip over:
 ## Building, testing and linting
 
 `Taskfile.yml` is the entry point and mirrors what CI runs.
-`task lint` covers everything: Go, module tidiness, markdown, shell scripts, the dashboards, and the release configuration.
+`task lint` covers everything: Go, module tidiness, markdown, shell scripts, the dashboards, the release configuration and the GitHub Actions workflows.
 `task fmt` applies the formatters.
 The individual `task lint:*` targets are the ones to reach for while iterating, since the full set needs several external tools installed.
 
@@ -231,7 +231,7 @@ The mode is fixed too, because the checkout's file mode follows the builder's um
 Keep new build steps deterministic.
 A separate workflow builds the release artifacts twice on two runners and fails on any checksum difference, so a build that starts depending on the hostname or the time is caught before a release.
 That workflow and the post-release rebuild run without the Go cache on purpose.
-The cache key is only the `go.sum` hash, so the rebuild would otherwise restore the compiled packages of the build it is meant to check and compare only the packaging.
+The cache key is only the `go.sum` hash, so the rebuild would otherwise restore a cached build's compiled packages and compare only the packaging.
 Neither of them can catch a dependence on the user or the umask, because every runner builds as the same user.
 That class is covered only by the fixed owner and mode above, so do not drop them as redundant.
 The container images are reproducible too: the commit time goes in as a build argument for the image timestamps, and the release build rewrites the layer timestamps to it, because the copy of the binary would otherwise stamp its layer with the build time. buildkit's own provenance and SBOM attestations are switched off for the images: both carry wall-clock timestamps and change the published index digest on every build, and the release workflow attaches GitHub's build provenance instead. Snapshot builds cannot carry the exporter option (a multi-platform build loaded into the daemon), so image reproducibility is checked by hand: two cold builds pushed to a scratch registry must give the same index digest, not just the same local image ID.
@@ -287,6 +287,14 @@ The simulated machine configurations are re-read on every collection cycle, so e
   Deep, area-specific documentation lives next to the thing it documents, not in `docs/`.
 - `.bestpractices.json` at the repository root holds the answers to the OpenSSF Best Practices badge questionnaire.
   Their site reads it from the default branch and proposes the answers in the form, so a change to how the project works (tests, releases, reporting) is reflected there, not in the web form. The live entry on bestpractices.dev and this file must be updated together.
+- Every workflow declares `permissions:` at the top, and a job declares its own block when its needs differ, down to `{}` for a job that touches nothing on GitHub, and each permission beyond the plain checkout read carries a comment saying what uses it.
+  A same-run artifact download or upload needs none of them: it runs on the runner's own token, which the block does not govern.
+  The repository's default for the token is read-only as well, so a workflow that forgets the block gets read access rather than write, while the switch that lets the token open pull requests stays on, because the screenshots workflow opens one.
+  zizmor audits the workflows in `task lint`, and an accepted finding carries its reason, in `.github/zizmor.yml` for a whole file or in an ignore comment on the line.
+  It enforces the rules below and that a `permissions:` block exists, except three that review keeps: a job inheriting a permission it never touches, a permission without its comment, and an inline expression of a value GitHub fixes, such as the run id.
+  A value from an expression reaches a `run:` script through `env:` or the runner's own `GITHUB_*` variables, never inline, even a value GitHub fixes, so a tag, branch or input name with shell characters in it is data rather than code.
+  A checkout drops its credentials unless the job pushes, so a later step in the job cannot pick the token up from disk.
+  The release build restores no Go cache, since nothing checks what a cache entry holds before it is linked into a published binary.
 - Dependencies are updated by Renovate, configured to merge qualifying updates as branches without opening pull requests; `.renovaterc.json` is the authority on which update classes qualify.
   Branch automerge only works while the default branch has no rule requiring a pull request before merging, so if dependency pull requests start appearing for passing updates, that rule is the thing to look for.
   Required status checks are fine and are what actually gate those merges.
