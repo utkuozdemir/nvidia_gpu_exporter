@@ -314,7 +314,7 @@ var nvmlSymbolRequirements = []symbolRequirement{
 			"nvmlDeviceGetSupportedClocksEventReasons_v2",
 			"nvmlDeviceGetSupportedClocksEventReasons_v3",
 		},
-		serves: "clocks_event_reasons.supported",
+		serves: "clocks_event_reasons.supported and the per-reason flags",
 	},
 	{
 		goCall: "GetCurrentClocksEventReasons",

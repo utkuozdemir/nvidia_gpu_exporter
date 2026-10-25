@@ -731,3 +731,69 @@ func TestRemappedRowsInactiveAbsentWhenSymbolMissing(t *testing.T) {
 	assert.Equal(t, "[Function Not Found]", cellValue(t, reading.Table, "remapped_rows.correctable_inactive"))
 	assert.Equal(t, "12.34 W", cellValue(t, reading.Table, "power.draw"))
 }
+
+func TestClocksEventReasonsCheckedAgainstSupportedBitmask(t *testing.T) {
+	t.Parallel()
+
+	dev := identityDevice()
+	dev.GetSupportedClocksEventReasonsFunc = func() (uint64, nvml.Return) {
+		return 0x1ff | reasonBoardLimit, nvml.SUCCESS
+	}
+	dev.GetCurrentClocksEventReasonsFunc = func() (uint64, nvml.Return) {
+		return reasonBoardLimit | reasonReliability, nvml.SUCCESS
+	}
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
+
+	fields := resolveFields(t,
+		"clocks_event_reasons.gpu_idle,clocks_event_reasons.board_limit,clocks_event_reasons.reliability")
+
+	reading, _, err := backend.QueryFunc(fields, CollectOptions{})(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "Not Active", cellValue(t, reading.Table, "clocks_event_reasons.gpu_idle"))
+	assert.Equal(t, "Active", cellValue(t, reading.Table, "clocks_event_reasons.board_limit"))
+	assert.Equal(t, "[N/A]", cellValue(t, reading.Table, "clocks_event_reasons.reliability"))
+}
+
+func TestClocksEventReasonsSupportedGetterErrorPropagates(t *testing.T) {
+	t.Parallel()
+
+	dev := identityDevice()
+	dev.GetSupportedClocksEventReasonsFunc = func() (uint64, nvml.Return) {
+		return 0, nvml.ERROR_NO_PERMISSION
+	}
+	dev.GetCurrentClocksEventReasonsFunc = func() (uint64, nvml.Return) {
+		return reasonBoardLimit, nvml.SUCCESS
+	}
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
+
+	fields := resolveFields(t, "clocks_event_reasons.board_limit")
+
+	reading, _, err := backend.QueryFunc(fields, CollectOptions{})(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "[Insufficient Permissions]", cellValue(t, reading.Table, "clocks_event_reasons.board_limit"))
+}
+
+func TestClocksEventReasonsActiveLifecycleErrorNotMasked(t *testing.T) {
+	t.Parallel()
+
+	dev := identityDevice()
+	dev.GetSupportedClocksEventReasonsFunc = func() (uint64, nvml.Return) {
+		return 0x1ff, nvml.SUCCESS
+	}
+	dev.GetCurrentClocksEventReasonsFunc = func() (uint64, nvml.Return) {
+		return 0, nvml.ERROR_GPU_IS_LOST
+	}
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
+
+	fields := resolveFields(t, "clocks_event_reasons.board_limit")
+
+	_, code, err := backend.QueryFunc(fields, CollectOptions{})(t.Context())
+	require.Error(t, err)
+	assert.Equal(t, int(nvml.ERROR_GPU_IS_LOST), code)
+}

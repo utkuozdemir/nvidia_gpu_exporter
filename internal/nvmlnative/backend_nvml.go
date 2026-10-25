@@ -646,6 +646,8 @@ const (
 	reasonSwThermal        uint64 = 0x20
 	reasonHwThermal        uint64 = 0x40
 	reasonHwPowerBrake     uint64 = 0x80
+	reasonBoardLimit       uint64 = 0x200
+	reasonReliability      uint64 = 0x400
 )
 
 // edppMultiplierFieldID is NVML_FI_DEV_EDPP_MULTIPLIER, not yet exposed as a
@@ -825,36 +827,68 @@ func (b *Backend) collectDevice(
 		coll.set("pstate", ret, func() string { return fmt.Sprintf("P%d", pstate) })
 	}
 
-	if reqs.want("clocks_event_reasons.supported") {
-		supported, ret := dev.GetSupportedClocksEventReasons()
-		coll.set("clocks_event_reasons.supported", ret,
-			func() string { return fmt.Sprintf("0x%016X", supported) })
+	reasonBits := map[nvidiasmi.QField]uint64{
+		"clocks_event_reasons.gpu_idle":                    reasonGpuIdle,
+		"clocks_event_reasons.applications_clocks_setting": reasonAppClocksSetting,
+		"clocks_event_reasons.sw_power_cap":                reasonSwPowerCap,
+		"clocks_event_reasons.hw_slowdown":                 reasonHwSlowdown,
+		"clocks_event_reasons.sync_boost":                  reasonSyncBoost,
+		"clocks_event_reasons.sw_thermal_slowdown":         reasonSwThermal,
+		"clocks_event_reasons.hw_thermal_slowdown":         reasonHwThermal,
+		"clocks_event_reasons.hw_power_brake_slowdown":     reasonHwPowerBrake,
+		"clocks_event_reasons.board_limit":                 reasonBoardLimit,
+		"clocks_event_reasons.reliability":                 reasonReliability,
 	}
 
-	if reqs.want("clocks_event_reasons.active", "clocks_event_reasons.gpu_idle",
-		"clocks_event_reasons.applications_clocks_setting", "clocks_event_reasons.sw_power_cap",
-		"clocks_event_reasons.hw_slowdown", "clocks_event_reasons.sync_boost",
-		"clocks_event_reasons.sw_thermal_slowdown", "clocks_event_reasons.hw_thermal_slowdown",
-		"clocks_event_reasons.hw_power_brake_slowdown") {
-		active, ret := dev.GetCurrentClocksEventReasons()
-		coll.set("clocks_event_reasons.active", ret, func() string { return fmt.Sprintf("0x%016X", active) })
+	wantReason := false
 
-		for field, bit := range map[nvidiasmi.QField]uint64{
-			"clocks_event_reasons.gpu_idle":                    reasonGpuIdle,
-			"clocks_event_reasons.applications_clocks_setting": reasonAppClocksSetting,
-			"clocks_event_reasons.sw_power_cap":                reasonSwPowerCap,
-			"clocks_event_reasons.hw_slowdown":                 reasonHwSlowdown,
-			"clocks_event_reasons.sync_boost":                  reasonSyncBoost,
-			"clocks_event_reasons.sw_thermal_slowdown":         reasonSwThermal,
-			"clocks_event_reasons.hw_thermal_slowdown":         reasonHwThermal,
-			"clocks_event_reasons.hw_power_brake_slowdown":     reasonHwPowerBrake,
-		} {
+	for field := range reasonBits {
+		if reqs.want(field) {
+			wantReason = true
+
+			break
+		}
+	}
+
+	var (
+		supported uint64
+		suppRet   nvml.Return
+		active    uint64
+		ret       nvml.Return
+	)
+
+	if wantReason || reqs.want("clocks_event_reasons.supported") {
+		supported, suppRet = dev.GetSupportedClocksEventReasons()
+		if reqs.want("clocks_event_reasons.supported") {
+			coll.set("clocks_event_reasons.supported", suppRet,
+				func() string { return fmt.Sprintf("0x%016X", supported) })
+		}
+	}
+
+	if (wantReason && suppRet == nvml.SUCCESS) || reqs.want("clocks_event_reasons.active") {
+		active, ret = dev.GetCurrentClocksEventReasons()
+		if reqs.want("clocks_event_reasons.active") {
+			coll.set("clocks_event_reasons.active", ret, func() string { return fmt.Sprintf("0x%016X", active) })
+		}
+	}
+
+	if wantReason {
+		for field, bit := range reasonBits {
 			if !reqs.want(field) {
 				// keep the permission diagnostics limited to requested fields
 				continue
 			}
 
-			coll.set(field, ret, func() string { return activeNotActive(active, bit) })
+			switch {
+			case suppRet != nvml.SUCCESS:
+				coll.set(field, suppRet, nil)
+			case ret != nvml.SUCCESS:
+				coll.set(field, ret, nil)
+			case supported&bit == 0:
+				coll.set(field, nvml.ERROR_NOT_SUPPORTED, nil)
+			default:
+				coll.set(field, nvml.SUCCESS, func() string { return activeNotActive(active, bit) })
+			}
 		}
 	}
 
