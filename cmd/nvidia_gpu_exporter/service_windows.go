@@ -119,6 +119,8 @@ loop:
 			// reports SERVICE_STOPPED once Execute returns, and reporting it here
 			// too would send a clean stop before the real exit code lands.
 			if err != nil {
+				slog.Default().Error("failed to run", "err", err)
+
 				return true, 1
 			}
 
@@ -132,7 +134,10 @@ loop:
 	changes <- svc.Status{State: svc.StopPending}
 
 	cancel()
-	<-runErr
+
+	if err := <-runErr; err != nil {
+		slog.Default().Error("failed to run", "err", err)
+	}
 
 	return false, 0
 }
