@@ -30,7 +30,7 @@ ARG SHFMT_VERSION=3.14.1
 # renovate: depName=grafana/dashboard-linter datasource=github-releases
 ARG DASHBOARD_LINTER_VERSION=0.4.0
 # renovate: depName=markdownlint-cli datasource=npm
-ARG MARKDOWNLINT_VERSION=0.49.1
+ARG MARKDOWNLINT_VERSION=0.50.0
 # renovate: depName=node datasource=docker
 ARG NODE_VERSION=24.22.1
 # renovate: depName=koalaman/shellcheck datasource=docker
