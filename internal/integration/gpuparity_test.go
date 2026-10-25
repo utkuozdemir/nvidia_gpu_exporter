@@ -240,6 +240,17 @@ func compareVolatile(t *testing.T, uuid string, qField nvidiasmi.QField, before,
 		return 0
 	}
 
+	// Require the "P" prefix on all three before stripping it, so a native
+	// reading missing the prefix still fails the comparison.
+	if qField == "pstate" &&
+		strings.HasPrefix(strings.TrimSpace(before), "P") &&
+		strings.HasPrefix(strings.TrimSpace(native), "P") &&
+		strings.HasPrefix(strings.TrimSpace(after), "P") {
+		before = strings.TrimPrefix(strings.TrimSpace(before), "P")
+		native = strings.TrimPrefix(strings.TrimSpace(native), "P")
+		after = strings.TrimPrefix(strings.TrimSpace(after), "P")
+	}
+
 	beforeNum, beforeOK := parseNumeric(before)
 	nativeNum, nativeOK := parseNumeric(native)
 	afterNum, afterOK := parseNumeric(after)
@@ -415,8 +426,37 @@ func TestBackendMetricFamilyParityOnRealGPU(t *testing.T) {
 		execOnlyDeprecated[name] = true
 	}
 
-	compareFamiliesExecToNVML(t, execFamilies, nativeFamilies, execOnlyDeprecated)
+	deferred := deferredFamilies(t)
+
+	compareFamiliesExecToNVML(t, execFamilies, nativeFamilies, execOnlyDeprecated, deferred)
 	compareFamiliesNVMLToExec(t, execFamilies, nativeFamilies)
+}
+
+// deferredFamilies returns the metric family names derived from fields the
+// nvml catalog consciously defers, so the family-level parity test treats
+// them the same way TestBackendParityOnRealGPU treats them at field level.
+func deferredFamilies(t *testing.T) map[string]bool {
+	t.Helper()
+
+	logger := slogt.New(t)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	resolved, err := nvidiasmi.ResolveFields(
+		ctx, nvidiasmi.DefaultCommand, "AUTO", "", 30*time.Second, nvidiasmi.DefaultRunFunc, logger)
+	require.NoError(t, err)
+
+	families := map[string]bool{}
+
+	for qField, rField := range resolved.Returned {
+		if nvmlnative.IsDeferredField(qField) {
+			name, _ := exporter.BuildFQNameAndMultiplier(exporter.DefaultPrefix, rField, logger)
+			families[name] = true
+		}
+	}
+
+	return families
 }
 
 // compareFamiliesExecToNVML requires every family and series the exec backend
@@ -425,7 +465,7 @@ func TestBackendMetricFamilyParityOnRealGPU(t *testing.T) {
 func compareFamiliesExecToNVML(
 	t *testing.T,
 	execFamilies, nativeFamilies map[string]map[string]bool,
-	execOnlyDeprecated map[string]bool,
+	execOnlyDeprecated, deferred map[string]bool,
 ) {
 	t.Helper()
 
@@ -438,10 +478,15 @@ func compareFamiliesExecToNVML(
 				continue
 			}
 
+			if deferred[family] {
+				t.Logf("family only exec serves, deferred in the nvml catalog: %s", family)
+
+				continue
+			}
+
 			t.Errorf("metric family missing from the nvml backend\n"+
 				"  family: %s (%d exec series, e.g. %s)\n"+
-				"  fix: the catalog or collector in internal/nvmlnative; if the family comes from a "+
-				"field the catalog defers, this is recorded drift",
+				"  fix: the catalog or collector in internal/nvmlnative",
 				family, len(execSeries), anySeries(execSeries))
 
 			continue
