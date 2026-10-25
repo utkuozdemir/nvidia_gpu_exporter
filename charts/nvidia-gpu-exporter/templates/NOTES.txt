@@ -1,4 +1,12 @@
 {{ .Chart.Name }} {{ .Chart.Version }} (app version {{ .Chart.AppVersion }}) is installed.
+{{- if and .Values.resourceClaims (not .Values.runtimeClassName) }}
+
+resourceClaims is set, so GPU access comes from Dynamic Resource Allocation
+(DRA). Make sure the referenced ResourceClaim or ResourceClaimTemplate exists
+in {{ .Release.Namespace | quote }}, and that the namespace carries the
+"resource.kubernetes.io/admin-access=true" label when the claim uses
+adminAccess: true.
+{{- else }}
 
 GPU access is injected by the NVIDIA container runtime. The nodes need the
 NVIDIA driver and the NVIDIA Container Toolkit, and the pods must run with the
@@ -15,6 +23,7 @@ NVIDIA runtime:
   runtimeClassName=nvidia (and create the RuntimeClass if needed), otherwise
   the exporter will serve no GPU metrics and report
   nvidia_smi_last_collect_success 0.
+{{- end }}
 {{- end }}
 
 {{- if and .Values.computeApps.enabled (not .Values.hostPID) }}

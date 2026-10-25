@@ -336,6 +336,24 @@ mechanism, since it only needs to observe the GPUs. Allocation limits such as
 whole-number allocations and one workload per GPU therefore apply to your
 workloads, but never to the exporter.
 
+### Dynamic Resource Allocation (DRA)
+
+On clusters running Kubernetes 1.34 or newer that use the
+[NVIDIA DRA driver](https://github.com/kubernetes-sigs/dra-driver-nvidia-gpu)
+(`dra-driver-nvidia-gpu`) without an `nvidia` `RuntimeClass`, leave
+`runtimeClassName` empty. The DRA kubelet plugin injects `nvidia-smi`, the
+driver libraries and the GPU device nodes through CDI under the default
+container runtime.
+
+Label the exporter's namespace with
+`resource.kubernetes.io/admin-access: "true"`, create a `ResourceClaimTemplate`
+with `allocationMode: All` and `adminAccess: true` so the exporter can observe
+all GPUs on the node without reserving them, and pass `resourceClaims`,
+`resources.claims` and a GPU `nodeSelector` (because `allocationMode: All`
+leaves pods `Pending` on nodes without GPUs) to the chart. See the
+[chart README](../charts/nvidia-gpu-exporter/README.md#dynamic-resource-allocation-dra)
+for the manifest and values.
+
 ## Windows
 
 If you do not have Prometheus and Grafana yet, the all-in-one script below

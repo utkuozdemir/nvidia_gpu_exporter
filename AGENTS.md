@@ -184,6 +184,7 @@ The chart deploys a DaemonSet and is the primary Kubernetes install path.
 Its central design decision: GPU access comes from the NVIDIA container runtime, injected via a runtime class and the NVIDIA environment variables, and the exporter never requests an `nvidia.com/gpu` resource.
 The device plugin allocates whole GPUs exclusively, so a monitoring pod that requested one would take it away from real workloads.
 Anything that reintroduces a GPU resource request is a bug.
+When Dynamic Resource Allocation (`resourceClaims`) is used in place of a runtime class, the claim must set `adminAccess: true` for the same reason, since a claim without it allocates the GPUs exclusively.
 
 Other things that are easy to trip over:
 

@@ -472,6 +472,9 @@
     "resources": {
       "type": "object"
     },
+    "resourceClaims": {
+      "type": "array"
+    },
     "volumes": {
       "type": "array"
     },
