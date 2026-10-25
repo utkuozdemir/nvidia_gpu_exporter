@@ -1,0 +1,56 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+annotations:
+  artifacthub.io/license: MIT
+  artifacthub.io/links: |
+    - name: Grafana dashboard
+      url: https://grafana.com/grafana/dashboards/14574
+    - name: Grafana dashboard (multi-GPU overview)
+      url: https://grafana.com/grafana/dashboards/25547
+  artifacthub.io/signKey: |
+    fingerprint: 93122B2C53431C2F60964EB7EAC49314A32B9205
+    url: https://utkuozdemir.github.io/nvidia_gpu_exporter/pubkey.asc
+apiVersion: v2
+appVersion: 1.16.0
+description: Nvidia GPU exporter for prometheus, using nvidia-smi binary to gather
+  metrics.
+home: https://github.com/utkuozdemir/nvidia_gpu_exporter
+icon: https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/docs/img/nvidia.png
+keywords:
+- - nvidia
+- - gpu
+- - exporter
+- - nvidia-smi
+- - prometheus
+maintainers:
+- - email: utkuozdemir@gmail.com
+  name: Utku Özdemir
+  url: https://utkuozdemir.org
+name: nvidia-gpu-exporter
+sources:
+- - https://github.com/utkuozdemir/nvidia_gpu_exporter
+type: application
+version: 2.16.0
+
+...
+files:
+  nvidia-gpu-exporter-2.16.0.tgz: sha256:816f41c36842d575cb6f2087ca642018ae20354b5aa00d0081035c5c7efd7271
+
+-----BEGIN PGP SIGNATURE-----
+
+wsG5BAEBCgBtBYJq3ne6CRDqxJMUoyuSBUUUAAAAAAAcACBzYWx0QG5vdGF0aW9u
+cy5vcGVucGdwanMub3Jn6zIOzUP3Ry0dAvi4ZXcKhUl86kGKmUFMOVER7OKwkqgW
+IQSTEissU0McL2CWTrfqxJMUoyuSBQAAV2AQAIdlGKKHOIAafeTfqmrQYaUOEzZW
++bY+nrKjcT3DLFc1QGS0chi1mTeMvRpl+QssgMz8P3YRNb8XafvP/XIpU9TmYtg8
+0v8yyL3Om/DtrFzPS3FF5bLLf5t+0s5zgOhQIoG5a6nZYQ5fxuFE3GS1zSchLTQZ
+bA4ipD+E//ZCAnWaguTFf6GMWGPJEUwyVjws2CWwo/sfCzYhSl4CMGr96HOFyp5P
+nqxWtRrfbroQBW4G0074biLfWuuOUHdNCCnZxyDPLlgrEw7z4NWbN3tTv/vurTay
+O2WNjpnKamPPdMlguaZlSyp3WmbfIzp2DOdEp8mndZqICItux8uTVqoiu3dPGVcs
+pRQnXJbKIWcmpx2RRbtW38NNDHENzCw5aAfMov6CgNL1LPFOCDpdcir/PG+stNTG
+VWscu96mB3VrXXSKr6etz3gD2zbYKeP1OIorEYIUQt1micyCgISBi1gT66GMcSDZ
+OEhfOXP/ODC8iQOawt5nmDKebS8ByBLzMRZfacJbB3oJ9UGIoe+Q6flfnOxX0VCe
++QSo4ERPeQ29eZStCCbF7OZoplaGcNN5Bmy9KkqVd8i7VrfUNRGAlFgVlms2r2c3
+fUuHsd/sd7fU4ABeZpqksG/KR/klafaoGjNug9HiI1YvOE/rCzId7dIdJcSBX57O
+BwlotAUr625R51xR
+-----END PGP SIGNATURE-----
