@@ -102,13 +102,8 @@ docker run -d \
   utkuozdemir/nvidia_gpu_exporter:latest-nvml
 ```
 
-It is marked experimental mainly because it needs more testing across driver
-versions and GPU generations. If you try it, [open an
-issue](https://github.com/utkuozdemir/nvidia_gpu_exporter/issues) about how
-it went, good or bad. That is what will get it past the experimental label.
-
-See [CONFIGURE.md](docs/CONFIGURE.md#experimental-native-nvml-backend) for
-the full backend comparison and the current limits.
+See [CONFIGURE.md](docs/CONFIGURE.md#native-nvml-backend) for the full
+backend comparison and the limits.
 
 ## Try it without a GPU
 

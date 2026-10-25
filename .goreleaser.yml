@@ -35,11 +35,9 @@ builds:
       - goos: darwin
         goarch: arm64
 
-  # The nvml flavor carries the experimental --collect.backend=nvml backend,
-  # which needs cgo (go-nvml). It is a separate artifact so the main builds
-  # above stay CGO_ENABLED=0 and fully static. Linux amd64 only for now:
-  # arm64 needs a cross C toolchain in CI, deferred until the backend leaves
-  # experimental.
+  # The nvml flavor carries the --collect.backend=nvml backend, which needs cgo
+  # (go-nvml). It is a separate artifact so the main builds above stay
+  # CGO_ENABLED=0 and fully static.
   - id: nvidia_gpu_exporter-nvml
     main: ./cmd/nvidia_gpu_exporter
     binary: nvidia_gpu_exporter
@@ -59,10 +57,12 @@ builds:
       - -X github.com/prometheus/common/version.BuildDate={{.CommitDate}}
     env:
       - CGO_ENABLED=1
+      - CC={{ if eq .Arch "arm64" }}aarch64-linux-gnu-gcc{{ else }}gcc{{ end }}
     goos:
       - linux
     goarch:
       - amd64
+      - arm64
 
 archives:
   - id: nvidia_gpu_exporter-nvml-archive
@@ -279,6 +279,7 @@ dockers_v2:
       - "{{ if not .Prerelease }}latest-nvml{{ end }}"
     platforms:
       - linux/amd64
+      - linux/arm64
     # reproducible image: the commit time as the image and history timestamp
     # (buildkit reads it from this build argument), and the exporter rewrites
     # the layer timestamps to it, which the COPY of the binary otherwise

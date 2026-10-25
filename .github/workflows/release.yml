@@ -80,6 +80,8 @@ jobs:
           # than linked from packages an earlier run restored, since nothing
           # checks what a cache entry holds
           cache: false
+      - name: Install arm64 C cross-toolchain
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross
       - name: Set up QEMU
         uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - name: Set up Docker Buildx
@@ -333,6 +335,8 @@ jobs:
           # would otherwise be restored here and the comparison would only
           # cover the packaging
           cache: false
+      - name: Install arm64 C cross-toolchain
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross
       - name: Resolve goreleaser version
         id: goreleaser_version
         run: echo "version=$(sed -n 's/^ARG GORELEASER_VERSION=//p' hack/dev.Dockerfile)" >>"${GITHUB_OUTPUT}"

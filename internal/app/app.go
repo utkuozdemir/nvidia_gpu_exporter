@@ -134,12 +134,12 @@ func Run(ctx context.Context, args []string, opts Options) error {
 				"or unsupported on a given setup.").
 			Default("").String()
 		collectBackend = app.Flag("collect.backend",
-			"How to collect GPU metrics. `exec` runs nvidia-smi (the default); `nvml` is "+
-				"experimental and reads the driver library (libnvidia-ml) directly, without "+
-				"nvidia-smi. The nvml backend requires Linux and a build with the backend "+
-				"compiled in. It exposes every metric the exec backend exposes, plus "+
-				"NVML-only extras (see the docs). `demo` serves synthetic data mimicking "+
-				"the nvml surface, with no GPU or driver needed, on any platform.").
+			"How to collect GPU metrics. `exec` runs nvidia-smi (the default), `nvml` reads "+
+				"the driver library (libnvidia-ml) directly without nvidia-smi. The nvml "+
+				"backend requires Linux and a build with the backend compiled in. It exposes "+
+				"the same core metrics as the exec backend, plus NVML-only extras (see the "+
+				"docs). `demo` serves synthetic data mimicking the nvml surface, with no GPU "+
+				"or driver needed, on any platform.").
 			Default(DefaultBackend).Enum("exec", "nvml", "demo")
 		collectInterval = app.Flag("collect.interval",
 			"Interval at which the collection runs in the background, with scrapes serving "+

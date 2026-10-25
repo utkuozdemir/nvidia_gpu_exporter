@@ -1,6 +1,6 @@
 {
   "name": "nvidia_gpu_exporter",
-  "description": "Prometheus exporter for NVIDIA GPUs. It runs `nvidia-smi` and parses its output, so it works wherever `nvidia-smi` works: Linux, Windows, macOS, containers, VMs. There is also an experimental backend that reads the driver library (NVML) directly.",
+  "description": "Prometheus exporter for NVIDIA GPUs. It runs `nvidia-smi` and parses its output, so it works wherever `nvidia-smi` works: Linux, Windows, macOS, containers, VMs. On Linux it also has a backend that reads the driver library (NVML) directly.",
   "license": "MIT",
   "implementation_languages": "Go, Shell, PowerShell",
   "description_good_status": "Met",

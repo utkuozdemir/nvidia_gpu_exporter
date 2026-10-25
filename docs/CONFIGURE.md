@@ -12,7 +12,7 @@ and explains the ones that need more than their help text.
 - [Scrape concurrency](#scrape-concurrency)
 - [Health endpoints](#health-endpoints)
 - [Per-process GPU metrics](#per-process-gpu-metrics)
-- [Experimental: native NVML backend](#experimental-native-nvml-backend)
+- [Native NVML backend](#native-nvml-backend)
 - [Demo mode](#demo-mode)
 
 ## Command line reference
@@ -83,15 +83,14 @@ Flags:
                                 Useful to drop fields that are slow or
                                 unsupported on a given setup.
       --collect.backend=exec    How to collect GPU metrics. `exec` runs
-                                nvidia-smi (the default); `nvml` is experimental
-                                and reads the driver library (libnvidia-ml)
-                                directly, without nvidia-smi. The nvml backend
-                                requires Linux and a build with the backend
-                                compiled in. It exposes every metric the exec
-                                backend exposes, plus NVML-only extras (see the
-                                docs). `demo` serves synthetic data mimicking
-                                the nvml surface, with no GPU or driver needed,
-                                on any platform.
+                                nvidia-smi (the default), `nvml` reads the
+                                driver library (libnvidia-ml) directly without
+                                nvidia-smi. The nvml backend requires Linux and
+                                a build with the backend compiled in. It exposes
+                                the same core metrics as the exec backend, plus
+                                NVML-only extras (see the docs). `demo` serves
+                                synthetic data mimicking the nvml surface,
+                                with no GPU or driver needed, on any platform.
       --collect.interval=0      Interval at which the collection runs in the
                                 background, with scrapes serving the most
                                 recent result. When 0, the collection runs
@@ -363,7 +362,7 @@ Things to keep in mind:
   go a lot, this can bloat the time series database. This is one of the
   reasons the feature is opt-in.
 
-## Experimental: native NVML backend
+## Native NVML backend
 
 `--collect.backend=nvml` reads GPU metrics directly from the driver library
 (`libnvidia-ml.so.1`) instead of running `nvidia-smi`.
@@ -437,11 +436,11 @@ A note for semver-based image automation, e.g., a Flux `ImagePolicy`: the
 explicitly. For example:
 `filterTags: {pattern: '^(?P<version>\d+\.\d+\.\d+)-nvml$', extract: '$version'}`.
 
-Current limits, while the backend is experimental:
+Limits:
 
-- Linux x86_64 only, on glibc-based systems (the binary is built with cgo),
-  and only in the dedicated `-nvml` release archives and image tags. The
-  regular binaries stay fully static and answer this flag with an error.
+- Linux only (x86_64 and arm64), on glibc-based systems (the binary is built
+  with cgo), and only in the dedicated `-nvml` release archives and image tags.
+  The regular binaries stay fully static and answer this flag with an error.
 - The queryable fields are a built-in catalog. A field a future driver adds
   shows up in the default backend first. Explicit `--query-field-names`
   lists work the same in both backends and fail loudly on unknown fields.
