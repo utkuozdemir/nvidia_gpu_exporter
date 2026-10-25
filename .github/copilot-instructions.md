@@ -2,6 +2,7 @@
 
 Read `AGENTS.md` in the repository root first. It is the project guide, and everything below is only the short version for when you have not opened it.
 
+- Compatibility is cumulative across every driver generation and operating system: evolve to cover new driver outputs, fields and symbols alongside existing ones rather than replacing old paths.
 - This exporter's metric names and labels are a public contract. Renaming or relabeling an established series silently breaks users' dashboards and alerts, so treat existing names as frozen.
 - The expected `.metrics` files under `internal/integration/testdata/` are generated, not hand-edited. Regenerate them with the integration suite's `-update` flag and review the diff.
 - The Helm chart's `README.md` is generated and must never be edited directly: its prose lives in `README.md.gotmpl`, and its values reference comes from the comments in `values.yaml`. Regenerate with helm-docs after changing either. A new key in `values.yaml` also needs an entry in `values.schema.json`, which rejects unknown keys.

@@ -30,6 +30,10 @@ DCGM and the NVIDIA GPU Operator own the datacenter fleet-management case.
 This exporter aims at everything `nvidia-smi` can reach and heavier tooling cannot or will not: consumer and prosumer cards, small clusters and edge boxes, virtualized and locked-down environments, mixed old-and-new fleets, and remote scraping over a wrapper command.
 When a change would only make sense for a large managed datacenter fleet, it is probably the wrong project for it.
 
+Compatibility spans every driver generation and operating system at once.
+As drivers evolve, the exporter widens to cover the new shapes while keeping every older driver, card and platform working.
+When a driver renames a field, changes a header line, adds a unit suffix or introduces a versioned symbol, the new path goes in alongside the old one through aliases, fallbacks, runtime symbol probes and lenient parsing rather than replacing it.
+
 ## The three collection backends
 
 Everything about the exporter's shape follows from there being three ways to obtain a reading.
