@@ -7,11 +7,12 @@ image:
   tag: ""
 
 # -- Name of the RuntimeClass to run the pods with. GPU access is injected by
-# the NVIDIA container runtime, so the pods must run with it: either set this
-# to the name of your NVIDIA RuntimeClass (usually `nvidia`), or leave it
-# empty if the NVIDIA runtime is the default runtime of your nodes. If
-# neither is the case, the exporter will come up but serve no GPU metrics,
-# reporting `nvidia_smi_last_collect_success 0`.
+# the NVIDIA container runtime or by Dynamic Resource Allocation (DRA, via
+# `resourceClaims`). Set this to the name of your NVIDIA RuntimeClass (usually
+# `nvidia`), or leave it empty when the NVIDIA runtime is the default runtime
+# of your nodes or when using DRA. If none of those holds, the exporter will
+# come up but serve no GPU metrics, reporting
+# `nvidia_smi_last_collect_success 0`.
 runtimeClassName: ""
 
 # -- Which GPUs to make visible to the exporter. `all` monitors every GPU on the node.
@@ -284,6 +285,9 @@ securityContext:
 
 # -- Resources for the exporter container
 resources: {}
+
+# -- Resource claims for the pods, referenced from `resources.claims`
+resourceClaims: []
 
 # -- Extra volumes for the pods
 volumes: []

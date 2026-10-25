@@ -7,7 +7,10 @@ container runtime: the nodes need the NVIDIA driver and the
 [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html),
 and the pods must run with the NVIDIA runtime. Either the runtime is the
 default on your nodes, or you set `runtimeClassName` (usually to `nvidia`)
-and make sure that RuntimeClass exists.
+and make sure that RuntimeClass exists. On clusters that use
+[Dynamic Resource Allocation (DRA)](#dynamic-resource-allocation-dra) instead
+of an `nvidia` `RuntimeClass`, leave `runtimeClassName` empty and pass
+`resourceClaims` and `resources.claims`.
 
 To try the experimental NVML backend, which reads the driver library
 directly instead of running `nvidia-smi`, set the image tag to a `-nvml`
@@ -156,6 +159,55 @@ Feature Discovery labels for the `nodeSelector` shown above.
 
 To replace dcgm-exporter instead of running both, disable it with
 `dcgmExporter.enabled=false` in the GPU Operator chart.
+
+## Dynamic Resource Allocation (DRA)
+
+On clusters running Kubernetes 1.34 or newer that manage GPUs with the
+[NVIDIA DRA driver](https://github.com/kubernetes-sigs/dra-driver-nvidia-gpu)
+(`dra-driver-nvidia-gpu`) and do not configure an `nvidia` `RuntimeClass`,
+leave `runtimeClassName` empty (the chart default). The DRA kubelet plugin
+injects `nvidia-smi`, the driver libraries and the GPU device nodes into the
+container through CDI under the default container runtime.
+
+Label the exporter's namespace with `resource.kubernetes.io/admin-access: "true"`
+and create a `ResourceClaimTemplate` in that namespace requesting all GPUs with
+`adminAccess: true`. Because `adminAccess` is `true`, the claim gives the
+exporter access to every GPU on the node without reserving them or blocking
+workloads:
+
+```yaml
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata:
+  name: nvidia-gpu-exporter
+spec:
+  spec:
+    devices:
+      requests:
+        - name: gpu
+          exactly:
+            deviceClassName: gpu.nvidia.com
+            allocationMode: All
+            adminAccess: true
+```
+
+Unlike the `runtimeClassName` setup (where pods on non-GPU nodes start and
+report `nvidia_smi_last_collect_success 0`), `allocationMode: All` requires at
+least one matching GPU on the node for the claim to allocate. On clusters that
+have CPU-only nodes, restrict `nodeSelector` to GPU nodes (see
+[Scheduling on GPU nodes](#scheduling-on-gpu-nodes)) so pods are not left
+`Pending` on nodes without GPUs:
+
+```yaml
+nodeSelector:
+  nvidia.com/gpu.present: "true"
+resourceClaims:
+  - name: gpu
+    resourceClaimTemplateName: nvidia-gpu-exporter
+resources:
+  claims:
+    - name: gpu
+```
 
 ## Restricted namespaces
 
@@ -362,9 +414,10 @@ grafanaDashboard:
 | queryFieldNames | list | `["AUTO"]` | `nvidia-smi` fields to be queried by the exporter. `AUTO` auto-detects them. |
 | queryFieldNamesExclude | list | `[]` | `nvidia-smi` fields to exclude from being queried. Names match literally, with `*` as a wildcard for any sequence of characters. |
 | readinessProbe | object | `{"httpGet":{"path":"/-/ready","port":"http"}}` | Readiness probe for the exporter container, process-level like the liveness probe. Set to `null` to disable the probe. |
+| resourceClaims | list | `[]` | Resource claims for the pods, referenced from `resources.claims` |
 | resources | object | `{}` | Resources for the exporter container |
 | revisionHistoryLimit | string | `""` | How many old DaemonSet history revisions to retain for rollbacks. Empty means the Kubernetes default (10). |
-| runtimeClassName | string | `""` | Name of the RuntimeClass to run the pods with. GPU access is injected by the NVIDIA container runtime, so the pods must run with it: either set this to the name of your NVIDIA RuntimeClass (usually `nvidia`), or leave it empty if the NVIDIA runtime is the default runtime of your nodes. If neither is the case, the exporter will come up but serve no GPU metrics, reporting `nvidia_smi_last_collect_success 0`. |
+| runtimeClassName | string | `""` | Name of the RuntimeClass to run the pods with. GPU access is injected by the NVIDIA container runtime or by Dynamic Resource Allocation (DRA, via `resourceClaims`). Set this to the name of your NVIDIA RuntimeClass (usually `nvidia`), or leave it empty when the NVIDIA runtime is the default runtime of your nodes or when using DRA. If none of those holds, the exporter will come up but serve no GPU metrics, reporting `nvidia_smi_last_collect_success 0`. |
 | securityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}` | Security context for the exporter container. Unprivileged: GPU access comes from the NVIDIA runtime, which needs no privileges or capabilities. |
 | service.annotations | object | `{}` | Annotations to add to the Service |
 | service.enabled | bool | `true` | Create a Service for the exporter |
