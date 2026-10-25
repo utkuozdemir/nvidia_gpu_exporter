@@ -43,7 +43,7 @@ It runs `nvidia-smi` as a subprocess and parses the CSV.
 It is the only backend that can honor a custom command, which is what makes remote scraping over ssh and privilege wrappers like `sudo` work.
 It is also the strongest isolation against a misbehaving driver, because a wedged subprocess can be killed and an in-process driver call cannot.
 
-`nvml` reads the driver library directly through go-nvml, and is still labelled experimental.
+`nvml` reads the driver library directly through go-nvml.
 It requires cgo and Linux, so it exists only as a separate release flavor whose default backend is flipped at link time.
 On top of the query-field metrics it shares with the exec backend, it serves families only the driver library can provide.
 Its query-field vocabulary is a compiled catalog, not runtime discovery, so it is not automatically a superset of what exec can reach.

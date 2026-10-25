@@ -1,4 +1,4 @@
-// Package nvmlnative implements the experimental NVML collection backend:
+// Package nvmlnative implements the NVML collection backend:
 // GPU metrics read directly from libnvidia-ml instead of exec-ing nvidia-smi.
 // The catalog below is the backend's field vocabulary: every query field it
 // can serve, with the exact returned-header string nvidia-smi prints for it.

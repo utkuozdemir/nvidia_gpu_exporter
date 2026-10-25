@@ -21,8 +21,8 @@ to be able to run `nvidia-smi`. If `nvidia-smi` prints your GPUs, the
 exporter will work.
 
 The exception is the `-nvml` flavor. It reads the driver library directly and
-needs no `nvidia-smi`. It exists for Linux x86_64 only, as a separate archive
-and as `-nvml` image tags. See [CONFIGURE.md](CONFIGURE.md#experimental-native-nvml-backend)
+needs no `nvidia-smi`. It exists for Linux (x86_64 and arm64), as a separate
+archive and as `-nvml` image tags. See [CONFIGURE.md](CONFIGURE.md#native-nvml-backend)
 for what it can and cannot do.
 
 Once installed, the exporter listens on port `9835` and serves the metrics
@@ -93,11 +93,11 @@ nvidia_gpu_exporter --help
 
 The arm64 archive is named `nvidia_gpu_exporter_${VERSION}_linux_arm64.tar.gz`.
 
-The x86_64 releases also ship an `nvidia_gpu_exporter-nvml_*` archive. It is
-the same exporter with the experimental NVML backend built in and used by
-default, so it needs no `nvidia-smi`. See
-[CONFIGURE.md](CONFIGURE.md#experimental-native-nvml-backend) for the details
-and the limits.
+Linux releases also ship `nvidia_gpu_exporter-nvml_*` archives for x86_64 and
+arm64. They are the same exporter with the NVML backend built in and used by
+default, so they need no `nvidia-smi`. See
+[CONFIGURE.md](CONFIGURE.md#native-nvml-backend) for the details and the
+limits.
 
 ### Systemd service without the package
 
@@ -161,10 +161,10 @@ The image is `utkuozdemir/nvidia_gpu_exporter` on
 [GHCR](https://github.com/utkuozdemir/nvidia_gpu_exporter/pkgs/container/nvidia_gpu_exporter),
 with the same tags on both.
 
-To try the experimental NVML backend, use a `-nvml` tag, e.g.,
+To use the NVML backend, pull a `-nvml` tag, e.g.,
 `utkuozdemir/nvidia_gpu_exporter:latest-nvml`. It reads the driver library
 directly instead of running `nvidia-smi`. See
-[CONFIGURE.md](CONFIGURE.md#experimental-native-nvml-backend).
+[CONFIGURE.md](CONFIGURE.md#native-nvml-backend).
 
 ### Docker compose
 

@@ -53,6 +53,8 @@ jobs:
           # would otherwise restore the same compiled packages from an earlier
           # run and the comparison would only cover the packaging
           cache: false
+      - name: Install arm64 C cross-toolchain
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross
       # the build workflow enforces that this declaration is exactly one line
       - name: Resolve goreleaser version
         id: goreleaser_version
