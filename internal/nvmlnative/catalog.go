@@ -80,6 +80,8 @@ var fieldOrder = []nvidiasmi.QField{
 	"clocks_event_reasons.hw_power_brake_slowdown",
 	"clocks_event_reasons.sw_thermal_slowdown",
 	"clocks_event_reasons.sync_boost",
+	"clocks_event_reasons.board_limit",
+	"clocks_event_reasons.reliability",
 	"clocks_event_reasons_counters.sw_power_cap",
 	"clocks_event_reasons_counters.sync_boost",
 	"clocks_event_reasons_counters.sw_thermal_slowdown",
@@ -265,6 +267,8 @@ var catalogRFields = map[nvidiasmi.QField]nvidiasmi.RField{
 	"clocks_event_reasons.hw_power_brake_slowdown":          "clocks_event_reasons.hw_power_brake_slowdown",
 	"clocks_event_reasons.sw_thermal_slowdown":              "clocks_event_reasons.sw_thermal_slowdown",
 	"clocks_event_reasons.sync_boost":                       "clocks_event_reasons.sync_boost",
+	"clocks_event_reasons.board_limit":                      "clocks_event_reasons.board_limit",
+	"clocks_event_reasons.reliability":                      "clocks_event_reasons.reliability",
 	"clocks_event_reasons_counters.sw_power_cap":            "clocks_event_reasons_counters.sw_power_cap [us]",
 	"clocks_event_reasons_counters.sync_boost":              "clocks_event_reasons_counters.sync_boost [us]",
 	"clocks_event_reasons_counters.sw_thermal_slowdown":     "clocks_event_reasons_counters.sw_thermal_slowdown [us]",
@@ -413,13 +417,15 @@ var throttleAliases = map[nvidiasmi.QField]nvidiasmi.QField{
 	"clocks_throttle_reasons.hw_power_brake_slowdown":     "clocks_event_reasons.hw_power_brake_slowdown",
 	"clocks_throttle_reasons.sw_thermal_slowdown":         "clocks_event_reasons.sw_thermal_slowdown",
 	"clocks_throttle_reasons.sync_boost":                  "clocks_event_reasons.sync_boost",
+	"clocks_throttle_reasons.board_limit":                 "clocks_event_reasons.board_limit",
+	"clocks_throttle_reasons.reliability":                 "clocks_event_reasons.reliability",
 }
 
 // eventReasonsMinDriverMajor is the first driver branch whose nvidia-smi
 // advertises the clocks_event_reasons.* spelling first. The captures corpus
 // only proves >= 590 uses the event spelling; the r555 boundary is an
 // UNVERIFIED estimate, so on branches between the real rename and 590 the
-// two backends may spell these ten metric names differently. Pin the
+// two backends may spell these metric names differently. Pin the
 // boundary from a pre-590 capture when one becomes available (tracked in
 // the design doc's known limits).
 const eventReasonsMinDriverMajor = 555
