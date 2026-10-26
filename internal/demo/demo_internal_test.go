@@ -360,11 +360,13 @@ func TestAttributeApps(t *testing.T) {
 	require.NoError(t, err)
 
 	reading := func() collect.Reading {
-		return collect.Reading{Apps: []nvidiasmi.ComputeApp{
-			{GPUUUID: "u0", PID: "101"},
-			{GPUUUID: "u0", PID: "202"},
-			{GPUUUID: "u1", PID: "303"},
-		}}
+		return collect.Reading{
+			Apps: []nvidiasmi.ComputeApp{
+				{GPUUUID: "u0", PID: "101"},
+				{GPUUUID: "u0", PID: "202"},
+				{GPUUUID: "u1", PID: "303"},
+			},
+		}
 	}
 
 	first := reading()

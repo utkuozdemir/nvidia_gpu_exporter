@@ -306,12 +306,28 @@ func (b *Backend) collectCycle(
 	if opts.ComputeApps {
 		reading.AppsAttempted = true
 
-		apps, appsErr := b.collectComputeApps(ctx)
+		apps, appsErr := b.collectProcesses(ctx, func(dev device) ([]nvml.ProcessInfo, nvml.Return) {
+			return dev.GetComputeRunningProcesses()
+		})
 		if appsErr != nil {
 			reading.AppsErr = appsErr
 		} else {
 			reading.Apps = apps
 			reading.AppsSuccess = true
+		}
+	}
+
+	if opts.GraphicsApps {
+		reading.GraphicsAppsAttempted = true
+
+		apps, appsErr := b.collectProcesses(ctx, func(dev device) ([]nvml.ProcessInfo, nvml.Return) {
+			return dev.GetGraphicsRunningProcesses()
+		})
+		if appsErr != nil {
+			reading.GraphicsAppsErr = appsErr
+		} else {
+			reading.GraphicsApps = apps
+			reading.GraphicsAppsSuccess = true
 		}
 	}
 
@@ -1434,14 +1450,18 @@ func collectPlatform(dev device, coll *devCollector, reqs plan) {
 	})
 }
 
-// collectComputeApps lists processes with a compute context, matching the
-// exec backend's --query-compute-apps output. It fails softly per the
-// Reading contract, but lifecycle-class returns still mark the backend for
-// re-initialization so the next cycle recovers. The caller holds the
-// backend lock.
-//
-//nolint:cyclop // one linear pass over devices and their process lists
-func (b *Backend) collectComputeApps(ctx context.Context) ([]nvidiasmi.ComputeApp, error) {
+// collectProcesses lists running processes on each device using the given
+// getter (compute or graphics). It fails softly per the Reading contract,
+// but lifecycle-class returns still mark the backend for re-initialization so
+// the next cycle recovers. The caller holds the backend lock.
+func (b *Backend) collectProcesses(
+	ctx context.Context,
+	list func(device) ([]nvml.ProcessInfo, nvml.Return),
+) ([]nvidiasmi.ComputeApp, error) {
+	if !b.initialized {
+		return nil, errors.New("NVML is not initialized (lifecycle error earlier in this cycle)")
+	}
+
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("per-process collection interrupted: %w", err)
 	}
@@ -1468,7 +1488,7 @@ func (b *Backend) collectComputeApps(ctx context.Context) ([]nvidiasmi.ComputeAp
 			return nil, b.softLifecycle(ret, fmt.Errorf("failed to get device %d uuid", deviceIdx))
 		}
 
-		procs, ret := dev.GetComputeRunningProcesses()
+		procs, ret := list(dev)
 		if ret != nvml.SUCCESS {
 			return nil, b.softLifecycle(ret, fmt.Errorf("failed to list processes of device %d", deviceIdx))
 		}
@@ -1476,34 +1496,39 @@ func (b *Backend) collectComputeApps(ctx context.Context) ([]nvidiasmi.ComputeAp
 		nameAvailable := b.avail.Load().has("nvmlSystemGetProcessName")
 
 		for _, proc := range procs {
-			name, nret := "", nvml.ERROR_FUNCTION_NOT_FOUND
-			if nameAvailable {
-				name, nret = b.api.processName(int(proc.Pid))
-			}
-
-			if nret != nvml.SUCCESS {
-				name = tok(nret)
-			}
-
-			usedMemory := mib(proc.UsedGpuMemory)
-			if proc.UsedGpuMemory == math.MaxUint64 {
-				// NVML reports "value unknown" as ~0; nvidia-smi prints the
-				// absent token in that case (Windows WDDM behavior)
-				usedMemory = tokenNotAvailable
-			}
-
-			apps = append(apps, nvidiasmi.ComputeApp{
-				GPUUUID:           nvidiasmi.NormalizeUUID(uuid),
-				PID:               strconv.FormatUint(uint64(proc.Pid), 10),
-				ProcessName:       name,
-				UsedMemory:        usedMemory,
-				GPUInstanceID:     migAppID(proc.GpuInstanceId),
-				ComputeInstanceID: migAppID(proc.ComputeInstanceId),
-			})
+			apps = append(apps, b.toComputeApp(uuid, proc, nameAvailable))
 		}
 	}
 
 	return apps, nil
+}
+
+// toComputeApp formats an NVML process entry into the exporter's per-process record.
+func (b *Backend) toComputeApp(uuid string, proc nvml.ProcessInfo, nameAvailable bool) nvidiasmi.ComputeApp {
+	name, nret := "", nvml.ERROR_FUNCTION_NOT_FOUND
+	if nameAvailable {
+		name, nret = b.api.processName(int(proc.Pid))
+	}
+
+	if nret != nvml.SUCCESS {
+		name = tok(nret)
+	}
+
+	usedMemory := mib(proc.UsedGpuMemory)
+	if proc.UsedGpuMemory == math.MaxUint64 {
+		// NVML reports "value unknown" as ~0; nvidia-smi prints the
+		// absent token in that case (Windows WDDM behavior)
+		usedMemory = tokenNotAvailable
+	}
+
+	return nvidiasmi.ComputeApp{
+		GPUUUID:           nvidiasmi.NormalizeUUID(uuid),
+		PID:               strconv.FormatUint(uint64(proc.Pid), 10),
+		ProcessName:       name,
+		UsedMemory:        usedMemory,
+		GPUInstanceID:     migAppID(proc.GpuInstanceId),
+		ComputeInstanceID: migAppID(proc.ComputeInstanceId),
+	}
 }
 
 // softLifecycle marks the backend for re-initialization on lifecycle-class

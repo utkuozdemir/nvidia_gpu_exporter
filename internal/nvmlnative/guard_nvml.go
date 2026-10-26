@@ -45,6 +45,7 @@ type device interface {
 	GetGpuInstanceId() (int, nvml.Return)
 	GetGpuMaxPcieLinkGeneration() (int, nvml.Return)
 	GetGpuOperationMode() (nvml.GpuOperationMode, nvml.GpuOperationMode, nvml.Return)
+	GetGraphicsRunningProcesses() ([]nvml.ProcessInfo, nvml.Return)
 	GetGspFirmwareMode() (bool, bool, nvml.Return)
 	GetHostname_v1() (string, nvml.Return)
 	GetIndex() (int, nvml.Return)
@@ -376,6 +377,17 @@ func (g guardedDevice) GetGpuOperationMode() (nvml.GpuOperationMode, nvml.GpuOpe
 	}
 
 	return g.dev.GetGpuOperationMode()
+}
+
+func (g guardedDevice) GetGraphicsRunningProcesses() ([]nvml.ProcessInfo, nvml.Return) {
+	if !g.avail.hasAny("nvmlDeviceGetGraphicsRunningProcesses",
+		"nvmlDeviceGetGraphicsRunningProcesses_v2", "nvmlDeviceGetGraphicsRunningProcesses_v3") {
+		var z0 []nvml.ProcessInfo
+
+		return z0, nvml.ERROR_FUNCTION_NOT_FOUND
+	}
+
+	return g.dev.GetGraphicsRunningProcesses()
 }
 
 func (g guardedDevice) GetGspFirmwareMode() (bool, bool, nvml.Return) {

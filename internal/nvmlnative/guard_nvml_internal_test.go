@@ -55,7 +55,9 @@ func TestCollectionMakesNoCallWhenNoSymbolIsAvailable(t *testing.T) {
 
 	fields := resolveFields(t, "AUTO")
 
-	opts := CollectOptions{ComputeApps: true, PCIeThroughput: true, Energy: true, MIG: true}
+	opts := CollectOptions{
+		ComputeApps: true, GraphicsApps: true, PCIeThroughput: true, Energy: true, MIG: true,
+	}
 
 	// must not panic: every getter is unavailable, so none may be reached
 	reading, _, err := backend.QueryFunc(fields, opts)(t.Context())

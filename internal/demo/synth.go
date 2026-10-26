@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/collect"
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvidiasmi"
 )
 
 // demoRand is the seeded source behind every synthesized draw. One source,
@@ -301,6 +302,40 @@ func sortXIDCounters(counters []collect.XIDCounter) {
 
 		return counters[i].XID < counters[j].XID
 	})
+}
+
+// defaultGraphicsApps is the synthetic graphics-process list served on each
+// simulated GPU. The exec pipeline has no --query-graphics-apps switch to
+// replay from a capture, so the demo backend synthesizes a desktop-style set
+// directly.
+//
+//nolint:gochecknoglobals // static synthetic process table
+var defaultGraphicsApps = []struct {
+	pid        string
+	name       string
+	usedMemory string
+}{
+	{pid: "2165", name: "/usr/bin/kwin_wayland", usedMemory: "64 MiB"},
+	{pid: "2620", name: "/usr/bin/Xwayland", usedMemory: "128 MiB"},
+}
+
+// synthGraphicsApps populates the graphics per-process list for each simulated
+// GPU. Unlike compute apps (which come from the capture via --query-compute-apps),
+// graphics apps are an NVML-only family and are synthesized here.
+func synthGraphicsApps(uuids []string, reading *collect.Reading) {
+	reading.GraphicsAppsAttempted = true
+	reading.GraphicsAppsSuccess = true
+
+	for _, uuid := range uuids {
+		for _, proc := range defaultGraphicsApps {
+			reading.GraphicsApps = append(reading.GraphicsApps, nvidiasmi.ComputeApp{
+				GPUUUID:     uuid,
+				PID:         proc.pid,
+				ProcessName: proc.name,
+				UsedMemory:  proc.usedMemory,
+			})
+		}
+	}
 }
 
 // attributeApps assigns per-process readings to the configured MIG topology,

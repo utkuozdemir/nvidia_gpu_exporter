@@ -157,6 +157,12 @@ func Run(ctx context.Context, args []string, opts Options) error {
 				"container, seeing other workloads' processes requires sharing the host PID "+
 				"namespace (hostPID in Kubernetes, --pid=host in Docker).").
 			Default("false").Bool()
+		collectGraphicsApps = app.Flag("collect.graphics-apps",
+			"Also export per-process metrics for graphics contexts on a GPU "+
+				"(requires --collect.backend=nvml or demo). When the exporter runs in a "+
+				"container, seeing other workloads' processes requires sharing the host PID "+
+				"namespace (hostPID in Kubernetes, --pid=host in Docker).").
+			Default("false").Bool()
 		demoConfig = app.Flag("demo-config",
 			"Path to the demo backend's config file (the fake-nvidia-smi YAML plus an "+
 				"extras block; see the docs). Only with --collect.backend=demo; the "+
@@ -164,9 +170,9 @@ func Run(ctx context.Context, args []string, opts Options) error {
 			Default("").String()
 		collectComputeAppsMIG = app.Flag("collect.compute-apps-mig",
 			"Add MIG attribution labels (gpu_instance_id, compute_instance_id) to the "+
-				"per-process metrics (requires --collect.compute-apps and the nvml or demo "+
-				"backend). Opt-in because it changes the label set of the "+
-				"per-process series.").
+				"per-process metrics (requires --collect.compute-apps or "+
+				"--collect.graphics-apps, and the nvml or demo backend). Opt-in because "+
+				"it changes the label set of the per-process series.").
 			Default("false").Bool()
 		collectPcieThroughput = app.Flag("collect.pcie-throughput",
 			"Also export the PCIe TX/RX throughput per GPU (requires --collect.backend=nvml; "+
@@ -215,6 +221,7 @@ func Run(ctx context.Context, args []string, opts Options) error {
 		nvidiaSmiCommand: *nvidiaSmiCommand,
 		pcieThroughput:   *collectPcieThroughput,
 		computeApps:      *collectComputeApps,
+		graphicsApps:     *collectGraphicsApps,
 		computeAppsMIG:   *collectComputeAppsMIG,
 		demoConfig:       *demoConfig,
 	}
@@ -241,6 +248,7 @@ func Run(ctx context.Context, args []string, opts Options) error {
 		interval:         *collectInterval,
 		timeout:          *collectTimeout,
 		computeApps:      *collectComputeApps,
+		graphicsApps:     *collectGraphicsApps,
 		computeAppsMIG:   *collectComputeAppsMIG,
 		pcieThroughput:   *collectPcieThroughput,
 		demoConfig:       *demoConfig,
@@ -337,6 +345,7 @@ type backendFlagSet struct {
 	nvidiaSmiCommand string
 	pcieThroughput   bool
 	computeApps      bool
+	graphicsApps     bool
 	computeAppsMIG   bool
 	demoConfig       string
 }
@@ -359,13 +368,18 @@ func validateBackendFlags(flags backendFlagSet) error {
 		return errors.New("--collect.pcie-throughput requires --collect.backend=nvml")
 	}
 
+	if flags.graphicsApps && flags.backend == backendExec {
+		// nvidia-smi has no query switch for graphics processes
+		return errors.New("--collect.graphics-apps requires --collect.backend=nvml or demo")
+	}
+
 	if flags.computeAppsMIG && flags.backend == backendExec {
 		// the per-process query output has no MIG attribution to parse
 		return errors.New("--collect.compute-apps-mig requires --collect.backend=nvml or demo")
 	}
 
-	if flags.computeAppsMIG && !flags.computeApps {
-		return errors.New("--collect.compute-apps-mig requires --collect.compute-apps")
+	if flags.computeAppsMIG && !flags.computeApps && !flags.graphicsApps {
+		return errors.New("--collect.compute-apps-mig requires --collect.compute-apps or --collect.graphics-apps")
 	}
 
 	if flags.demoConfig != "" && flags.backend != backendDemo {
@@ -482,6 +496,7 @@ type collectConfig struct {
 	interval         time.Duration
 	timeout          time.Duration
 	computeApps      bool
+	graphicsApps     bool
 	computeAppsMIG   bool
 	pcieThroughput   bool
 	demoConfig       string
@@ -523,6 +538,7 @@ func setupExporter(
 
 	features := exporter.Features{
 		ComputeApps:         cfg.computeApps,
+		GraphicsApps:        cfg.graphicsApps,
 		ComputeAppMIGLabels: cfg.computeAppsMIG,
 		// the extras families exist in the nvml backend and its demo twin;
 		// the demo serves the PCIe family unconditionally
@@ -636,6 +652,7 @@ func setupNVMLBackend(
 
 	opts := nvmlnative.CollectOptions{
 		ComputeApps:    cfg.computeApps,
+		GraphicsApps:   cfg.graphicsApps,
 		PCIeThroughput: cfg.pcieThroughput,
 		Energy:         true,
 		MIG:            true,

@@ -298,6 +298,7 @@ func TestDemoBackendExpectedMetrics(t *testing.T) {
 		"--collect.backend=demo",
 		"--demo-config="+filepath.Join("testdata", "demo-config.yaml"),
 		"--collect.compute-apps",
+		"--collect.graphics-apps",
 		"--collect.compute-apps-mig")
 
 	got := filterDeterministic(scrape(t, baseURL))
@@ -1009,7 +1010,11 @@ func TestExecBackendRejectsPcieThroughput(t *testing.T) {
 func TestDemoBackendDefaultConfig(t *testing.T) {
 	t.Parallel()
 
-	baseURL := startExporter(t, "--collect.backend=demo", "--collect.compute-apps")
+	baseURL := startExporter(t,
+		"--collect.backend=demo",
+		"--collect.compute-apps",
+		"--collect.graphics-apps",
+	)
 
 	first := scrape(t, baseURL)
 	second := scrape(t, baseURL)
@@ -1017,6 +1022,7 @@ func TestDemoBackendDefaultConfig(t *testing.T) {
 	for _, family := range []string{
 		"nvidia_smi_gpu_info",
 		"nvidia_smi_compute_app_info",
+		"nvidia_smi_graphics_app_info",
 		"nvidia_smi_energy_joules_total",
 		"nvidia_smi_pcie_throughput_tx_bytes_per_second",
 		"nvidia_smi_mig_info",

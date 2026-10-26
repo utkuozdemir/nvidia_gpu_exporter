@@ -48,6 +48,7 @@ services:
       - "--collect.backend=demo"
       - "--demo-config=/etc/machines/consumer.yaml"
       - "--collect.compute-apps"
+      - "--collect.graphics-apps"
     volumes:
       - ./machines:/etc/machines:ro
     ports:
@@ -61,6 +62,7 @@ services:
       - "--collect.backend=demo"
       - "--demo-config=/etc/machines/datacenter.yaml"
       - "--collect.compute-apps"
+      - "--collect.graphics-apps"
       - "--collect.compute-apps-mig"
     volumes:
       - ./machines:/etc/machines:ro

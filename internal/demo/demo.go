@@ -319,6 +319,7 @@ func (b *Backend) overlay(reading *collect.Reading) {
 	b.synthEnergy(uuids, power, snap.extras, now, reading)
 	b.synthPCIe(uuids, snap.extras, reading)
 	b.synthMIG(uuids, snap.extras, reading)
+	synthGraphicsApps(uuids, reading)
 	attributeApps(uuids, snap.extras, reading)
 	b.tickXIDs(uuids, snap.extras, now)
 }

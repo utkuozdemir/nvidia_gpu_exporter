@@ -3290,7 +3290,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "Processes with a compute context on the selected GPU, with used memory and its share of total VRAM. Requires the exporter to run with --collect.compute-apps. A memory value of 0 B means the platform does not report per-process memory (e.g. Windows in WDDM mode).",
+          "description": "Processes with a compute or graphics context on the selected GPU, with used memory and its share of total VRAM. Requires the exporter to run with --collect.compute-apps and/or --collect.graphics-apps. A memory value of 0 B means the platform does not report per-process memory (e.g. Windows in WDDM mode).",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3325,7 +3325,19 @@
                 "properties": [
                   {
                     "id": "custom.width",
-                    "value": 70
+                    "value": 65
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Type"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 75
                   }
                 ]
               },
@@ -3341,7 +3353,7 @@
                   },
                   {
                     "id": "custom.width",
-                    "value": 100
+                    "value": 90
                   }
                 ]
               },
@@ -3365,7 +3377,7 @@
                   },
                   {
                     "id": "custom.width",
-                    "value": 140
+                    "value": 120
                   },
                   {
                     "id": "custom.cellOptions",
@@ -3417,7 +3429,7 @@
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "nvidia_smi_compute_app_used_memory_bytes{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} or (nvidia_smi_compute_app_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} * 0)",
+              "expr": "label_replace(nvidia_smi_compute_app_used_memory_bytes{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} or (nvidia_smi_compute_app_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} * 0), \"type\", \"compute\", \"\", \"\") or label_replace(nvidia_smi_graphics_app_used_memory_bytes{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} or (nvidia_smi_graphics_app_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} * 0), \"type\", \"graphics\", \"\", \"\")",
               "format": "table",
               "instant": true,
               "legendFormat": "",
@@ -3428,7 +3440,7 @@
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "(nvidia_smi_compute_app_used_memory_bytes{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} or (nvidia_smi_compute_app_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} * 0)) / on(uuid) group_left() nvidia_smi_memory_total_bytes{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+              "expr": "(label_replace(nvidia_smi_compute_app_used_memory_bytes{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} or (nvidia_smi_compute_app_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} * 0), \"type\", \"compute\", \"\", \"\") or label_replace(nvidia_smi_graphics_app_used_memory_bytes{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} or (nvidia_smi_graphics_app_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} * 0), \"type\", \"graphics\", \"\", \"\")) / on(uuid) group_left() nvidia_smi_memory_total_bytes{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
               "format": "table",
               "instant": true,
               "legendFormat": "",
@@ -3448,17 +3460,21 @@
                   "uuid": true,
                   "__name__": true,
                   "instance": true,
-                  "job": true
+                  "job": true,
+                  "gpu_instance_id": true,
+                  "compute_instance_id": true
                 },
                 "indexByName": {
                   "process_name": 0,
                   "pid": 1,
-                  "Value #A": 2,
-                  "Value #B": 3
+                  "type": 2,
+                  "Value #A": 3,
+                  "Value #B": 4
                 },
                 "renameByName": {
                   "process_name": "Process",
                   "pid": "PID",
+                  "type": "Type",
                   "Value #A": "Memory",
                   "Value #B": "Share"
                 }
@@ -3473,7 +3489,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "GPU memory per process over time, stacked. Processes appear and disappear as they open and close compute contexts. Empty when --collect.compute-apps is off or the platform reports no per-process memory.",
+          "description": "GPU memory per process over time, stacked. Processes appear and disappear as they open and close compute or graphics contexts. Empty when --collect.compute-apps and --collect.graphics-apps are off or the platform reports no per-process memory.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3535,7 +3551,7 @@
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "nvidia_smi_compute_app_used_memory_bytes{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+              "expr": "nvidia_smi_compute_app_used_memory_bytes{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} or nvidia_smi_graphics_app_used_memory_bytes{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
               "legendFormat": "{{process_name}} ({{pid}})",
               "refId": "A"
             }
@@ -3548,7 +3564,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "Health of the per-process collection on the selected node. OK means the last collection succeeded, so an empty table really means no compute processes. Failing means nvidia-smi could not deliver per-process data. Not enabled means the exporter runs without --collect.compute-apps.",
+          "description": "Health of the compute process collection on the selected node. OK means the last collection succeeded, so an empty table really means no compute processes. Failing means the exporter could not deliver compute process data. Off means the exporter runs without --collect.compute-apps.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3572,7 +3588,7 @@
                   }
                 }
               ],
-              "noValue": "Not enabled (--collect.compute-apps)",
+              "noValue": "Off (--collect.compute-apps)",
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
@@ -3589,7 +3605,7 @@
           "gridPos": {
             "x": 0,
             "y": 38,
-            "w": 9,
+            "w": 5,
             "h": 3
           },
           "id": 52,
@@ -3608,7 +3624,7 @@
             "textMode": "value",
             "wideLayout": false,
             "text": {
-              "valueSize": 24
+              "valueSize": 20
             }
           },
           "pluginVersion": "11.2.0",
@@ -3623,7 +3639,90 @@
               "refId": "A"
             }
           ],
-          "title": "Process Collection",
+          "title": "Compute Collection",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Health of the graphics process collection on the selected node. OK means the last collection succeeded, so an empty table really means no graphics processes. Failing means the exporter could not deliver graphics process data. Off means the exporter runs without --collect.graphics-apps (needs the nvml or demo backend).",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 0,
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "Failing",
+                      "color": "#E02F44",
+                      "index": 0
+                    },
+                    "1": {
+                      "text": "OK",
+                      "color": "#56A64B",
+                      "index": 1
+                    }
+                  }
+                }
+              ],
+              "noValue": "Off (--collect.graphics-apps)",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6E7B8B",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 5,
+            "y": 38,
+            "w": 4,
+            "h": 3
+          },
+          "id": 69,
+          "options": {
+            "colorMode": "background_solid",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value",
+            "wideLayout": false,
+            "text": {
+              "valueSize": 20
+            }
+          },
+          "pluginVersion": "11.2.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "nvidia_smi_graphics_apps_last_collect_success{instance=\"$node\", job=\"$job\"}",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "Graphics Collection",
           "type": "stat"
         }
       ],
