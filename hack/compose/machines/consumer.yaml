@@ -55,6 +55,9 @@ overrides:
   # block to fall back to values jittering around the capture.
   utilization.gpu:    {min: 72,   max: 99}
   utilization.memory: {min: 40,   max: 88}
+  utilization.decoder: {min: 18,  max: 42}
+  encoder.stats.averageFps:     {min: 165,   max: 195}
+  encoder.stats.averageLatency: {min: 55000, max: 68000}
   memory.used:        {min: 11000, max: 15600}
   power.draw:         {min: 240,  max: 385}
   fan.speed:          {min: 55,   max: 92}
