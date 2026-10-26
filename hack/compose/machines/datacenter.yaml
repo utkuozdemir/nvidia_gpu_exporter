@@ -45,6 +45,13 @@ gpus:
       power.draw:         {min: 600, max: 655}
       power.draw.average: {min: 600, max: 655}
       power.draw.instant: {min: 600, max: 655}
+      utilization.encoder:          {min: 58, max: 68}
+      utilization.decoder:          {min: 28, max: 38}
+      utilization.jpeg:             {min: 8, max: 14}
+      utilization.ofa:              {min: 4, max: 9}
+      encoder.stats.sessionCount:   2
+      encoder.stats.averageFps:     {min: 116, max: 124}
+      encoder.stats.averageLatency: {min: 4800, max: 5600}
       # A range rather than a pin, and wide enough to be visible: the P-state
       # palette is a gradient, so neighbouring states are near indistinguishable
       # at panel size and a card that only ever reads P0/P1 draws one unbroken

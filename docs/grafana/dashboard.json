@@ -2775,6 +2775,514 @@
         "x": 0,
         "y": 29
       },
+      "id": 63,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Percent of time over the past sample period during which one or more kernels was executing on the Encoder Engine.\nThe sample period may be between 1 second and 1/6 second depending on the product.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "purple"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "purple",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "percentunit",
+              "max": 1,
+              "noValue": "Not reported by driver"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 5,
+            "x": 0,
+            "y": 29
+          },
+          "id": 64,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": false
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "11.1.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "exemplar": true,
+              "expr": "nvidia_smi_utilization_encoder_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "{{uuid}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Encoder Utilization %",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Percent of time over the past sample period during which one or more kernels was executing on the Decoder Engine.\nThe sample period may be between 1 second and 1/6 second depending on the product.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "purple"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "purple",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "percentunit",
+              "max": 1,
+              "noValue": "Not reported by driver"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 5,
+            "x": 5,
+            "y": 29
+          },
+          "id": 65,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": false
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "11.1.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "exemplar": true,
+              "expr": "nvidia_smi_utilization_decoder_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "{{uuid}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Decoder Utilization %",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Number of encoder sessions running on the GPU.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "none",
+              "noValue": "Not reported by driver",
+              "decimals": 0
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 4,
+            "x": 10,
+            "y": 29
+          },
+          "id": 66,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": false
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "11.1.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "exemplar": true,
+              "expr": "nvidia_smi_encoder_stats_session_count{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "{{uuid}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Encoder Sessions",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Average FPS of all sessions running on the GPU.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "fps",
+              "noValue": "Not reported by driver",
+              "decimals": 0
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 5,
+            "x": 14,
+            "y": 29
+          },
+          "id": 67,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": false
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "11.1.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "exemplar": true,
+              "expr": "nvidia_smi_encoder_stats_average_fps{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "{{uuid}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Encoder Average FPS",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Average latency in microseconds of all sessions running on the GPU.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "\u00b5s",
+              "noValue": "Not reported by driver"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 5,
+            "x": 19,
+            "y": 29
+          },
+          "id": 68,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": false
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "11.1.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "exemplar": true,
+              "expr": "nvidia_smi_encoder_stats_average_latency{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "{{uuid}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Encoder Average Latency",
+          "type": "timeseries"
+        }
+      ],
+      "title": "Video (NVENC / NVDEC)",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
       "id": 47,
       "panels": [
         {
@@ -2879,7 +3387,7 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 29,
+            "y": 30,
             "w": 9,
             "h": 8
           },
@@ -3003,7 +3511,7 @@
           },
           "gridPos": {
             "x": 9,
-            "y": 29,
+            "y": 30,
             "w": 15,
             "h": 11
           },
@@ -3080,7 +3588,7 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 37,
+            "y": 38,
             "w": 9,
             "h": 3
           },
@@ -3128,7 +3636,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 30
+        "y": 31
       },
       "id": 48,
       "panels": [
@@ -3190,7 +3698,7 @@
             "h": 4,
             "w": 6,
             "x": 0,
-            "y": 30
+            "y": 31
           },
           "id": 37,
           "options": {
@@ -3266,7 +3774,7 @@
             "h": 8,
             "w": 18,
             "x": 6,
-            "y": 30
+            "y": 31
           },
           "id": 44,
           "options": {
@@ -3308,7 +3816,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 31
+        "y": 32
       },
       "id": 53,
       "panels": [
@@ -3359,7 +3867,7 @@
             "h": 5,
             "w": 4,
             "x": 0,
-            "y": 31
+            "y": 32
           },
           "id": 54,
           "options": {
@@ -3446,7 +3954,7 @@
             "h": 5,
             "w": 4,
             "x": 4,
-            "y": 31
+            "y": 32
           },
           "id": 61,
           "options": {
@@ -3546,7 +4054,7 @@
             "h": 5,
             "w": 8,
             "x": 8,
-            "y": 31
+            "y": 32
           },
           "id": 55,
           "options": {
@@ -3641,7 +4149,7 @@
             "h": 5,
             "w": 8,
             "x": 16,
-            "y": 31
+            "y": 32
           },
           "id": 57,
           "options": {
@@ -3746,7 +4254,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 36
+            "y": 37
           },
           "id": 56,
           "options": {
@@ -3821,7 +4329,7 @@
             "h": 6,
             "w": 4,
             "x": 8,
-            "y": 36
+            "y": 37
           },
           "id": 62,
           "options": {
@@ -3920,7 +4428,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 36
+            "y": 37
           },
           "id": 60,
           "options": {
@@ -4015,7 +4523,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 42
+            "y": 43
           },
           "id": 58,
           "options": {
@@ -4110,7 +4618,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 42
+            "y": 43
           },
           "id": 59,
           "options": {
