@@ -296,6 +296,25 @@ nvidia_smi_gpu_info{compute_cap="9.0",cuda_version="13.1",driver_model_current="
 # TYPE nvidia_smi_gpu_recovery_action gauge
 nvidia_smi_gpu_recovery_action{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
 nvidia_smi_gpu_recovery_action{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
+# HELP nvidia_smi_graphics_app_info A metric with a constant '1' value labeled by the identity of a process with a graphics context on a GPU.
+# TYPE nvidia_smi_graphics_app_info gauge
+nvidia_smi_graphics_app_info{compute_instance_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1
+nvidia_smi_graphics_app_info{compute_instance_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1
+nvidia_smi_graphics_app_info{compute_instance_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1
+nvidia_smi_graphics_app_info{compute_instance_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1
+# HELP nvidia_smi_graphics_app_used_memory_bytes GPU memory used by the process. Absent when the driver cannot report it (e.g. Windows WDDM).
+# TYPE nvidia_smi_graphics_app_used_memory_bytes gauge
+nvidia_smi_graphics_app_used_memory_bytes{compute_instance_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 6.7108864e+07
+nvidia_smi_graphics_app_used_memory_bytes{compute_instance_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 6.7108864e+07
+nvidia_smi_graphics_app_used_memory_bytes{compute_instance_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1.34217728e+08
+nvidia_smi_graphics_app_used_memory_bytes{compute_instance_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1.34217728e+08
+# HELP nvidia_smi_graphics_apps Number of processes with a graphics context on the GPU.
+# TYPE nvidia_smi_graphics_apps gauge
+nvidia_smi_graphics_apps{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 2
+nvidia_smi_graphics_apps{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 2
+# HELP nvidia_smi_graphics_apps_last_collect_success Whether the most recent per-process collection succeeded (1) or not (0)
+# TYPE nvidia_smi_graphics_apps_last_collect_success gauge
+nvidia_smi_graphics_apps_last_collect_success 1
 # HELP nvidia_smi_gsp_mode_current gsp.mode.current
 # TYPE nvidia_smi_gsp_mode_current gauge
 nvidia_smi_gsp_mode_current{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1

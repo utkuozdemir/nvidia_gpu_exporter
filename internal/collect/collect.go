@@ -21,13 +21,20 @@ type Snapshot struct {
 	Success bool
 	// Table holds the GPU data of the most recent collection, nil on failure.
 	Table *nvidiasmi.Table
-	// Apps holds the per-process data, nil when disabled or failed.
+	// Apps holds the compute per-process data, nil when disabled or failed.
 	Apps []nvidiasmi.ComputeApp
-	// AppsAttempted reports whether the collection included a per-process query.
+	// AppsAttempted reports whether the collection included a compute per-process query.
 	AppsAttempted bool
-	// AppsSuccess reports whether that per-process query succeeded, valid only
+	// AppsSuccess reports whether that compute per-process query succeeded, valid only
 	// when AppsAttempted.
 	AppsSuccess bool
+	// GraphicsApps holds the graphics per-process data, nil when disabled or failed.
+	GraphicsApps []nvidiasmi.ComputeApp
+	// GraphicsAppsAttempted reports whether the collection included a graphics per-process query.
+	GraphicsAppsAttempted bool
+	// GraphicsAppsSuccess reports whether that graphics per-process query succeeded,
+	// valid only when GraphicsAppsAttempted.
+	GraphicsAppsSuccess bool
 	// Extras holds the backend-specific readings of the most recent
 	// collection, zero when the latest collection failed.
 	Extras Extras
@@ -57,14 +64,23 @@ type Source interface {
 type Reading struct {
 	// Table holds the GPU data.
 	Table *nvidiasmi.Table
-	// Apps holds the per-process data, nil when disabled or failed.
+	// Apps holds the compute per-process data, nil when disabled or failed.
 	Apps []nvidiasmi.ComputeApp
-	// AppsAttempted reports whether a per-process query ran (the feature is on).
+	// AppsAttempted reports whether a compute per-process query ran (the feature is on).
 	AppsAttempted bool
 	// AppsSuccess reports whether that query succeeded, valid only when AppsAttempted.
 	AppsSuccess bool
-	// AppsErr is the per-process query's error, for source-owned logging only.
+	// AppsErr is the compute per-process query's error, for source-owned logging only.
 	AppsErr error
+	// GraphicsApps holds the graphics per-process data, nil when disabled or failed.
+	GraphicsApps []nvidiasmi.ComputeApp
+	// GraphicsAppsAttempted reports whether a graphics per-process query ran
+	// (the feature is on, or the demo backend populated it).
+	GraphicsAppsAttempted bool
+	// GraphicsAppsSuccess reports whether that query succeeded, valid only when GraphicsAppsAttempted.
+	GraphicsAppsSuccess bool
+	// GraphicsAppsErr is the graphics per-process query's error, for source-owned logging only.
+	GraphicsAppsErr error
 	// Extras holds the backend-specific readings outside the query-field
 	// schema. Like Apps, extras fail softly and never fail the collection.
 	Extras Extras
@@ -148,11 +164,15 @@ func collectOnce(
 		return snapshot, nil
 	}
 
-	// The per-process query fails softly: it is logged here (once per attempt,
-	// like a primary failure), but it does not count as a failed collection
-	// and never triggers shutdown-on-error.
+	// The per-process queries fail softly: they are logged here (once per attempt,
+	// like a primary failure), but they do not count as a failed collection
+	// and never trigger shutdown-on-error.
 	if reading.AppsAttempted && !reading.AppsSuccess {
 		logger.Warn("failed to collect per-process data", "err", reading.AppsErr)
+	}
+
+	if reading.GraphicsAppsAttempted && !reading.GraphicsAppsSuccess {
+		logger.Warn("failed to collect graphics per-process data", "err", reading.GraphicsAppsErr)
 	}
 
 	snapshot.Success = true
@@ -160,6 +180,9 @@ func collectOnce(
 	snapshot.Apps = reading.Apps
 	snapshot.AppsAttempted = reading.AppsAttempted
 	snapshot.AppsSuccess = reading.AppsSuccess
+	snapshot.GraphicsApps = reading.GraphicsApps
+	snapshot.GraphicsAppsAttempted = reading.GraphicsAppsAttempted
+	snapshot.GraphicsAppsSuccess = reading.GraphicsAppsSuccess
 	snapshot.Extras = reading.Extras
 	snapshot.LastSuccess = now
 

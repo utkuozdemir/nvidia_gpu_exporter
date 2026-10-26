@@ -107,16 +107,25 @@ Flags:
                                 other workloads' processes requires sharing
                                 the host PID namespace (hostPID in Kubernetes,
                                 --pid=host in Docker).
+      --[no-]collect.graphics-apps  
+                                Also export per-process metrics for
+                                graphics contexts on a GPU (requires
+                                --collect.backend=nvml or demo). When the
+                                exporter runs in a container, seeing other
+                                workloads' processes requires sharing the host
+                                PID namespace (hostPID in Kubernetes, --pid=host
+                                in Docker).
       --demo-config=""          Path to the demo backend's config file (the
                                 fake-nvidia-smi YAML plus an extras block;
                                 see the docs). Only with --collect.backend=demo;
                                 the built-in demo setup is used when unset.
       --[no-]collect.compute-apps-mig  
                                 Add MIG attribution labels (gpu_instance_id,
-                                compute_instance_id) to the per-process metrics
-                                (requires --collect.compute-apps and the nvml
-                                or demo backend). Opt-in because it changes the
-                                label set of the per-process series.
+                                compute_instance_id) to the per-process
+                                metrics (requires --collect.compute-apps or
+                                --collect.graphics-apps, and the nvml or demo
+                                backend). Opt-in because it changes the label
+                                set of the per-process series.
       --[no-]collect.pcie-throughput  
                                 Also export the PCIe TX/RX throughput per
                                 GPU (requires --collect.backend=nvml;
@@ -330,6 +339,13 @@ per-process query itself fails, all per-process series disappear and
 `nvidia_smi_compute_apps_last_collect_success` reads `0`. This way, a query
 failure never looks like an idle GPU.
 
+On the NVML and demo backends, `--collect.graphics-apps` exports the matching
+`nvidia_smi_graphics_app_*` and `nvidia_smi_graphics_apps*` families for
+processes holding a graphics context (Xorg, Wayland compositors, games, 3D
+rendering, or CUDA workloads that also open a graphics context). `nvidia-smi`
+has no CSV query flag for graphics processes, so `--collect.graphics-apps` is
+rejected when `--collect.backend=exec`.
+
 Things to keep in mind:
 
 - Containers see only their own processes. Process visibility follows the
@@ -385,6 +401,7 @@ What each backend can do (`demo` serves synthetic data, see
 | Query-field metrics (identical names, labels, values) | yes | yes | synthetic |
 | `gpu_info` with the `cuda_version` label | yes | yes | yes |
 | Per-process metrics (`--collect.compute-apps`) | yes | yes | yes |
+| Graphics per-process metrics (`--collect.graphics-apps`) | no | yes | yes |
 | Collection status metric | `command_exit_code` | `nvml_return_code` | `nvml_return_code` |
 | Custom command, remote scraping (`--nvidia-smi-command`, ssh, sudo) | yes | no | no |
 | Strongest isolation against a stuck driver (killable subprocess) | yes | no | n/a |
@@ -483,8 +500,9 @@ consistently with the rest:
 - PCIe throughput jitters within configurable bounds
 - XID error counters accumulate over time
 
-Per-process metrics work too, including the MIG attribution labels
-(`--collect.compute-apps`, `--collect.compute-apps-mig`).
+Per-process metrics work too, including graphics contexts and the MIG
+attribution labels (`--collect.compute-apps`, `--collect.graphics-apps`,
+`--collect.compute-apps-mig`).
 
 The built-in setup simulates two H200 GPUs, a MIG topology on the first one
 and a pre-seeded XID history. `--demo-config` replaces it with your own

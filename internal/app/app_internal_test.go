@@ -166,6 +166,18 @@ func TestValidateBackendFlags(t *testing.T) {
 			},
 		},
 		{
+			name: "nvml with graphics apps and mig attribution",
+			flags: backendFlagSet{
+				backend: backendNVML, nvidiaSmiCommand: "nvidia-smi",
+				graphicsApps: true, computeAppsMIG: true,
+			},
+		},
+		{
+			name:    "exec rejects graphics apps",
+			flags:   backendFlagSet{backend: backendExec, nvidiaSmiCommand: "nvidia-smi", graphicsApps: true},
+			wantErr: "--collect.graphics-apps requires --collect.backend=nvml or demo",
+		},
+		{
 			name:    "nvml rejects custom command",
 			flags:   backendFlagSet{backend: backendNVML, nvidiaSmiCommand: "sudo nvidia-smi"},
 			wantErr: "--nvidia-smi-command cannot be combined",

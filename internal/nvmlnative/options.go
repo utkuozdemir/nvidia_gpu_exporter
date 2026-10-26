@@ -5,8 +5,10 @@ package nvmlnative
 // schema, so they are gated here at startup rather than through the
 // per-cycle field plan.
 type CollectOptions struct {
-	// ComputeApps enables the per-process query.
+	// ComputeApps enables the compute per-process query.
 	ComputeApps bool
+	// GraphicsApps enables the graphics per-process query.
+	GraphicsApps bool
 	// PCIeThroughput enables per-GPU PCIe throughput sampling. Each reading
 	// blocks inside the driver for a 20ms sampling window per direction, so
 	// this is a deliberate opt-in (--collect.pcie-throughput).

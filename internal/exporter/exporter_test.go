@@ -681,6 +681,46 @@ func TestCollectComputeAppsDisabled(t *testing.T) {
 	assert.NotContains(t, families, "aaa_compute_app_used_memory_bytes")
 }
 
+func TestCollectGraphicsApps(t *testing.T) {
+	t.Parallel()
+
+	apps := []nvidiasmi.ComputeApp{
+		{
+			GPUUUID: "abc", PID: "2620", ProcessName: "/usr/bin/Xwayland",
+			UsedMemory: "128 MiB", GPUInstanceID: "2", ComputeInstanceID: "1",
+		},
+	}
+
+	snap := collect.Snapshot{
+		Attempted:             true,
+		Success:               true,
+		Table:                 gpuTable("GPU-ABC"),
+		GraphicsApps:          apps,
+		GraphicsAppsAttempted: true,
+		GraphicsAppsSuccess:   true,
+		LastSuccess:           time.Now(),
+	}
+
+	exp := newExtrasExporter(t,
+		exporter.Features{GraphicsApps: true, ComputeAppMIGLabels: true}, snap)
+	families := gatherFamilies(t, exp)
+
+	assertFloat(t, 1, gaugeValue(t, families, "aaa_graphics_apps_last_collect_success"))
+	assertFloat(t, 1, gaugeValue(t, families, "aaa_graphics_apps"))
+
+	info, ok := families["aaa_graphics_app_info"]
+	require.True(t, ok)
+	require.Len(t, info.GetMetric(), 1)
+	assert.Equal(t, "/usr/bin/Xwayland", labelValue(t, info.GetMetric()[0], "process_name"))
+	assert.Equal(t, "2", labelValue(t, info.GetMetric()[0], "gpu_instance_id"))
+	assert.Equal(t, "1", labelValue(t, info.GetMetric()[0], "compute_instance_id"))
+
+	memory, ok := families["aaa_graphics_app_used_memory_bytes"]
+	require.True(t, ok)
+	require.Len(t, memory.GetMetric(), 1)
+	assertFloat(t, 128*1024*1024, memory.GetMetric()[0].GetGauge().GetValue())
+}
+
 // extrasSnapshot builds a successful snapshot carrying the given extras.
 func extrasSnapshot(table *nvidiasmi.Table, extras collect.Extras) collect.Snapshot {
 	return collect.Snapshot{

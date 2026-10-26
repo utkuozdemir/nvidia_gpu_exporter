@@ -298,6 +298,34 @@ func TestComputeAppsHappyPath(t *testing.T) {
 	assert.Equal(t, "11111111-2222-3333-4444-555555555555", reading.Apps[0].GPUUUID)
 }
 
+func TestGraphicsAppsHappyPath(t *testing.T) {
+	t.Parallel()
+
+	dev := identityDevice()
+	dev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 100000, nvml.SUCCESS }
+	dev.GetGraphicsRunningProcessesFunc = func() ([]nvml.ProcessInfo, nvml.Return) {
+		return []nvml.ProcessInfo{{Pid: 2620, UsedGpuMemory: 128 * 1024 * 1024}}, nvml.SUCCESS
+	}
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
+
+	reading, _, err := backend.QueryFunc(
+		resolveFields(t, "power.draw"),
+		CollectOptions{GraphicsApps: true},
+	)(
+		t.Context(),
+	)
+	require.NoError(t, err)
+	assert.True(t, reading.GraphicsAppsAttempted)
+	assert.True(t, reading.GraphicsAppsSuccess)
+	require.Len(t, reading.GraphicsApps, 1)
+	assert.Equal(t, "2620", reading.GraphicsApps[0].PID)
+	assert.Equal(t, "/usr/bin/burn", reading.GraphicsApps[0].ProcessName)
+	assert.Equal(t, "128 MiB", reading.GraphicsApps[0].UsedMemory)
+	assert.Equal(t, "11111111-2222-3333-4444-555555555555", reading.GraphicsApps[0].GPUUUID)
+}
+
 func TestAbandonedCollectionFailsFastAndRecovers(t *testing.T) {
 	t.Parallel()
 

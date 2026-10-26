@@ -581,4 +581,13 @@ var nvmlSymbolRequirements = []symbolRequirement{
 		},
 		serves: "per-process metrics",
 	},
+	{
+		goCall: "GetGraphicsRunningProcesses",
+		anyOf: []string{
+			"nvmlDeviceGetGraphicsRunningProcesses",
+			"nvmlDeviceGetGraphicsRunningProcesses_v2",
+			"nvmlDeviceGetGraphicsRunningProcesses_v3",
+		},
+		serves: "per-process metrics",
+	},
 }

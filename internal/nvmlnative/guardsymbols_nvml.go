@@ -99,6 +99,9 @@ var guardedSymbols = []string{
 	"nvmlDeviceGetComputeRunningProcesses",
 	"nvmlDeviceGetComputeRunningProcesses_v2",
 	"nvmlDeviceGetComputeRunningProcesses_v3",
+	"nvmlDeviceGetGraphicsRunningProcesses",
+	"nvmlDeviceGetGraphicsRunningProcesses_v2",
+	"nvmlDeviceGetGraphicsRunningProcesses_v3",
 	"nvmlDeviceRegisterEvents",
 	"nvmlGpmQueryDeviceSupport",
 }

@@ -86,11 +86,12 @@ The activity metrics have a few details worth knowing:
   MIG uuids are deterministic. So the one window spanning such a swap may
   blend the two instances before self-correcting.
 
-With `--collect.compute-apps-mig` (requires `--collect.compute-apps` and the
-NVML backend) the per-process metrics additionally carry `gpu_instance_id`
-and `compute_instance_id` labels, attributing each process to its MIG
-instance (empty for processes on non-MIG GPUs). It is opt-in because it
-changes the label set of the per-process series.
+With `--collect.compute-apps-mig` (requires `--collect.compute-apps` or
+`--collect.graphics-apps`, and the NVML backend) the per-process metrics
+additionally carry `gpu_instance_id` and `compute_instance_id` labels,
+attributing each process to its MIG instance (empty for processes on non-MIG
+GPUs). It is opt-in because it changes the label set of the per-process
+series.
 
 Container note: full function, the per-process metrics under MIG included,
 needs a privileged container with `NVIDIA_MIG_MONITOR_DEVICES=all` and the
@@ -269,3 +270,10 @@ nvidia_smi_compute_apps{uuid="00000000-0000-0000-0000-000000000000"} 2
 # TYPE nvidia_smi_compute_apps_last_collect_success gauge
 nvidia_smi_compute_apps_last_collect_success 1
 ```
+
+On the NVML and demo backends, `--collect.graphics-apps` emits the same four
+series for processes holding a graphics context on a GPU
+(`nvidia_smi_graphics_app_info`, `nvidia_smi_graphics_app_used_memory_bytes`,
+`nvidia_smi_graphics_apps`, and
+`nvidia_smi_graphics_apps_last_collect_success`). A process that holds both a
+compute and a graphics context appears in both families.
