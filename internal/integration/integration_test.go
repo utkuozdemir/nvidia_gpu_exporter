@@ -1134,11 +1134,16 @@ func TestDemoBackendInvalidConfigFailsStartup(t *testing.T) {
 func TestNVMLBackendStartupFailureWithoutDriver(t *testing.T) {
 	t.Parallel()
 
-	err := app.Run(t.Context(), []string{
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	err := app.Run(ctx, []string{
 		"--web.listen-address=127.0.0.1:0",
 		"--log.level=error",
 		"--collect.backend=nvml",
-	}, app.Options{})
+	}, app.Options{
+		OnListen: func(_ []net.Addr) { cancel() },
+	})
 	if err == nil {
 		t.Skip("a working NVML driver is present; the no-driver startup path does not apply here")
 	}

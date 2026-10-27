@@ -1,4 +1,4 @@
-//go:build linux && cgo
+//go:build (linux && cgo) || windows
 
 package nvmlnative
 
@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/NVIDIA/go-nvml/pkg/nvml"
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvmlnative/nvml"
 )
 
 // availability is an immutable snapshot of which driver-library exports were

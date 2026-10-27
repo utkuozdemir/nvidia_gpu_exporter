@@ -1,4 +1,4 @@
-//go:build linux && cgo
+//go:build (linux && cgo) || windows
 
 package nvmlnative
 
@@ -9,9 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/NVIDIA/go-nvml/pkg/nvml"
-
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/collect"
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvmlnative/nvml"
 )
 
 // The GPM metric ids this backend samples, from the NVML metric catalog.

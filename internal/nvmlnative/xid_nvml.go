@@ -1,4 +1,4 @@
-//go:build linux && cgo
+//go:build (linux && cgo) || windows
 
 package nvmlnative
 
@@ -8,10 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/NVIDIA/go-nvml/pkg/nvml"
-
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/collect"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvidiasmi"
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvmlnative/nvml"
 )
 
 // xidWaitTimeoutMs bounds each event wait, so the watcher regularly
@@ -125,11 +124,13 @@ func (b *Backend) RunXIDWatcher(ctx context.Context) error {
 	backoff := xidBackoffStart
 
 	for ctx.Err() == nil {
-		set, uuids, generation, ok := b.xidRegister(warnings)
+		set, uuids, generation, ok, recoverNeeded := b.xidRegister(warnings)
 		if !ok {
-			// registration failing usually means the driver generation is
-			// dead: recover it here rather than waiting for a scrape
-			b.tryRecover()
+			if recoverNeeded {
+				// registration failed because the driver generation is
+				// dead: recover it here rather than waiting for a scrape
+				b.tryRecover()
+			}
 
 			if !sleepContext(ctx, backoff) {
 				return nil
@@ -166,16 +167,16 @@ func (b *Backend) RunXIDWatcher(ctx context.Context) error {
 // xidRegister builds an event set and registers every device for XID
 // events, under the shared lifecycle barrier. It reports the set, the
 // registration-time uuid cache (a GPU may be unreadable by the time it
-// errors), the NVML generation the set belongs to, and whether anything was
-// registered at all.
+// errors), the NVML generation the set belongs to, whether anything was
+// registered at all, and whether failure requires a lifecycle recovery.
 //
 //nolint:cyclop,funlen,ireturn // one linear pass; the event set is go-nvml.s own interface type
-func (b *Backend) xidRegister(warnings *xidWatcherLog) (nvml.EventSet, map[nvml.Device]string, uint64, bool) {
+func (b *Backend) xidRegister(warnings *xidWatcherLog) (nvml.EventSet, map[nvml.Device]string, uint64, bool, bool) {
 	b.lifecycleMu.RLock()
 	defer b.lifecycleMu.RUnlock()
 
 	if !b.genLive.Load() {
-		return nil, nil, 0, false
+		return nil, nil, 0, false, true
 	}
 
 	generation := b.generation.Load()
@@ -186,7 +187,7 @@ func (b *Backend) xidRegister(warnings *xidWatcherLog) (nvml.EventSet, map[nvml.
 	if !b.avail.Load().hasAll(
 		"nvmlEventSetCreate", "nvmlEventSetFree", "nvmlDeviceRegisterEvents",
 	) {
-		return nil, nil, 0, false
+		return nil, nil, 0, false, false
 	}
 
 	set, ret := b.api.eventSetCreate()
@@ -198,30 +199,37 @@ func (b *Backend) xidRegister(warnings *xidWatcherLog) (nvml.EventSet, map[nvml.
 				"nvml_return", retString(ret))
 		}
 
-		return nil, nil, 0, false
+		return nil, nil, 0, false, isLifecycleError(ret)
 	}
 
 	count, ret := b.api.deviceCount()
 	if ret != nvml.SUCCESS {
 		_ = set.Free()
 
-		return nil, nil, 0, false
+		return nil, nil, 0, false, isLifecycleError(ret)
 	}
 
 	uuids := map[nvml.Device]string{}
+	lifecycleErr := false
 
 	for deviceIdx := range count {
 		dev, ret := b.device(deviceIdx)
 		if ret != nvml.SUCCESS {
+			lifecycleErr = lifecycleErr || isLifecycleError(ret)
+
 			continue
 		}
 
 		uuid, ret := dev.GetUUID()
 		if ret != nvml.SUCCESS {
+			lifecycleErr = lifecycleErr || isLifecycleError(ret)
+
 			continue
 		}
 
 		if ret := dev.RegisterEvents(nvml.EventTypeXidCriticalError, set); ret != nvml.SUCCESS {
+			lifecycleErr = lifecycleErr || isLifecycleError(ret)
+
 			if !warnings.registerWarned {
 				warnings.registerWarned = true
 
@@ -244,7 +252,7 @@ func (b *Backend) xidRegister(warnings *xidWatcherLog) (nvml.EventSet, map[nvml.
 			b.logger.Warn("registered no GPU for XID error events, the XID counters stay empty")
 		}
 
-		return nil, nil, 0, false
+		return nil, nil, 0, false, lifecycleErr
 	}
 
 	// the readiness signal: anything waiting to inject a test XID (the
@@ -252,7 +260,7 @@ func (b *Backend) xidRegister(warnings *xidWatcherLog) (nvml.EventSet, map[nvml.
 	// be replayed
 	b.logger.Info("watching for GPU XID error events", "gpus", len(uuids))
 
-	return set, uuids, generation, true
+	return set, uuids, generation, true, false
 }
 
 // xidWait drains the event set until the context ends, the NVML generation

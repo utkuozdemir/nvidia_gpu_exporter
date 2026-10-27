@@ -581,13 +581,14 @@ func driverMajor(driverVersion string) int {
 var deferredFields = map[nvidiasmi.QField]bool{
 	"kmd_version":           true,
 	"pcie.link.gen.hostmax": true,
+	"gpu_uptime":            true,
 }
 
 // deferredFieldPrefixes covers whole deferred families (vGPU capabilities,
 // Blackwell power smoothing, GB200 module power, fabric health...).
 var deferredFieldPrefixes = []string{
 	"vgpu_", "module.power.", "module.enforced.", "gpu.base.", "power_smoothing.",
-	"bbx.", "fabric.health.",
+	"bbx.", "fabric.health.", "remapped_banks.",
 }
 
 // IsDeferredField reports whether an unknown field is a recorded, conscious

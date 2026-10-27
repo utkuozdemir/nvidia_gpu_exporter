@@ -32,6 +32,12 @@ linters:
       - linters:
           - goconst
         path: (.+)_test\.go
+      # internal/nvmlnative/nvml mirrors the upstream github.com/NVIDIA/go-nvml/pkg/nvml
+      # API surface so the collector code is identical on Linux and Windows.
+      - linters:
+          - errname
+          - revive
+        path: ^internal/nvmlnative/nvml/
 formatters:
   enable:
     - gci

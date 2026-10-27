@@ -41,10 +41,11 @@ func TestLoadCorpus(t *testing.T) {
 					commandless++
 				case section.Label == "nvml-symbols":
 					// the driver library's symbol inventory is the one
-					// section produced by an ELF reader, not nvidia-smi
+					// section produced by a binary symbol reader, not nvidia-smi
 					assert.True(t, strings.HasPrefix(section.Command, "readelf") ||
-						strings.HasPrefix(section.Command, "nm"),
-						"nvml-symbols command %q is not an ELF reader", section.Command)
+						strings.HasPrefix(section.Command, "nm") ||
+						strings.HasPrefix(section.Command, "powershell.exe"),
+						"nvml-symbols command %q is not a symbol reader", section.Command)
 				default:
 					assert.True(t, strings.HasPrefix(section.Command, "nvidia-smi"),
 						"command %q does not invoke nvidia-smi", section.Command)
