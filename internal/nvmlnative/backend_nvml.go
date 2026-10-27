@@ -1,4 +1,4 @@
-//go:build linux && cgo
+//go:build (linux && cgo) || windows
 
 package nvmlnative
 
@@ -14,10 +14,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/NVIDIA/go-nvml/pkg/nvml"
-
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/collect"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvidiasmi"
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvmlnative/nvml"
 )
 
 // Available reports whether this build carries the NVML backend.
@@ -58,7 +57,7 @@ func realNVML() nvmlAPI {
 		init:          nvml.Init,
 		shutdown:      nvml.Shutdown,
 		deviceCount:   nvml.DeviceGetCount,
-		deviceByIndex: func(i int) (nvml.Device, nvml.Return) { return nvml.DeviceGetHandleByIndex(i) },
+		deviceByIndex: nvml.DeviceGetHandleByIndex,
 		driverVersion: nvml.SystemGetDriverVersion,
 		// deliberately the unversioned entry point: the _v2 variant asks
 		// libcuda and fails without it, while this one falls back to the

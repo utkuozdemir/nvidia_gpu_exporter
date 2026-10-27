@@ -16,31 +16,45 @@ import (
 
 // TestSymbolInventoriesCoverRequirements checks the requirement manifest
 // against every capture carrying an nvml-symbols section. The newest such
-// capture fails hard on a missing symbol (the driver dropped or renamed an
-// entry point this backend calls); older ones report, since old drivers
-// legitimately predate newer APIs.
+// capture on each OS fails hard on a missing symbol (the driver dropped or
+// renamed an entry point this backend calls), and older ones report, since old
+// drivers legitimately predate newer APIs.
 func TestSymbolInventoriesCoverRequirements(t *testing.T) {
 	t.Parallel()
 
-	names := linuxCaptureNames(t)
+	var withInventory, newestCaptures []string
 
-	var withInventory []string
-
+	isNewest := map[string]bool{}
 	inventories := map[string]map[string]bool{}
 
-	for _, name := range names {
-		symbols := captureSymbolInventory(t, name)
-		if symbols != nil {
-			withInventory = append(withInventory, name)
-			inventories[name] = symbols
+	for _, prefix := range []string{"linux-", "windows-"} {
+		var osWithInventory []string
+
+		for _, name := range captureNamesWithPrefix(t, prefix) {
+			symbols := captureSymbolInventory(t, name)
+			if symbols != nil {
+				withInventory = append(withInventory, name)
+				osWithInventory = append(osWithInventory, name)
+				inventories[name] = symbols
+			}
+		}
+
+		require.NotEmpty(t, osWithInventory,
+			"no %s capture carries an nvml-symbols section, so the symbol drift check is inert", prefix)
+
+		maxVersion := maxDriverVersion(t, osWithInventory)
+
+		for _, name := range osWithInventory {
+			version := versionComponents(t, driverVersionFromCaptureName(t, name))
+			if !versionLess(version, maxVersion) {
+				isNewest[name] = true
+
+				newestCaptures = append(newestCaptures, name)
+			}
 		}
 	}
 
-	require.NotEmpty(t, withInventory,
-		"no capture carries an nvml-symbols section; the symbol drift check is inert")
-
-	newest := newestByDriverVersion(t, withInventory)
-	t.Logf("captures with a symbol inventory: %v (hard assertions: %s)", withInventory, newest)
+	t.Logf("captures with a symbol inventory: %v (hard assertions: %v)", withInventory, newestCaptures)
 
 	for _, name := range withInventory {
 		symbols := inventories[name]
@@ -53,10 +67,10 @@ func TestSymbolInventoriesCoverRequirements(t *testing.T) {
 			message := "driver library lacks a required NVML entry point\n" +
 				"  capture: %s\n  call site: %s (serves: %s)\n  accepted symbols: %v\n" +
 				"  fix: if the driver renamed it, add the new spelling to nvmlSymbolRequirements in " +
-				"internal/nvmlnative/symbols.go and wire it in backend_nvml.go; " +
-				"if it was removed, the affected fields need a new source or a recorded deferral"
+				"internal/nvmlnative/symbols.go and wire it in backend_nvml.go, " +
+				"or if it was removed, the affected fields need a new source or a recorded deferral"
 
-			if name == newest {
+			if isNewest[name] {
 				t.Errorf(message, name, requirement.goCall, requirement.serves, requirement.anyOf)
 			} else {
 				t.Logf("(older driver) "+message, name, requirement.goCall, requirement.serves, requirement.anyOf)

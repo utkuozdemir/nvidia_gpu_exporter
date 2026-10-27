@@ -1,4 +1,4 @@
-//go:build !(linux && cgo)
+//go:build !(linux && cgo) && !windows
 
 package nvmlnative
 
@@ -15,10 +15,9 @@ import (
 const Available = false
 
 // ErrUnavailable is returned by New in builds without the NVML backend: the
-// backend needs Linux and cgo, and only the dedicated release artifacts
-// carry it.
+// backend needs Windows, or Linux with cgo enabled.
 var ErrUnavailable = errors.New(
-	"the nvml backend is not available in this build: it requires Linux and a cgo-enabled binary " +
+	"the nvml backend is not available in this build: it requires Windows, or Linux with a cgo-enabled binary " +
 		"(use the nvml release artifact or build with CGO_ENABLED=1)")
 
 // Backend is the unavailable-build placeholder.

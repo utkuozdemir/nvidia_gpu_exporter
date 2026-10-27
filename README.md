@@ -77,18 +77,19 @@ probably the better fit. This exporter aims at the cases above.
 
 ## Try the native NVML backend
 
-On Linux, the exporter can skip `nvidia-smi` and read the metrics directly
-from the NVIDIA driver library (NVML). Every metric the default backend
-serves stays identical in name, labels and value, so existing dashboards and
-alerts keep working.
+On Linux and Windows, the exporter can skip `nvidia-smi` and read the metrics
+directly from the NVIDIA driver library (NVML). Every metric the default
+backend serves stays identical in name, labels and value, so existing
+dashboards and alerts keep working.
 
 On top of that it adds families `nvidia-smi` cannot provide: per-MIG-instance
 metrics, XID error counters, a total energy counter and PCIe throughput. The
 official Grafana dashboards have panels for all of these. They sit empty on
 the default backend and fill up on this one.
 
-It ships as its own release flavor that already defaults to this backend:
-grab a `-nvml` archive from the
+On Windows, the regular binary includes this backend out of the box, enabled
+with `--collect.backend=nvml`. On Linux, it ships as its own release flavor
+that already defaults to this backend: grab a `-nvml` archive from the
 [releases page](https://github.com/utkuozdemir/nvidia_gpu_exporter/releases),
 or use a `-nvml` image tag:
 

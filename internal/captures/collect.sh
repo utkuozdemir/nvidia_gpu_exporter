@@ -296,39 +296,90 @@ section "capabilities :: nvlink -s" nvlink -s
 
 # Best-effort NVML symbol inventory: the exported function names of the
 # driver library, used by the exporter's driver-drift tests. Skipped with a
-# note when the library or an ELF reader is not available (the capture stays
+# note when the library or an ELF/PE reader is not available (the capture stays
 # useful without it).
 nvml_symbols_section() {
-  local lib=""
-  if command -v ldconfig > /dev/null 2>&1; then
-    lib="$(ldconfig -p 2> /dev/null | awk '/libnvidia-ml\.so\.1/{print $NF; exit}')"
-  fi
-  [ -z "$lib" ] && for candidate in \
-    "/usr/lib/${ARCH}-linux-gnu/libnvidia-ml.so.1" \
-    "/lib/${ARCH}-linux-gnu/libnvidia-ml.so.1" \
-    /usr/lib64/libnvidia-ml.so.1 \
-    /usr/lib/libnvidia-ml.so.1 \
-    /usr/local/lib/libnvidia-ml.so.1 \
-    /usr/local/glibc/usr/lib/libnvidia-ml.so.1; do
-    [ -e "$candidate" ] && lib="$candidate" && break
-  done
-  if [ -z "$lib" ]; then
-    echo "note: nvml-symbols skipped, libnvidia-ml.so.1 not found." >&2
-    return 0
-  fi
+  local lib="" symbols="" tool=""
+  if [ "$OS_KERNEL" = "windows" ]; then
+    for candidate in /c/Windows/System32/nvml.dll "${SYSTEMROOT:-C:/Windows}/System32/nvml.dll"; do
+      [ -e "$candidate" ] && lib="$candidate" && break
+    done
+    if [ -z "$lib" ]; then
+      echo "note: nvml-symbols skipped, nvml.dll not found." >&2
+      return 0
+    fi
 
-  local symbols="" tool=""
-  if command -v readelf > /dev/null 2>&1; then
-    tool="readelf"
-    symbols="$(readelf --dyn-syms --wide "$lib" 2> /dev/null |
-      awk '$4=="FUNC" && $7!="UND" {print $8}' | grep '^nvml' | sed 's/@@.*//' | sort -u)"
-  elif command -v nm > /dev/null 2>&1; then
-    tool="nm"
-    symbols="$(nm -D --defined-only "$lib" 2> /dev/null |
-      awk '$2=="T" {print $3}' | grep '^nvml' | sed 's/@@.*//' | sort -u)"
+    if command -v powershell.exe > /dev/null 2>&1; then
+      tool="powershell.exe"
+      # shellcheck disable=SC2016
+      symbols="$(powershell.exe -NoProfile -NonInteractive -Command '
+        $p = Join-Path $env:SystemRoot "System32\nvml.dll"
+        if (-not (Test-Path $p)) { exit 0 }
+        $b = [IO.File]::ReadAllBytes($p)
+        $pe = [BitConverter]::ToInt32($b, 0x3C)
+        $magic = [BitConverter]::ToUInt16($b, $pe + 24)
+        $dd = if ($magic -eq 0x20B) { $pe + 136 } else { $pe + 120 }
+        $expRva = [BitConverter]::ToInt32($b, $dd)
+        if ($expRva -eq 0) { exit 0 }
+        $nSec = [BitConverter]::ToUInt16($b, $pe + 6)
+        $secOff = $pe + 24 + [BitConverter]::ToUInt16($b, $pe + 20)
+        function r2o([int]$rva) {
+          for ($i = 0; $i -lt $nSec; $i++) {
+            $s = $secOff + 40 * $i
+            $vs = [BitConverter]::ToInt32($b, $s + 8)
+            $va = [BitConverter]::ToInt32($b, $s + 12)
+            $rs = [BitConverter]::ToInt32($b, $s + 16)
+            $ptr = [BitConverter]::ToInt32($b, $s + 20)
+            if ($rva -ge $va -and $rva -lt ($va + [Math]::Max($vs, $rs))) {
+              return $ptr + ($rva - $va)
+            }
+          }
+          return 0
+        }
+        $exp = r2o $expRva
+        $nNames = [BitConverter]::ToInt32($b, $exp + 24)
+        $namesOff = r2o ([BitConverter]::ToInt32($b, $exp + 32))
+        for ($i = 0; $i -lt $nNames; $i++) {
+          $sOff = r2o ([BitConverter]::ToInt32($b, $namesOff + 4 * $i))
+          $end = $sOff
+          while ($b[$end] -ne 0) { $end++ }
+          [Text.Encoding]::ASCII.GetString($b, $sOff, $end - $sOff)
+        }
+      ' 2> /dev/null | tr -d '\r' | grep '^nvml' | sort -u)"
+    else
+      echo "note: nvml-symbols skipped, powershell.exe not found." >&2
+      return 0
+    fi
   else
-    echo "note: nvml-symbols skipped, neither readelf nor nm found (install binutils to include it)." >&2
-    return 0
+    if command -v ldconfig > /dev/null 2>&1; then
+      lib="$(ldconfig -p 2> /dev/null | awk '/libnvidia-ml\.so\.1/{print $NF; exit}')"
+    fi
+    [ -z "$lib" ] && for candidate in \
+      "/usr/lib/${ARCH}-linux-gnu/libnvidia-ml.so.1" \
+      "/lib/${ARCH}-linux-gnu/libnvidia-ml.so.1" \
+      /usr/lib64/libnvidia-ml.so.1 \
+      /usr/lib/libnvidia-ml.so.1 \
+      /usr/local/lib/libnvidia-ml.so.1 \
+      /usr/local/glibc/usr/lib/libnvidia-ml.so.1; do
+      [ -e "$candidate" ] && lib="$candidate" && break
+    done
+    if [ -z "$lib" ]; then
+      echo "note: nvml-symbols skipped, libnvidia-ml.so.1 not found." >&2
+      return 0
+    fi
+
+    if command -v readelf > /dev/null 2>&1; then
+      tool="readelf"
+      symbols="$(readelf --dyn-syms --wide "$lib" 2> /dev/null |
+        awk '$4=="FUNC" && $7!="UND" {print $8}' | grep '^nvml' | sed 's/@@.*//' | sort -u)"
+    elif command -v nm > /dev/null 2>&1; then
+      tool="nm"
+      symbols="$(nm -D --defined-only "$lib" 2> /dev/null |
+        awk '$2=="T" {print $3}' | grep '^nvml' | sed 's/@@.*//' | sort -u)"
+    else
+      echo "note: nvml-symbols skipped, neither readelf nor nm found (install binutils to include it)." >&2
+      return 0
+    fi
   fi
   [ -z "$symbols" ] && return 0
 

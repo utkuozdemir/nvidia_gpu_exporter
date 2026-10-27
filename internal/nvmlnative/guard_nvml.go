@@ -1,8 +1,8 @@
-//go:build linux && cgo
+//go:build (linux && cgo) || windows
 
 package nvmlnative
 
-import "github.com/NVIDIA/go-nvml/pkg/nvml"
+import "github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvmlnative/nvml"
 
 // device is the narrow NVML surface this package uses. Collector code depends
 // on this interface and never on nvml.Device directly, so that every entry

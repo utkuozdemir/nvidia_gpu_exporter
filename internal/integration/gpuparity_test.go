@@ -1,10 +1,11 @@
-//go:build gpu && linux && cgo
+//go:build gpu && ((linux && cgo) || windows)
 
 package integration_test
 
 import (
 	"context"
 	"regexp"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -416,6 +417,19 @@ func TestBackendMetricFamilyParityOnRealGPU(t *testing.T) {
 		}
 	}
 
+	// the opt-in per-process families are exercised under their flags
+	appFamilies := scrapeBackend(t, "nvml", "--collect.compute-apps", "--collect.graphics-apps")
+	for _, family := range []string{
+		"nvidia_smi_compute_apps",
+		"nvidia_smi_compute_apps_last_collect_success",
+		"nvidia_smi_graphics_apps",
+		"nvidia_smi_graphics_apps_last_collect_success",
+	} {
+		if _, ok := appFamilies[family]; !ok {
+			t.Errorf("metric family missing with --collect.compute-apps --collect.graphics-apps: %s", family)
+		}
+	}
+
 	// families the exec backend serves but the nvml backend reports deprecated
 	// below the deprecation driver generation: the same accepted split the
 	// field-level parity test exempts, see IsExecOnlyDeprecatedField.
@@ -550,6 +564,14 @@ var nvmlOnlyFamilyPrefixes = []string{
 }
 
 func isNVMLOnlyFamily(family string) bool {
+	if runtime.GOOS == "windows" &&
+		(family == "nvidia_smi_pci_base_class" || family == "nvidia_smi_pci_sub_class") {
+		// Windows nvidia-smi omits pci.baseClass and pci.subClass from
+		// --help-query-gpu, while nvmlDeviceGetPciInfoExt in nvml.dll serves
+		// both.
+		return true
+	}
+
 	for _, prefix := range nvmlOnlyFamilyPrefixes {
 		if strings.HasPrefix(family, prefix) {
 			return true

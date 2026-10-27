@@ -84,13 +84,16 @@ Flags:
                                 unsupported on a given setup.
       --collect.backend=exec    How to collect GPU metrics. `exec` runs
                                 nvidia-smi (the default), `nvml` reads the
-                                driver library (libnvidia-ml) directly without
-                                nvidia-smi. The nvml backend requires Linux and
-                                a build with the backend compiled in. It exposes
-                                the same core metrics as the exec backend, plus
-                                NVML-only extras (see the docs). `demo` serves
-                                synthetic data mimicking the nvml surface,
-                                with no GPU or driver needed, on any platform.
+                                driver library (libnvidia-ml on Linux, nvml.dll
+                                on Windows) directly without nvidia-smi.
+                                On Windows it is included in the standard build.
+                                On Linux it requires a build with the backend
+                                compiled in (the `-nvml` release artifact).
+                                It exposes the same core metrics as the exec
+                                backend, plus NVML-only extras (see the docs).
+                                `demo` serves synthetic data mimicking the
+                                nvml surface, with no GPU or driver needed,
+                                on any platform.
       --collect.interval=0      Interval at which the collection runs in the
                                 background, with scrapes serving the most
                                 recent result. When 0, the collection runs
@@ -381,7 +384,8 @@ Things to keep in mind:
 ## Native NVML backend
 
 `--collect.backend=nvml` reads GPU metrics directly from the driver library
-(`libnvidia-ml.so.1`) instead of running `nvidia-smi`.
+(`libnvidia-ml.so.1` on Linux, `nvml.dll` on Windows) instead of running
+`nvidia-smi`.
 
 For every query field both backends serve, the metric is identical in name,
 labels and value. This was checked field by field against live hardware. On
@@ -443,7 +447,11 @@ Advantages over the default backend:
     so that a broken container device mount cannot look like a healthy
     idle scrape.
 
-The `-nvml` release archives and image tags (e.g.,
+On Windows, the regular `nvidia_gpu_exporter.exe` binary carries this backend
+out of the box and loads `nvml.dll` from `System32` when `--collect.backend=nvml`
+is passed.
+
+On Linux, the `-nvml` release archives and image tags (e.g.,
 `utkuozdemir/nvidia_gpu_exporter:latest-nvml`) carry this backend and
 default to it, so they need no flag at all. `--collect.backend=exec`
 switches them back.
@@ -455,9 +463,15 @@ explicitly. For example:
 
 Limits:
 
-- Linux only (x86_64 and arm64), on glibc-based systems (the binary is built
-  with cgo), and only in the dedicated `-nvml` release archives and image tags.
-  The regular binaries stay fully static and answer this flag with an error.
+- Supported on Windows (`x86_64`, included in the standard build, loading
+  `nvml.dll` from `System32`, so pre-DCH drivers that keep `nvml.dll` only
+  under `C:\Program Files\NVIDIA Corporation\NVSMI\` need the default
+  backend) and on Linux (`x86_64` and `arm64`, on glibc-based systems in the
+  dedicated `-nvml` release archives and image tags). The regular Linux and
+  macOS binaries stay fully static and answer this flag with an error.
+- On Windows under the WDDM driver model, NVML event registration returns
+  `ERROR_NOT_SUPPORTED`, so the XID error counters stay empty (the exporter
+  logs a warning at startup and serves every other family normally).
 - The queryable fields are a built-in catalog. A field a future driver adds
   shows up in the default backend first. Explicit `--query-field-names`
   lists work the same in both backends and fail loudly on unknown fields.

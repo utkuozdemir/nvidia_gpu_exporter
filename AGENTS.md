@@ -43,8 +43,9 @@ It runs `nvidia-smi` as a subprocess and parses the CSV.
 It is the only backend that can honor a custom command, which is what makes remote scraping over ssh and privilege wrappers like `sudo` work.
 It is also the strongest isolation against a misbehaving driver, because a wedged subprocess can be killed and an in-process driver call cannot.
 
-`nvml` reads the driver library directly through go-nvml.
-It requires cgo and Linux, so it exists only as a separate release flavor whose default backend is flipped at link time.
+`nvml` reads the driver library directly (`libnvidia-ml.so.1` through go-nvml on Linux, `nvml.dll` through pure-Go lazy DLL calls on Windows).
+On Windows it needs no cgo and ships inside the regular static binary.
+On Linux it requires cgo, so it exists as a separate release flavor whose default backend is flipped at link time.
 On top of the query-field metrics it shares with the exec backend, it serves families only the driver library can provide.
 Its query-field vocabulary is a compiled catalog, not runtime discovery, so it is not automatically a superset of what exec can reach.
 The catalog explicitly defers fields it has no verified mapping for, and a field a new driver adds appears under exec's discovery first.
@@ -84,8 +85,8 @@ A user passing a custom command with the nvml backend means something the backen
 - `internal/exporter`: turns a snapshot into Prometheus metrics.
   Conditionally-described families follow one precedent: a disabled feature contributes no descriptors at all, so `Describe` and `Collect` stay consistent.
 - `internal/nvidiasmi`: the exec backend: command splitting, field resolution, CSV parsing, value transformation, per-process queries.
-- `internal/nvmlnative`: the nvml backend, guarded by `linux && cgo` build tags with an unavailable stub for every other target.
-  Holds the field catalog, the MIG and XID paths, and the drift tests.
+- `internal/nvmlnative`: the nvml backend, guarded by `(linux && cgo) || windows` build tags with an unavailable stub for every other target.
+  Holds the field catalog, the MIG and XID paths, the drift tests, and `internal/nvmlnative/nvml`, which compartmentalizes the OS-specific driver binding (`go-nvml` on Linux, `nvml.dll` on Windows).
 - `internal/demo`: the demo backend's configuration and its synthesizers for the NVML-only families.
 - `internal/fakesmi`: the fake `nvidia-smi` implementation, shared by the standalone binary and the demo backend.
 - `internal/captures` and `internal/capture`: the recorded corpus and its parser.

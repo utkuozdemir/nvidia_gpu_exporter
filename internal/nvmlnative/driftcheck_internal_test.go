@@ -17,27 +17,41 @@ import (
 )
 
 // TestCatalogDriftAgainstCaptures checks the catalog against every embedded
-// Linux capture, so a newly contributed capture immediately reveals driver
-// drift. The newest capture (by driver version) carries the hard assertions:
-// a rename, removal, header change, deprecation change, or a new field with
-// real values fails the build with a message saying what to fix. Older
-// captures only verify the headers they share with the catalog and report
-// the rest, since old drivers legitimately lack newer fields.
+// Linux and Windows capture, so a newly contributed capture immediately
+// reveals driver drift. The newest capture on each OS (by driver version)
+// carries the hard assertions: a rename, removal, header change, deprecation
+// change, or a new field with real values fails the build with a message
+// saying what to fix. Older captures only verify the headers they share with
+// the catalog and report the rest, since old drivers legitimately lack newer
+// fields.
 func TestCatalogDriftAgainstCaptures(t *testing.T) {
 	t.Parallel()
 
-	names := linuxCaptureNames(t)
-	require.NotEmpty(t, names)
+	linuxNames := captureNamesWithPrefix(t, "linux-")
+	require.NotEmpty(t, linuxNames)
 
-	maxVersion := maxDriverVersion(t, names)
-	t.Logf("newest driver (hard assertions): %v", maxVersion)
+	windowsNames := captureNamesWithPrefix(t, "windows-")
+	require.NotEmpty(t, windowsNames)
+
+	maxLinuxVersion := maxDriverVersion(t, linuxNames)
+	maxWindowsVersion := maxDriverVersion(t, windowsNames)
+	t.Logf("newest drivers (hard assertions): linux=%v windows=%v", maxLinuxVersion, maxWindowsVersion)
 
 	aliasExercised := false
+
+	names := make([]string, 0, len(linuxNames)+len(windowsNames))
+	names = append(names, linuxNames...)
+	names = append(names, windowsNames...)
 
 	for _, name := range names {
 		version := versionComponents(t, driverVersionFromCaptureName(t, name))
 		if version[0] < eventReasonsMinDriverMajor {
 			aliasExercised = true
+		}
+
+		maxVersion := maxLinuxVersion
+		if strings.HasPrefix(name, "windows-") {
+			maxVersion = maxWindowsVersion
 		}
 
 		isNewest := !versionLess(version, maxVersion)
@@ -113,20 +127,7 @@ func checkCaptureDrift(t *testing.T, name string, isNewest bool) {
 	// rule 3: on the newest capture, every catalog field must still exist in
 	// the driver's vocabulary; a silent disappearance is a rename or removal
 	if isNewest {
-		advertised := make(map[nvidiasmi.QField]bool, len(query.qFields))
-		for _, advertisedField := range query.qFields {
-			advertised[advertisedField] = true
-		}
-
-		for catalogField := range vocabulary {
-			if !advertised[catalogField] {
-				t.Errorf("catalog field missing from the newest driver (rename or removal?)\n"+
-					"  capture: %s\n  field:   %s\n"+
-					"  fix: if renamed, add an alias in internal/nvmlnative/catalog.go (throttleAliases pattern); "+
-					"if removed, drop it from the catalog",
-					name, catalogField)
-			}
-		}
+		checkCatalogFieldsPresent(t, name, vocabulary, query.qFields)
 	}
 
 	// rule 4: unknown fields. On the newest capture a field with a real
@@ -189,6 +190,42 @@ func resolveVocabularyFor(t *testing.T, driverVersion string) map[nvidiasmi.QFie
 	require.NoError(t, err)
 
 	return resolved.Returned
+}
+
+func checkCatalogFieldsPresent(
+	t *testing.T,
+	name string,
+	vocabulary map[nvidiasmi.QField]nvidiasmi.RField,
+	qFields []nvidiasmi.QField,
+) {
+	t.Helper()
+
+	advertised := make(map[nvidiasmi.QField]bool, len(qFields))
+	for _, advertisedField := range qFields {
+		advertised[advertisedField] = true
+	}
+
+	for catalogField := range vocabulary {
+		if isWindowsNVMLOnlyField(name, catalogField) {
+			continue
+		}
+
+		if !advertised[catalogField] {
+			t.Errorf("catalog field missing from the newest driver (rename or removal?)\n"+
+				"  capture: %s\n  field:   %s\n"+
+				"  fix: if renamed, add an alias in internal/nvmlnative/catalog.go (throttleAliases pattern), "+
+				"or if removed, drop it from the catalog",
+				name, catalogField)
+		}
+	}
+}
+
+func isWindowsNVMLOnlyField(captureName string, field nvidiasmi.QField) bool {
+	// Windows nvidia-smi omits pci.baseClass and pci.subClass from
+	// --help-query-gpu even though nvml.dll serves them via
+	// nvmlDeviceGetPciInfoExt.
+	return strings.HasPrefix(captureName, "windows-") &&
+		(field == "pci.baseClass" || field == "pci.subClass")
 }
 
 func isHardcodedDeprecated(q nvidiasmi.QField) bool {
@@ -293,7 +330,7 @@ func parseCaptureQuery(t *testing.T, name string) captureQuery {
 	}
 }
 
-func linuxCaptureNames(t *testing.T) []string {
+func captureNamesWithPrefix(t *testing.T, prefix string) []string {
 	t.Helper()
 
 	entries, err := captures.FS.ReadDir(".")
@@ -302,7 +339,7 @@ func linuxCaptureNames(t *testing.T) []string {
 	var names []string
 
 	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), "linux-") && strings.HasSuffix(entry.Name(), ".txt") {
+		if strings.HasPrefix(entry.Name(), prefix) && strings.HasSuffix(entry.Name(), ".txt") {
 			names = append(names, entry.Name())
 		}
 	}

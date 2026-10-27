@@ -171,10 +171,14 @@ func TestXIDWatcherUnsupportedIdles(t *testing.T) {
 	cancel, wg := startWatcher(t, backend)
 
 	require.Eventually(t, func() bool {
-		return xid.creates.Load() >= 1
+		return xid.creates.Load() >= 2
 	}, 5*time.Second, 5*time.Millisecond)
 
 	assert.Empty(t, backend.XIDCounts())
+	assert.Equal(t, int64(1), fake.inits.Load(),
+		"unsupported event registration is not a lifecycle failure and must not re-initialize NVML")
+	assert.Equal(t, int64(0), fake.shutdowns.Load(),
+		"unsupported event registration must not tear down a healthy NVML generation")
 
 	cancel()
 	wg.Wait()

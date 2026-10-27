@@ -20,8 +20,9 @@ The exporter needs the NVIDIA driver on the machine it monitors, and it needs
 to be able to run `nvidia-smi`. If `nvidia-smi` prints your GPUs, the
 exporter will work.
 
-The exception is the `-nvml` flavor. It reads the driver library directly and
-needs no `nvidia-smi`. It exists for Linux (x86_64 and arm64), as a separate
+The exception is the native NVML backend (`--collect.backend=nvml`). It reads
+the driver library directly and needs no `nvidia-smi`. On Windows it is built
+into the regular binary. On Linux (x86_64 and arm64) it ships as a separate
 archive and as `-nvml` image tags. See [CONFIGURE.md](CONFIGURE.md#native-nvml-backend)
 for what it can and cannot do.
 
