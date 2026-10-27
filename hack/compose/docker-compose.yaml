@@ -117,7 +117,7 @@ services:
       - ./alertmanager:/etc/alertmanager:ro
 
   grafana:
-    image: grafana/grafana:13.2.4
+    image: grafana/grafana:13.3.0
     ports:
       - "3000:3000"
     environment:
