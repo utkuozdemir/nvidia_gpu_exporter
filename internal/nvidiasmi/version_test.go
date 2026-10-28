@@ -88,6 +88,28 @@ func TestQueryCudaVersion(t *testing.T) {
 	assert.Equal(t, "13.1", got)
 }
 
+func TestQueryCudaVersionFallsBackToDetailQuery(t *testing.T) {
+	t.Parallel()
+
+	var calls [][]string
+
+	run := func(cmd *exec.Cmd) error {
+		calls = append(calls, cmd.Args[1:])
+
+		if len(cmd.Args) > 1 && cmd.Args[1] == "--version" {
+			return exec.CommandContext(t.Context(), "sh", "-c", "exit 255").Run()
+		}
+
+		_, err := cmd.Stdout.Write([]byte("Driver Version : 535.230.02\nCUDA Version : 12.2\n"))
+
+		return err //nolint:wrapcheck // test stub
+	}
+
+	got := nvidiasmi.QueryCudaVersion(t.Context(), "nvidia-smi", time.Second, run, slogt.New(t))
+	assert.Equal(t, "12.2", got)
+	assert.Equal(t, [][]string{{"--version"}, {"-q"}}, calls)
+}
+
 func TestQueryCudaVersionCommandFailure(t *testing.T) {
 	t.Parallel()
 

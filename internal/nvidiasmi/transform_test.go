@@ -86,7 +86,7 @@ func TestTransformFieldValueEnumFields(t *testing.T) {
 func TestTransformFieldValueEnumDrops(t *testing.T) {
 	t.Parallel()
 
-	absent := []string{"", "N/A", "[N/A]", "[Not Supported]", "[Insufficient Permissions]"}
+	absent := []string{"", "N/A", "[N/A]", "[Not Supported]", "[Insufficient Permissions]", "state  N/A"}
 	unexpected := []string{"[Unknown Error]", "definitely-not-a-value", "Power Cycle"}
 
 	for _, field := range []nvidiasmi.QField{"gpu_recovery_action", "fabric.state"} {

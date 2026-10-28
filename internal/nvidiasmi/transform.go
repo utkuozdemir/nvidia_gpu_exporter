@@ -24,9 +24,11 @@ var ErrAbsentValue = errors.New("value is an expected-absent token")
 // enumFieldAbsentTokens are the values that mean "this field exists but is not
 // available here". This is IsKnownAbsentValue minus "[unknown error]": for a
 // health field an unknown error is a retrieval failure worth surfacing, not a
-// clean unsupported state.
+// clean unsupported state. Drivers 525 through 570 print "state  N/A" for
+// fabric.state on GPUs without NVLink fabric.
 var enumFieldAbsentTokens = map[string]struct{}{
 	"": {}, "n/a": {}, "[n/a]": {}, "[not supported]": {}, "[insufficient permissions]": {},
+	"state  n/a": {},
 }
 
 // fieldValueMappers maps a query field whose value is an NVML enum string to a

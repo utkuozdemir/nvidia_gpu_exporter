@@ -112,14 +112,16 @@ func TestResolveFieldsExplicitUnknownFieldStillFails(t *testing.T) {
 }
 
 // TestResolveFieldsAutoNormalizesDiscoveredList covers a --help-query-gpu
-// output that lists a field twice and omits the identity fields. The query
-// assigns cells positionally, so a duplicate would be queried twice and emit
-// two samples for one series, failing the whole scrape, and a missing identity
-// field would leave the gpu_info label it claims with nothing behind it.
+// output that lists a field twice and omits an identity field (such as
+// compute_cap on driver 470). The query assigns cells positionally, so a
+// duplicate would be queried twice and emit two samples for one series,
+// failing the whole scrape, while an unadvertised identity field must not be
+// appended to a discovered list because nvidia-smi rejects queries containing
+// fields the driver does not know.
 func TestResolveFieldsAutoNormalizesDiscoveredList(t *testing.T) {
 	t.Parallel()
 
-	helpText := "List of valid properties:\n\n\"name\"\n\n\"name\"\n\n\"temperature.gpu\"\n"
+	helpText := "List of valid properties:\n\n\"uuid\"\n\n\"name\"\n\n\"name\"\n\n\"temperature.gpu\"\n"
 
 	run := func(cmd *exec.Cmd) error {
 		if slices.Contains(cmd.Args, "--help-query-gpu") {
@@ -154,17 +156,7 @@ func TestResolveFieldsAutoNormalizesDiscoveredList(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	seen := map[nvidiasmi.QField]int{}
-	for _, qField := range resolved.Query {
-		seen[qField]++
-	}
-
-	for qField, count := range seen {
-		assert.Equalf(t, 1, count, "query field %q appears %d times", qField, count)
-	}
-
-	for _, infoField := range resolved.Info {
-		assert.Containsf(t, resolved.Query, infoField.QField,
-			"identity field %q is claimed by gpu_info but never queried", infoField.QField)
-	}
+	assert.Equal(t, []nvidiasmi.QField{"uuid", "name", "temperature.gpu"}, resolved.Query)
+	assert.NotContains(t, resolved.Query, nvidiasmi.QField("compute_cap"),
+		"auto mode must not append identity fields that --help-query-gpu did not advertise")
 }

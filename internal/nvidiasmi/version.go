@@ -14,7 +14,8 @@ import (
 // that does not look like a version number must be ignored, not exported.
 var cudaVersionValue = regexp.MustCompile(`^[0-9]+\.[0-9]+$`)
 
-// QueryCudaVersion runs `nvidia-smi --version` once and extracts the CUDA
+// QueryCudaVersion runs `nvidia-smi --version` once (falling back to `-q` on
+// pre-550 drivers that do not recognize `--version`) and extracts the CUDA
 // version the driver supports. It is best-effort: any failure returns the
 // empty string (logged once), which renders as an empty cuda_version label.
 // It runs at startup only, never per scrape.
@@ -25,14 +26,18 @@ func QueryCudaVersion(
 	run RunFunc,
 	logger *slog.Logger,
 ) string {
-	if timeout > 0 {
-		var cancel context.CancelFunc
-
-		ctx, cancel = context.WithTimeout(ctx, timeout)
+	runQuery := func(arg string) (string, int, error) {
+		callCtx, cancel := withOptionalTimeout(ctx, timeout)
 		defer cancel()
+
+		return execQuery(callCtx, command, run, arg)
 	}
 
-	stdout, _, err := execQuery(ctx, command, run, "--version")
+	stdout, code, err := runQuery("--version")
+	if err != nil && code > 0 {
+		stdout, _, err = runQuery("-q")
+	}
+
 	if err != nil {
 		logger.Warn("failed to read the CUDA version from nvidia-smi, "+
 			"the cuda_version label stays empty", "err", err)
@@ -42,7 +47,7 @@ func QueryCudaVersion(
 
 	version := ParseCudaVersion(stdout)
 	if version == "" {
-		logger.Warn("no CUDA version found in the nvidia-smi --version output, " +
+		logger.Warn("no CUDA version found in the nvidia-smi output, " +
 			"the cuda_version label stays empty")
 	}
 
