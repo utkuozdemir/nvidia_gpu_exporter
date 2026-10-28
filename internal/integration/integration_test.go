@@ -260,6 +260,9 @@ func TestExpectedMetrics(t *testing.T) {
 				"--collect.compute-apps")
 
 			got := filterDeterministic(scrape(t, baseURL))
+			require.Contains(t, got, "nvidia_smi_last_collect_success 1",
+				"a corpus capture must never produce a failed scrape")
+
 			expectedPath := filepath.Join("testdata", testCase.expectedFile)
 
 			if *update {

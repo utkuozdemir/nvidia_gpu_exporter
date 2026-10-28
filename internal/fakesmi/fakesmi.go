@@ -642,15 +642,46 @@ func answer(capt *capture.Capture, cfg *config, args []string, stdout, stderr io
 	}
 
 	if section := findVerbatim(capt, cfg.state, args); section != nil {
-		fmt.Fprintln(stdout, section.Body)
+		body, code := splitRecordedExitCode(section.Body)
+		if body != "" || code == 0 {
+			fmt.Fprintln(stdout, body)
+		}
 
-		return 0
+		return code
 	}
 
 	fmt.Fprintf(stderr, "fake-nvidia-smi: capture has no section recorded for %q in state %q\n",
 		strings.Join(args, " "), cfg.state)
 
 	return usageExitCode
+}
+
+// splitRecordedExitCode strips a trailing "# (exit code: N)" marker that
+// collect.sh appends when a recorded command exits non-zero, returning the
+// trimmed body and the recorded exit code (0 when no marker is present).
+func splitRecordedExitCode(body string) (string, int) {
+	const (
+		prefix = "# (exit code: "
+		suffix = ")"
+	)
+
+	lastLine := body
+	rest := ""
+
+	if before, after, ok := strings.CutLast(body, "\n"); ok {
+		rest = strings.TrimRight(before, "\n")
+		lastLine = after
+	}
+
+	if numStr, ok := strings.CutPrefix(lastLine, prefix); ok {
+		if numStr, ok = strings.CutSuffix(numStr, suffix); ok {
+			if code, err := strconv.Atoi(numStr); err == nil {
+				return rest, code
+			}
+		}
+	}
+
+	return body, 0
 }
 
 // answerQuery serves one of the two CSV queries by projecting the recorded

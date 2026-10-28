@@ -65,8 +65,9 @@ for each of the idle and load states: the default table, `-q`, the full
 `--query-gpu` CSV (exactly what the exporter parses), `--query-compute-apps`,
 `--query-accounted-apps`, `--query-retired-pages`, and `pmon` / `dmon`.
 
-A failing command (a feature your card doesn't support) is kept too. That it
-prints `[N/A]` or an error is itself useful data.
+A failing command (a feature your card doesn't support) is kept too, with its
+non-zero status recorded on a trailing `# (exit code: N)` line that the fake
+replays verbatim. That it prints `[N/A]` or an error is itself useful data.
 
 ## Privacy / masking
 

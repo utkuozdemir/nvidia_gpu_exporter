@@ -124,7 +124,7 @@ EOF
   exit 1
 fi
 
-if ! nv --version > /dev/null 2>&1; then
+if ! nv -L > /dev/null 2>&1; then
   cat >&2 << EOF
 
 error: could not run '$NVSMI'.
@@ -308,7 +308,8 @@ nvml_symbols_section() {
     "/lib/${ARCH}-linux-gnu/libnvidia-ml.so.1" \
     /usr/lib64/libnvidia-ml.so.1 \
     /usr/lib/libnvidia-ml.so.1 \
-    /usr/local/lib/libnvidia-ml.so.1; do
+    /usr/local/lib/libnvidia-ml.so.1 \
+    /usr/local/glibc/usr/lib/libnvidia-ml.so.1; do
     [ -e "$candidate" ] && lib="$candidate" && break
   done
   if [ -z "$lib" ]; then
