@@ -295,19 +295,26 @@ section "capabilities :: topo -m" topo -m
 section "capabilities :: nvlink -s" nvlink -s
 
 # Best-effort NVML symbol inventory: the exported function names of the
-# driver library, used by the exporter's driver-drift tests. Skipped quietly
-# when the library or an ELF reader is not available (the capture stays
+# driver library, used by the exporter's driver-drift tests. Skipped with a
+# note when the library or an ELF reader is not available (the capture stays
 # useful without it).
 nvml_symbols_section() {
   local lib=""
   if command -v ldconfig > /dev/null 2>&1; then
     lib="$(ldconfig -p 2> /dev/null | awk '/libnvidia-ml\.so\.1/{print $NF; exit}')"
   fi
-  [ -z "$lib" ] && for candidate in /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1 \
-    /usr/lib64/libnvidia-ml.so.1 /lib/x86_64-linux-gnu/libnvidia-ml.so.1; do
+  [ -z "$lib" ] && for candidate in \
+    "/usr/lib/${ARCH}-linux-gnu/libnvidia-ml.so.1" \
+    "/lib/${ARCH}-linux-gnu/libnvidia-ml.so.1" \
+    /usr/lib64/libnvidia-ml.so.1 \
+    /usr/lib/libnvidia-ml.so.1 \
+    /usr/local/lib/libnvidia-ml.so.1; do
     [ -e "$candidate" ] && lib="$candidate" && break
   done
-  [ -z "$lib" ] && return 0
+  if [ -z "$lib" ]; then
+    echo "note: nvml-symbols skipped, libnvidia-ml.so.1 not found." >&2
+    return 0
+  fi
 
   local symbols="" tool=""
   if command -v readelf > /dev/null 2>&1; then
@@ -318,6 +325,9 @@ nvml_symbols_section() {
     tool="nm"
     symbols="$(nm -D --defined-only "$lib" 2> /dev/null |
       awk '$2=="T" {print $3}' | grep '^nvml' | sed 's/@@.*//' | sort -u)"
+  else
+    echo "note: nvml-symbols skipped, neither readelf nor nm found (install binutils to include it)." >&2
+    return 0
   fi
   [ -z "$symbols" ] && return 0
 
