@@ -75,12 +75,15 @@ func ResolveFields(
 			return builtinResolvedFields(qFieldsExcludeRaw, logger), nil
 		}
 
-		// The discovered list goes through the same normalization as an
-		// explicit one. A field listed twice would otherwise be queried twice
-		// and emit two samples for one series, failing the whole scrape, and a
-		// list missing an identity field would leave the gpu_info labels it
-		// claims empty.
-		qFields = withRequiredFields(parsed)
+		// Drop duplicates from the discovered list: the query assigns cells
+		// positionally, so a field listed twice would be queried twice and emit
+		// two samples for one series, failing the whole scrape. Unlike an
+		// explicit list, do not append infoFields here: older drivers may lack
+		// newer identity fields (such as compute_cap on driver 470), and
+		// querying an unadvertised field makes nvidia-smi reject the whole
+		// query. An unadvertised identity field simply leaves its gpu_info
+		// label empty.
+		qFields = removeDuplicates(parsed)
 	}
 
 	qFields = filterExcludedQFields(qFields, qFieldsExcludeRaw, logger)
@@ -226,10 +229,9 @@ func withOptionalTimeout(ctx context.Context, d time.Duration) (context.Context,
 }
 
 // withRequiredFields appends the identity fields backing the gpu_info metric
-// and drops duplicates, keeping first-seen order. Every field list, explicit or
-// discovered, passes through here: the query assigns cells positionally, so a
-// duplicate is two cells for one metric, and a missing identity field is a
-// gpu_info label with nothing behind it.
+// and drops duplicates, keeping first-seen order. Explicit user field lists
+// pass through here so gpu_info labels stay populated without the user having
+// to name every identity field.
 func withRequiredFields(qFields []QField) []QField {
 	for _, infoField := range infoFields {
 		qFields = append(qFields, infoField.QField)

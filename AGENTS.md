@@ -155,7 +155,7 @@ Some specifics that regularly surprise people:
   So a field whose returned name yields an empty name, or a name another field or one of the exporter's own families already owns, is dropped with a logged error instead.
   When several fields contend for one name, *all* of them are dropped: which field owns a derived name is not knowable here, and publishing one field's reading under a contested name would put a wrong value on an established series.
   The fixed family names live in one list in `internal/exporter`, pinned by a test against what the exporter actually describes, so a new family cannot be added without reserving its name.
-- Every field list, whether the user wrote it or auto-detection discovered it, is deduplicated and has the identity fields appended before it is queried.
+- Every field list, whether the user wrote it or auto-detection discovered it, is deduplicated before it is queried, and an explicit list also has the identity fields appended while a discovered list queries only what `--help-query-gpu` advertised so an older driver is never asked for a newer identity field it does not know.
   Cells are assigned to fields positionally, so a duplicate would be queried twice and emit two samples for one series, failing the whole scrape.
 
 `docs/METRICS.md` carries the reference and the per-family semantics; keep it in sync when the surface changes.
