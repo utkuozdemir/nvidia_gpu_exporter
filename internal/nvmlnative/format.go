@@ -14,6 +14,7 @@ import "fmt"
 const (
 	tokenNotAvailable            = "[N/A]"
 	tokenNoPermission            = "[Insufficient Permissions]"
+	tokenNotFound                = "[Not Found]"
 	tokenUnknownError            = "[Unknown Error]"
 	tokenFunctionNotFound        = "[Function Not Found]"
 	tokenDeprecated              = "[Requested functionality has been deprecated]"

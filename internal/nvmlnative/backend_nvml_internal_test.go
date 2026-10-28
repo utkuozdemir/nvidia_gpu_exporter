@@ -116,6 +116,9 @@ func TestCollectHappyPath(t *testing.T) {
 	t.Parallel()
 
 	dev := identityDevice()
+	dev.GetPciInfoExtFunc = func() (nvml.PciInfoExt, nvml.Return) {
+		return nvml.PciInfoExt{PciSubSystemId: 0x10DE}, nvml.SUCCESS
+	}
 	dev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 12340, nvml.SUCCESS }
 
 	fake := &fakeAPI{devices: []nvml.Device{dev}}
@@ -126,6 +129,7 @@ func TestCollectHappyPath(t *testing.T) {
 	assert.Equal(t, 0, code)
 	assert.Equal(t, "12.34 W", cellValue(t, reading.Table, "power.draw"))
 	assert.Equal(t, "NVIDIA H100 80GB HBM3", cellValue(t, reading.Table, "name"))
+	assert.Equal(t, "0x10DE", cellValue(t, reading.Table, "pci.sub_device_id"))
 	// the fan getter has no stub: reaching it would have panicked, so this
 	// test also proves unrequested getters are not called
 }
@@ -296,6 +300,30 @@ func TestComputeAppsHappyPath(t *testing.T) {
 	assert.Equal(t, "/usr/bin/burn", reading.Apps[0].ProcessName)
 	assert.Equal(t, "2048 MiB", reading.Apps[0].UsedMemory)
 	assert.Equal(t, "11111111-2222-3333-4444-555555555555", reading.Apps[0].GPUUUID)
+}
+
+func TestComputeAppsProcessNameNotFound(t *testing.T) {
+	t.Parallel()
+
+	dev := identityDevice()
+	dev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 100000, nvml.SUCCESS }
+	dev.GetComputeRunningProcessesFunc = func() ([]nvml.ProcessInfo, nvml.Return) {
+		return []nvml.ProcessInfo{{Pid: 12256, UsedGpuMemory: 24859 * 1024 * 1024}}, nvml.SUCCESS
+	}
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	api := fake.api()
+	api.processName = func(int) (string, nvml.Return) { return "", nvml.ERROR_NOT_FOUND }
+
+	backend, err := newWithAPI(api, slogt.New(t))
+	require.NoError(t, err)
+
+	reading, _, err := backend.QueryFunc(resolveFields(t, "power.draw"), CollectOptions{ComputeApps: true})(t.Context())
+	require.NoError(t, err)
+	require.Len(t, reading.Apps, 1)
+	assert.Equal(t, "12256", reading.Apps[0].PID)
+	assert.Equal(t, "[Not Found]", reading.Apps[0].ProcessName)
+	assert.Equal(t, "24859 MiB", reading.Apps[0].UsedMemory)
 }
 
 func TestGraphicsAppsHappyPath(t *testing.T) {
