@@ -292,6 +292,14 @@ func TestVerbatimSections(t *testing.T) {
 	code, stdoutLoad, _ := runFake(t, "--capture", path, "--state", "load", "-q")
 	require.Equal(t, 0, code)
 	assert.NotEqual(t, stdoutIdle, stdoutLoad)
+
+	// a verbatim section carrying a "# (exit code: N)" trailer replays that
+	// non-zero exit code and strips the marker line from stdout
+	oldDriverPath := filepath.Join(capturesDir, "linux-x86_64__nvidia-geforce-rtx-2080-super__535.230.02.txt")
+	code, stdout, _ = runFake(t, "--capture", oldDriverPath, "--version")
+	assert.Equal(t, 255, code)
+	assert.Contains(t, stdout, "Option --version is not recognized")
+	assert.NotContains(t, stdout, "exit code:")
 }
 
 // TestEmbeddedCaptures proves --capture resolves embedded capture names (the

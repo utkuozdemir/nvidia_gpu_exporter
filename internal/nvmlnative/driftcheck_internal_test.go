@@ -3,6 +3,7 @@ package nvmlnative
 import (
 	"encoding/csv"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -62,6 +63,12 @@ func checkCaptureDrift(t *testing.T, name string, isNewest bool) {
 
 	query := parseCaptureQuery(t, name)
 	vocabulary := resolveVocabularyFor(t, query.driverVersion)
+
+	assert.Equalf(t,
+		slices.Contains(query.qFields, nvidiasmi.QField("clocks_event_reasons.active")),
+		driverUsesEventReasons(query.driverVersion),
+		"capture %s: driverUsesEventReasons(%q) disagrees with the capture's advertised fields",
+		name, query.driverVersion)
 
 	covered := 0
 
