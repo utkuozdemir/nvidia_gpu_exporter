@@ -28,6 +28,7 @@ type device interface {
 	GetConfComputeProtectedMemoryUsage() (nvml.Memory, nvml.Return)
 	GetCudaComputeCapability() (int, int, nvml.Return)
 	GetCurrentClocksEventReasons() (uint64, nvml.Return)
+	GetCurrentClocksThrottleReasons() (uint64, nvml.Return)
 	GetCurrPcieLinkGeneration() (int, nvml.Return)
 	GetCurrPcieLinkWidth() (int, nvml.Return)
 	GetDecoderUtilization() (uint32, uint32, nvml.Return)
@@ -62,12 +63,14 @@ type device interface {
 		counterType nvml.EccCounterType,
 		location nvml.MemoryLocation,
 	) (uint64, nvml.Return)
+	GetMemoryInfo() (nvml.Memory, nvml.Return)
 	GetMemoryInfo_v2() (nvml.Memory_v2, nvml.Return)
 	GetMigDeviceHandleByIndex(index int) (device, nvml.Return)
 	GetMigMode() (int, int, nvml.Return)
 	GetName() (string, nvml.Return)
 	GetOfaUtilization() (uint32, uint32, nvml.Return)
 	GetPcieThroughput(counter nvml.PcieUtilCounter) (uint32, nvml.Return)
+	GetPciInfo() (nvml.PciInfo, nvml.Return)
 	GetPciInfoExt() (nvml.PciInfoExt, nvml.Return)
 	GetPerformanceState() (nvml.Pstates, nvml.Return)
 	GetPersistenceMode() (nvml.EnableState, nvml.Return)
@@ -84,6 +87,7 @@ type device interface {
 	GetSerial() (string, nvml.Return)
 	GetSramEccErrorStatus() (nvml.EccSramErrorStatus, nvml.Return)
 	GetSupportedClocksEventReasons() (uint64, nvml.Return)
+	GetSupportedClocksThrottleReasons() (uint64, nvml.Return)
 	GetTemperature(sensor nvml.TemperatureSensors) (uint32, nvml.Return)
 	GetTotalEccErrors(errorType nvml.MemoryErrorType, counterType nvml.EccCounterType) (uint64, nvml.Return)
 	GetTotalEnergyConsumption() (uint64, nvml.Return)
@@ -210,6 +214,14 @@ func (g guardedDevice) GetCurrentClocksEventReasons() (uint64, nvml.Return) {
 	}
 
 	return g.dev.GetCurrentClocksEventReasons()
+}
+
+func (g guardedDevice) GetCurrentClocksThrottleReasons() (uint64, nvml.Return) {
+	if !g.avail.has("nvmlDeviceGetCurrentClocksThrottleReasons") {
+		return 0, nvml.ERROR_FUNCTION_NOT_FOUND
+	}
+
+	return g.dev.GetCurrentClocksThrottleReasons()
 }
 
 func (g guardedDevice) GetCurrPcieLinkGeneration() (int, nvml.Return) {
@@ -493,6 +505,16 @@ func (g guardedDevice) GetMemoryErrorCounter(
 	return g.dev.GetMemoryErrorCounter(p0, p1, p2)
 }
 
+func (g guardedDevice) GetMemoryInfo() (nvml.Memory, nvml.Return) {
+	if !g.avail.has("nvmlDeviceGetMemoryInfo") {
+		var z0 nvml.Memory
+
+		return z0, nvml.ERROR_FUNCTION_NOT_FOUND
+	}
+
+	return g.dev.GetMemoryInfo()
+}
+
 //nolint:revive // the name must match go-nvml's Device interface to delegate
 func (g guardedDevice) GetMemoryInfo_v2() (nvml.Memory_v2, nvml.Return) {
 	if !g.avail.has("nvmlDeviceGetMemoryInfo_v2") {
@@ -548,6 +570,20 @@ func (g guardedDevice) GetPcieThroughput(p0 nvml.PcieUtilCounter) (uint32, nvml.
 	}
 
 	return g.dev.GetPcieThroughput(p0)
+}
+
+func (g guardedDevice) GetPciInfo() (nvml.PciInfo, nvml.Return) {
+	// go-nvml selects the version of this entry point itself: it dlsym-probes
+	// for the newer spellings at load time and falls back to v1, so the call is
+	// already safe against a driver that lacks the newer one. Hard-probing a
+	// single spelling here would be wrong.
+	if !g.avail.hasAny("nvmlDeviceGetPciInfo", "nvmlDeviceGetPciInfo_v2", "nvmlDeviceGetPciInfo_v3") {
+		var z0 nvml.PciInfo
+
+		return z0, nvml.ERROR_FUNCTION_NOT_FOUND
+	}
+
+	return g.dev.GetPciInfo()
 }
 
 func (g guardedDevice) GetPciInfoExt() (nvml.PciInfoExt, nvml.Return) {
@@ -693,6 +729,14 @@ func (g guardedDevice) GetSupportedClocksEventReasons() (uint64, nvml.Return) {
 	}
 
 	return g.dev.GetSupportedClocksEventReasons()
+}
+
+func (g guardedDevice) GetSupportedClocksThrottleReasons() (uint64, nvml.Return) {
+	if !g.avail.has("nvmlDeviceGetSupportedClocksThrottleReasons") {
+		return 0, nvml.ERROR_FUNCTION_NOT_FOUND
+	}
+
+	return g.dev.GetSupportedClocksThrottleReasons()
 }
 
 func (g guardedDevice) GetTemperature(p0 nvml.TemperatureSensors) (uint32, nvml.Return) {

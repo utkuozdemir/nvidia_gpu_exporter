@@ -712,17 +712,20 @@ func (b *Backend) collectDevice(
 		coll.set("index", ret, func() string { return strconv.Itoa(index) })
 	}
 
-	if reqs.want("pci.bus_id", "pci.domain", "pci.bus", "pci.device", "pci.baseClass",
-		"pci.subClass", "pci.device_id", "pci.sub_device_id") {
-		pci, ret := dev.GetPciInfoExt()
+	if reqs.want("pci.bus_id", "pci.domain", "pci.bus", "pci.device", "pci.device_id", "pci.sub_device_id") {
+		pci, ret := dev.GetPciInfo()
 		coll.set("pci.bus_id", ret, func() string { return i8str(pci.BusId[:]) })
 		coll.set("pci.domain", ret, func() string { return fmt.Sprintf("0x%04X", pci.Domain) })
 		coll.set("pci.bus", ret, func() string { return fmt.Sprintf("0x%02X", pci.Bus) })
 		coll.set("pci.device", ret, func() string { return fmt.Sprintf("0x%02X", pci.Device) })
-		coll.set("pci.baseClass", ret, func() string { return fmt.Sprintf("0x%X", pci.BaseClass) })
-		coll.set("pci.subClass", ret, func() string { return fmt.Sprintf("0x%X", pci.SubClass) })
 		coll.set("pci.device_id", ret, func() string { return fmt.Sprintf("0x%08X", pci.PciDeviceId) })
 		coll.set("pci.sub_device_id", ret, func() string { return fmt.Sprintf("0x%X", pci.PciSubSystemId) })
+	}
+
+	if reqs.want("pci.baseClass", "pci.subClass") {
+		pciExt, ret := dev.GetPciInfoExt()
+		coll.set("pci.baseClass", ret, func() string { return fmt.Sprintf("0x%X", pciExt.BaseClass) })
+		coll.set("pci.subClass", ret, func() string { return fmt.Sprintf("0x%X", pciExt.SubClass) })
 	}
 
 	if reqs.want("pcie.link.gen.current", "pcie.link.gen.gpucurrent") {
@@ -880,6 +883,10 @@ func (b *Backend) collectDevice(
 
 	if wantReason || reqs.want("clocks_event_reasons.supported") {
 		supported, suppRet = dev.GetSupportedClocksEventReasons()
+		if suppRet == nvml.ERROR_FUNCTION_NOT_FOUND {
+			supported, suppRet = dev.GetSupportedClocksThrottleReasons()
+		}
+
 		if reqs.want("clocks_event_reasons.supported") {
 			coll.set("clocks_event_reasons.supported", suppRet,
 				func() string { return fmt.Sprintf("0x%016X", supported) })
@@ -888,6 +895,10 @@ func (b *Backend) collectDevice(
 
 	if (wantReason && suppRet == nvml.SUCCESS) || reqs.want("clocks_event_reasons.active") {
 		active, ret = dev.GetCurrentClocksEventReasons()
+		if ret == nvml.ERROR_FUNCTION_NOT_FOUND {
+			active, ret = dev.GetCurrentClocksThrottleReasons()
+		}
+
 		if reqs.want("clocks_event_reasons.active") {
 			coll.set("clocks_event_reasons.active", ret, func() string { return fmt.Sprintf("0x%016X", active) })
 		}
@@ -921,8 +932,16 @@ func (b *Backend) collectDevice(
 
 	if reqs.want("memory.total", "memory.reserved", "memory.used", "memory.free") {
 		mem, ret := dev.GetMemoryInfo_v2()
-		coll.set("memory.total", ret, func() string { return mib(mem.Total) })
 		coll.set("memory.reserved", ret, func() string { return mib(mem.Reserved) })
+
+		if ret == nvml.ERROR_FUNCTION_NOT_FOUND {
+			var v1 nvml.Memory
+
+			v1, ret = dev.GetMemoryInfo()
+			mem.Total, mem.Used, mem.Free = v1.Total, v1.Used, v1.Free
+		}
+
+		coll.set("memory.total", ret, func() string { return mib(mem.Total) })
 		coll.set("memory.used", ret, func() string { return mib(mem.Used) })
 		coll.set("memory.free", ret, func() string { return mib(mem.Free) })
 	}

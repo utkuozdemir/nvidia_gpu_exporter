@@ -422,13 +422,10 @@ var throttleAliases = map[nvidiasmi.QField]nvidiasmi.QField{
 }
 
 // eventReasonsMinDriverMajor is the first driver branch whose nvidia-smi
-// advertises the clocks_event_reasons.* spelling first. The captures corpus
-// only proves >= 590 uses the event spelling; the r555 boundary is an
-// UNVERIFIED estimate, so on branches between the real rename and 590 the
-// two backends may spell these metric names differently. Pin the
-// boundary from a pre-590 capture when one becomes available (tracked in
-// the design doc's known limits).
-const eventReasonsMinDriverMajor = 555
+// advertises the clocks_event_reasons.* spelling first (verified against the
+// capture corpus: driver 525 advertises clocks_throttle_reasons.* first and
+// driver 535 advertises clocks_event_reasons.* first).
+const eventReasonsMinDriverMajor = 535
 
 // canonicalQField translates an alias to the field the collector produces.
 func canonicalQField(q nvidiasmi.QField) nvidiasmi.QField {
