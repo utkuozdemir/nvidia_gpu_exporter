@@ -223,10 +223,13 @@ func isLifecycleError(ret nvml.Return) bool {
 }
 
 // tok maps a non-success NVML return to the token nvidia-smi prints for it.
-// The NOT_SUPPORTED -> [N/A] and DEPRECATED mappings are capture-verified.
-// The rest were not observable on the test hardware (device-deny surfaces as
-// ERROR_UNKNOWN at init, not per field); all tokens parse as absent in the
-// shared transform layer either way, so the exported series stay identical.
+// The NOT_SUPPORTED -> [N/A] and DEPRECATED mappings are capture-verified,
+// and NOT_FOUND -> [Not Found] matches the process_name token captured when
+// a container's /proc lacks the host PID. The rest were not observable on
+// the test hardware (device-deny surfaces as ERROR_UNKNOWN at init, not per
+// field). For numeric fields all tokens parse as absent in the shared
+// transform layer, while for string labels like process_name the exact token
+// matters.
 func tok(ret nvml.Return) string {
 	//nolint:exhaustive // every unclassified return renders as the unknown token
 	switch ret {
@@ -234,6 +237,8 @@ func tok(ret nvml.Return) string {
 		return tokenNotAvailable
 	case nvml.ERROR_NO_PERMISSION:
 		return tokenNoPermission
+	case nvml.ERROR_NOT_FOUND:
+		return tokenNotFound
 	case nvml.ERROR_DEPRECATED:
 		return tokenDeprecated
 	case nvml.ERROR_FUNCTION_NOT_FOUND:
@@ -717,7 +722,7 @@ func (b *Backend) collectDevice(
 		coll.set("pci.baseClass", ret, func() string { return fmt.Sprintf("0x%X", pci.BaseClass) })
 		coll.set("pci.subClass", ret, func() string { return fmt.Sprintf("0x%X", pci.SubClass) })
 		coll.set("pci.device_id", ret, func() string { return fmt.Sprintf("0x%08X", pci.PciDeviceId) })
-		coll.set("pci.sub_device_id", ret, func() string { return fmt.Sprintf("0x%08X", pci.PciSubSystemId) })
+		coll.set("pci.sub_device_id", ret, func() string { return fmt.Sprintf("0x%X", pci.PciSubSystemId) })
 	}
 
 	if reqs.want("pcie.link.gen.current", "pcie.link.gen.gpucurrent") {
