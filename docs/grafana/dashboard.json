@@ -576,7 +576,7 @@
             "properties": [
               {
                 "id": "custom.width",
-                "value": 120
+                "value": 95
               },
               {
                 "id": "color",
@@ -633,7 +633,6 @@
           "id": "organize",
           "options": {
             "excludeByName": {
-              "Time": true,
               "__name__": true,
               "Value": true,
               "instance": true,
@@ -646,12 +645,13 @@
               "serial": true
             },
             "indexByName": {
-              "name": 0,
-              "driver_version": 1,
-              "cuda_version": 2,
-              "vbios_version": 3,
-              "compute_cap": 4,
-              "pci_bus_id": 5
+              "Time": 0,
+              "name": 1,
+              "driver_version": 2,
+              "cuda_version": 3,
+              "vbios_version": 4,
+              "compute_cap": 5,
+              "pci_bus_id": 6
             },
             "renameByName": {
               "name": "GPU",
@@ -3320,12 +3320,36 @@
               {
                 "matcher": {
                   "id": "byName",
+                  "options": "Process"
+                },
+                "properties": [
+                  {
+                    "id": "custom.inspect",
+                    "value": true
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "json-view"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
                   "options": "PID"
                 },
                 "properties": [
                   {
                     "id": "custom.width",
-                    "value": 65
+                    "value": 80
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "json-view"
+                    }
                   }
                 ]
               },
@@ -3338,6 +3362,50 @@
                   {
                     "id": "custom.width",
                     "value": 75
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Container"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 140
+                  },
+                  {
+                    "id": "custom.inspect",
+                    "value": true
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "json-view"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Unit"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 220
+                  },
+                  {
+                    "id": "custom.inspect",
+                    "value": true
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "json-view"
+                    }
                   }
                 ]
               },
@@ -3400,8 +3468,8 @@
           "gridPos": {
             "x": 0,
             "y": 30,
-            "w": 9,
-            "h": 8
+            "w": 24,
+            "h": 7
           },
           "id": 43,
           "options": {
@@ -3453,28 +3521,32 @@
               "options": {}
             },
             {
+              "id": "filterFieldsByName",
+              "options": {
+                "include": {
+                  "pattern": "^(process_name|pid|type|container_id|systemd_unit|Value #.+)$"
+                }
+              }
+            },
+            {
               "id": "organize",
               "options": {
-                "excludeByName": {
-                  "Time": true,
-                  "uuid": true,
-                  "__name__": true,
-                  "instance": true,
-                  "job": true,
-                  "gpu_instance_id": true,
-                  "compute_instance_id": true
-                },
+                "excludeByName": {},
                 "indexByName": {
                   "process_name": 0,
                   "pid": 1,
                   "type": 2,
-                  "Value #A": 3,
-                  "Value #B": 4
+                  "container_id": 3,
+                  "systemd_unit": 4,
+                  "Value #A": 5,
+                  "Value #B": 6
                 },
                 "renameByName": {
                   "process_name": "Process",
                   "pid": "PID",
                   "type": "Type",
+                  "container_id": "Container",
+                  "systemd_unit": "Unit",
                   "Value #A": "Memory",
                   "Value #B": "Share"
                 }
@@ -3526,10 +3598,10 @@
             "overrides": []
           },
           "gridPos": {
-            "x": 9,
-            "y": 30,
-            "w": 15,
-            "h": 11
+            "x": 6,
+            "y": 37,
+            "w": 18,
+            "h": 6
           },
           "id": 51,
           "options": {
@@ -3604,8 +3676,8 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 38,
-            "w": 5,
+            "y": 37,
+            "w": 6,
             "h": 3
           },
           "id": 52,
@@ -3686,9 +3758,9 @@
             "overrides": []
           },
           "gridPos": {
-            "x": 5,
-            "y": 38,
-            "w": 4,
+            "x": 0,
+            "y": 40,
+            "w": 6,
             "h": 3
           },
           "id": 69,

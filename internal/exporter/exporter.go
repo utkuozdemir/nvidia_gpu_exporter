@@ -44,12 +44,23 @@ var NVMLReturnCodeMetric = ExitCodeMetric{
 // uuidLabel is the GPU identity label every per-GPU metric carries.
 const uuidLabel = "uuid"
 
-// computeAppLabels is the label set on the per-process metrics.
+// computeAppLabels is the base label set on the per-process metrics.
 var computeAppLabels = []string{uuidLabel, "pid", "process_name"}
 
-// computeAppMIGLabels is the per-process label set with MIG attribution
-// (opt-in: adding labels changes the series identity of a shipped family).
-var computeAppMIGLabels = []string{uuidLabel, "pid", "process_name", "gpu_instance_id", "compute_instance_id"}
+// appLabelNames returns the label names for per-process descriptors, appending
+// the opt-in MIG and workload identity labels in a fixed order.
+func appLabelNames(migLabels, identityLabels bool) []string {
+	labels := slices.Clone(computeAppLabels)
+	if migLabels {
+		labels = append(labels, "gpu_instance_id", "compute_instance_id")
+	}
+
+	if identityLabels {
+		labels = append(labels, "container_id", "systemd_unit")
+	}
+
+	return labels
+}
 
 // invalidNameCharRuns matches runs of characters that are not legal in a
 // classic Prometheus metric name. Matching whole runs keeps a legal
@@ -90,6 +101,10 @@ type Features struct {
 	// ComputeAppMIGLabels adds the MIG attribution labels to the
 	// per-process metrics (nvml backend, --collect.compute-apps-mig).
 	ComputeAppMIGLabels bool
+	// ComputeAppIdentityLabels adds the workload identity labels
+	// (container_id, systemd_unit) to the per-process metrics
+	// (--collect.compute-apps-identity).
+	ComputeAppIdentityLabels bool
 	// PCIeThroughput enables the per-GPU PCIe throughput gauges (nvml
 	// backend, --collect.pcie-throughput).
 	PCIeThroughput bool
@@ -131,6 +146,7 @@ type GPUExporter struct {
 	energyDesc            *prometheus.Desc
 	migDescs              *migDescs
 	appMIGLabels          bool
+	appIdentityLabels     bool
 	xids                  XIDSource
 	xidCountDesc          *prometheus.Desc
 	xidTimestampDesc      *prometheus.Desc
@@ -218,16 +234,19 @@ func New(
 		qFieldToMetricInfoMap: qFieldToMetricInfoMap,
 		source:                source,
 		computeAppDescs: newAppDescs(
-			prefix, "compute", features.ComputeApps, features.ComputeAppMIGLabels),
+			prefix, "compute", features.ComputeApps,
+			features.ComputeAppMIGLabels, features.ComputeAppIdentityLabels),
 		graphicsAppDescs: newAppDescs(
-			prefix, "graphics", features.GraphicsApps, features.ComputeAppMIGLabels),
-		pcieTxDesc:   pcieTxDesc,
-		pcieRxDesc:   pcieRxDesc,
-		energyDesc:   newEnergyDesc(prefix, features.Energy),
-		migDescs:     newMIGDescs(prefix, features.MIG),
-		appMIGLabels: features.ComputeAppMIGLabels,
-		xids:         xids,
-		logger:       logger,
+			prefix, "graphics", features.GraphicsApps,
+			features.ComputeAppMIGLabels, features.ComputeAppIdentityLabels),
+		pcieTxDesc:        pcieTxDesc,
+		pcieRxDesc:        pcieRxDesc,
+		energyDesc:        newEnergyDesc(prefix, features.Energy),
+		migDescs:          newMIGDescs(prefix, features.MIG),
+		appMIGLabels:      features.ComputeAppMIGLabels,
+		appIdentityLabels: features.ComputeAppIdentityLabels,
+		xids:              xids,
+		logger:            logger,
 		gpuInfoDesc: prometheus.NewDesc(
 			prometheus.BuildFQName(prefix, "", "gpu_info"),
 			fmt.Sprintf("A metric with a constant '1' value labeled by gpu %s.",
@@ -295,15 +314,12 @@ func addHealthDescs(exp *GPUExporter, prefix string, exitCodeMetric ExitCodeMetr
 // newAppDescs builds a per-process metric family's descriptors (info, memory,
 // count, success) for the given kind ("compute" or "graphics"), nil when the
 // feature is disabled.
-func newAppDescs(prefix, kind string, enabled, migLabels bool) *appDescs {
+func newAppDescs(prefix, kind string, enabled, migLabels, identityLabels bool) *appDescs {
 	if !enabled {
 		return nil
 	}
 
-	labels := computeAppLabels
-	if migLabels {
-		labels = computeAppMIGLabels
-	}
+	labels := appLabelNames(migLabels, identityLabels)
 
 	return &appDescs{
 		info: prometheus.NewDesc(
@@ -742,6 +758,10 @@ func (e *GPUExporter) sendAppMetric(
 	labelValues := []string{app.GPUUUID, app.PID, app.ProcessName}
 	if e.appMIGLabels {
 		labelValues = append(labelValues, app.GPUInstanceID, app.ComputeInstanceID)
+	}
+
+	if e.appIdentityLabels {
+		labelValues = append(labelValues, app.ContainerID, app.SystemdUnit)
 	}
 
 	metric, err := prometheus.NewConstMetric(desc, prometheus.GaugeValue, value, labelValues...)

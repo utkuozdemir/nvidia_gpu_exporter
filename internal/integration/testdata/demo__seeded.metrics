@@ -100,20 +100,20 @@ nvidia_smi_clocks_max_sm_clock_hz{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1
 nvidia_smi_clocks_max_sm_clock_hz{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1.98e+09
 # HELP nvidia_smi_compute_app_info A metric with a constant '1' value labeled by the identity of a process with a compute context on a GPU.
 # TYPE nvidia_smi_compute_app_info gauge
-nvidia_smi_compute_app_info{compute_instance_id="",gpu_instance_id="",pid="10291",process_name="/root/tools/memhog",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1
-nvidia_smi_compute_app_info{compute_instance_id="",gpu_instance_id="",pid="10293",process_name="/root/tools/memhog",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1
-nvidia_smi_compute_app_info{compute_instance_id="",gpu_instance_id="",pid="10309",process_name="./gpu_burn",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1
-nvidia_smi_compute_app_info{compute_instance_id="0",gpu_instance_id="7",pid="10291",process_name="/root/tools/memhog",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1
-nvidia_smi_compute_app_info{compute_instance_id="1",gpu_instance_id="2",pid="10293",process_name="/root/tools/memhog",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1
-nvidia_smi_compute_app_info{compute_instance_id="1",gpu_instance_id="2",pid="10309",process_name="./gpu_burn",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1
+nvidia_smi_compute_app_info{compute_instance_id="",container_id="",gpu_instance_id="",pid="10309",process_name="./gpu_burn",systemd_unit="gpu-workload.service",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1
+nvidia_smi_compute_app_info{compute_instance_id="",container_id="644fbf91b12c586d8f3d33a02907162e68621c4da561f93a65e4cefb65dff9f9",gpu_instance_id="",pid="10291",process_name="/root/tools/memhog",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1
+nvidia_smi_compute_app_info{compute_instance_id="",container_id="6a26475f62dd358e9cd7c3405b4edbac418f3c08a5076366da7c32dc8c410b9e",gpu_instance_id="",pid="10293",process_name="/root/tools/memhog",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1
+nvidia_smi_compute_app_info{compute_instance_id="0",container_id="644fbf91b12c586d8f3d33a02907162e68621c4da561f93a65e4cefb65dff9f9",gpu_instance_id="7",pid="10291",process_name="/root/tools/memhog",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1
+nvidia_smi_compute_app_info{compute_instance_id="1",container_id="",gpu_instance_id="2",pid="10309",process_name="./gpu_burn",systemd_unit="gpu-workload.service",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1
+nvidia_smi_compute_app_info{compute_instance_id="1",container_id="6a26475f62dd358e9cd7c3405b4edbac418f3c08a5076366da7c32dc8c410b9e",gpu_instance_id="2",pid="10293",process_name="/root/tools/memhog",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1
 # HELP nvidia_smi_compute_app_used_memory_bytes GPU memory used by the process. Absent when the driver cannot report it (e.g. Windows WDDM).
 # TYPE nvidia_smi_compute_app_used_memory_bytes gauge
-nvidia_smi_compute_app_used_memory_bytes{compute_instance_id="",gpu_instance_id="",pid="10291",process_name="/root/tools/memhog",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 2.690646016e+09
-nvidia_smi_compute_app_used_memory_bytes{compute_instance_id="",gpu_instance_id="",pid="10293",process_name="/root/tools/memhog",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1.616904192e+09
-nvidia_smi_compute_app_used_memory_bytes{compute_instance_id="",gpu_instance_id="",pid="10309",process_name="./gpu_burn",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 2.9605494784e+10
-nvidia_smi_compute_app_used_memory_bytes{compute_instance_id="0",gpu_instance_id="7",pid="10291",process_name="/root/tools/memhog",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 2.690646016e+09
-nvidia_smi_compute_app_used_memory_bytes{compute_instance_id="1",gpu_instance_id="2",pid="10293",process_name="/root/tools/memhog",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1.616904192e+09
-nvidia_smi_compute_app_used_memory_bytes{compute_instance_id="1",gpu_instance_id="2",pid="10309",process_name="./gpu_burn",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 2.9605494784e+10
+nvidia_smi_compute_app_used_memory_bytes{compute_instance_id="",container_id="",gpu_instance_id="",pid="10309",process_name="./gpu_burn",systemd_unit="gpu-workload.service",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 2.9605494784e+10
+nvidia_smi_compute_app_used_memory_bytes{compute_instance_id="",container_id="644fbf91b12c586d8f3d33a02907162e68621c4da561f93a65e4cefb65dff9f9",gpu_instance_id="",pid="10291",process_name="/root/tools/memhog",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 2.690646016e+09
+nvidia_smi_compute_app_used_memory_bytes{compute_instance_id="",container_id="6a26475f62dd358e9cd7c3405b4edbac418f3c08a5076366da7c32dc8c410b9e",gpu_instance_id="",pid="10293",process_name="/root/tools/memhog",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1.616904192e+09
+nvidia_smi_compute_app_used_memory_bytes{compute_instance_id="0",container_id="644fbf91b12c586d8f3d33a02907162e68621c4da561f93a65e4cefb65dff9f9",gpu_instance_id="7",pid="10291",process_name="/root/tools/memhog",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 2.690646016e+09
+nvidia_smi_compute_app_used_memory_bytes{compute_instance_id="1",container_id="",gpu_instance_id="2",pid="10309",process_name="./gpu_burn",systemd_unit="gpu-workload.service",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 2.9605494784e+10
+nvidia_smi_compute_app_used_memory_bytes{compute_instance_id="1",container_id="6a26475f62dd358e9cd7c3405b4edbac418f3c08a5076366da7c32dc8c410b9e",gpu_instance_id="2",pid="10293",process_name="/root/tools/memhog",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1.616904192e+09
 # HELP nvidia_smi_compute_apps Number of processes with a compute context on the GPU.
 # TYPE nvidia_smi_compute_apps gauge
 nvidia_smi_compute_apps{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 3
@@ -298,16 +298,16 @@ nvidia_smi_gpu_recovery_action{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
 nvidia_smi_gpu_recovery_action{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
 # HELP nvidia_smi_graphics_app_info A metric with a constant '1' value labeled by the identity of a process with a graphics context on a GPU.
 # TYPE nvidia_smi_graphics_app_info gauge
-nvidia_smi_graphics_app_info{compute_instance_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1
-nvidia_smi_graphics_app_info{compute_instance_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1
-nvidia_smi_graphics_app_info{compute_instance_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1
-nvidia_smi_graphics_app_info{compute_instance_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1
+nvidia_smi_graphics_app_info{compute_instance_id="",container_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1
+nvidia_smi_graphics_app_info{compute_instance_id="",container_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1
+nvidia_smi_graphics_app_info{compute_instance_id="",container_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1
+nvidia_smi_graphics_app_info{compute_instance_id="",container_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1
 # HELP nvidia_smi_graphics_app_used_memory_bytes GPU memory used by the process. Absent when the driver cannot report it (e.g. Windows WDDM).
 # TYPE nvidia_smi_graphics_app_used_memory_bytes gauge
-nvidia_smi_graphics_app_used_memory_bytes{compute_instance_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 6.7108864e+07
-nvidia_smi_graphics_app_used_memory_bytes{compute_instance_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 6.7108864e+07
-nvidia_smi_graphics_app_used_memory_bytes{compute_instance_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1.34217728e+08
-nvidia_smi_graphics_app_used_memory_bytes{compute_instance_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1.34217728e+08
+nvidia_smi_graphics_app_used_memory_bytes{compute_instance_id="",container_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 6.7108864e+07
+nvidia_smi_graphics_app_used_memory_bytes{compute_instance_id="",container_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 6.7108864e+07
+nvidia_smi_graphics_app_used_memory_bytes{compute_instance_id="",container_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1.34217728e+08
+nvidia_smi_graphics_app_used_memory_bytes{compute_instance_id="",container_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1.34217728e+08
 # HELP nvidia_smi_graphics_apps Number of processes with a graphics context on the GPU.
 # TYPE nvidia_smi_graphics_apps gauge
 nvidia_smi_graphics_apps{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 2

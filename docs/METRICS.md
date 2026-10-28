@@ -278,3 +278,42 @@ series for processes holding a graphics context on a GPU
 `nvidia_smi_graphics_apps`, and
 `nvidia_smi_graphics_apps_last_collect_success`). A process that holds both a
 compute and a graphics context appears in both families.
+
+With `--collect.compute-apps-identity` (requires `--collect.compute-apps` or
+`--collect.graphics-apps`, and Linux or the demo backend), the per-process
+`*_app_info` and `*_app_used_memory_bytes` series additionally carry two
+best-effort workload identity labels read from `/proc/<pid>/cgroup` (requires
+host PID visibility when the exporter runs in a container):
+
+- `container_id`: the lowercase 64-character hexadecimal container ID for
+  processes running inside a Docker, containerd, CRI-O or Podman container, or
+  empty when no recognized container cgroup could be read.
+- `systemd_unit`: the innermost systemd unit in the process's cgroup path when
+  that unit is a `.service` (for example `ollama.service`), or empty when
+  `container_id` is set, when the innermost unit is a `.scope` (such as a login
+  session or `init.scope`), or when it is the user manager
+  (`user@<uid>.service`).
+
+The two labels are mutually exclusive: a container running under a runtime
+service (such as `docker.service` or a Podman Quadlet unit) reports
+`container_id` and leaves `systemd_unit` empty. An empty label means no
+recognized container or service cgroup was readable (for example, a process in
+a login session, a process that exited before `/proc/<pid>/cgroup` was read, or
+an inaccessible `/proc`). It is opt-in because it changes the label set of the
+per-process series.
+
+On Kubernetes, join `container_id` against `kube_pod_container_info` from
+`kube-state-metrics` in the same cluster (after stripping its runtime scheme
+prefix such as `containerd://`) to attribute per-process GPU memory to a pod
+and container (returning series for matched Kubernetes containers):
+
+```promql
+nvidia_smi_compute_app_used_memory_bytes{container_id!=""}
+  * on (container_id) group_left (namespace, pod, container)
+    max by (container_id, namespace, pod, container) (
+      label_replace(
+        kube_pod_container_info{container_id!=""},
+        "container_id", "$1", "container_id", "^[a-z0-9-]+://([0-9a-f]{64})$"
+      )
+    )
+```

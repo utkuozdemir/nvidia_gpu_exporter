@@ -292,8 +292,9 @@ const demoExpectedFile = "demo__seeded.metrics"
 // deterministic config (fixed seed, no fluctuation, initial XID events only)
 // and compares the deterministic part of the scrape against the expected
 // output file, pinning the whole synthesized surface: the extras families,
-// the MIG topology and its deterministic uuids, the per-process MIG
-// attribution, and the seeded XID counts. Run with -update to regenerate.
+// the MIG topology and its deterministic uuids, the per-process MIG and
+// workload identity attribution, and the seeded XID counts. Run with -update
+// to regenerate.
 func TestDemoBackendExpectedMetrics(t *testing.T) {
 	t.Parallel()
 
@@ -302,7 +303,8 @@ func TestDemoBackendExpectedMetrics(t *testing.T) {
 		"--demo-config="+filepath.Join("testdata", "demo-config.yaml"),
 		"--collect.compute-apps",
 		"--collect.graphics-apps",
-		"--collect.compute-apps-mig")
+		"--collect.compute-apps-mig",
+		"--collect.compute-apps-identity")
 
 	got := filterDeterministic(scrape(t, baseURL))
 	expectedPath := filepath.Join("testdata", demoExpectedFile)
@@ -1017,6 +1019,7 @@ func TestDemoBackendDefaultConfig(t *testing.T) {
 		"--collect.backend=demo",
 		"--collect.compute-apps",
 		"--collect.graphics-apps",
+		"--collect.compute-apps-identity",
 	)
 
 	first := scrape(t, baseURL)
@@ -1035,6 +1038,9 @@ func TestDemoBackendDefaultConfig(t *testing.T) {
 	} {
 		assert.Contains(t, first, family+"{", "family %s must be served by the built-in demo config", family)
 	}
+
+	assert.Regexp(t, `nvidia_smi_compute_app_info\{[^}]*container_id="[0-9a-f]{64}"`, first)
+	assert.Regexp(t, `nvidia_smi_compute_app_info\{[^}]*systemd_unit="gpu-workload\.service"`, first)
 
 	assert.NotContains(t, first, "nvidia_smi_mig_sm_activity_ratio",
 		"MIG utilization needs a sample pair, like the real backend")

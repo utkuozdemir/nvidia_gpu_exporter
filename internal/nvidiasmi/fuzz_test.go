@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvidiasmi"
 )
@@ -15,6 +16,10 @@ var discard = slog.New(slog.DiscardHandler)
 // cudaVersionShape is the shape ParseCudaVersion promises to return, restated
 // here so the assertion does not lean on the implementation's own pattern.
 var cudaVersionShape = regexp.MustCompile(`^[0-9]+\.[0-9]+$`)
+
+// containerIDShape is the 64-character lowercase hex shape ParseCgroupIdentity
+// promises for container_id.
+var containerIDShape = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 func toQFields(raw string) []nvidiasmi.QField {
 	names := strings.Split(raw, ",")
@@ -304,4 +309,39 @@ func FuzzExtractQFields(f *testing.F) {
 			}
 		}
 	})
+}
+
+// FuzzParseCgroupIdentity covers `/proc/<pid>/cgroup` parsing. Any non-empty
+// return value becomes a Prometheus label on the per-process series, so
+// container_id and systemd_unit are never both set, container_id is always 64
+// lowercase hex characters, and systemd_unit is a valid UTF-8 `.service` name
+// without path or line separators.
+func FuzzParseCgroupIdentity(f *testing.F) {
+	f.Add("0::/system.slice/docker-ad46282edd65b1c223e5175af1d71cca1dee615a517cbfcfaab9a1c90db0495b.scope\n")
+	f.Add("0::/system.slice/ollama.service\n")
+	f.Add("0::/user.slice/user-1000.slice/user@1000.service/init.scope\n")
+	f.Add(
+		"1:name=systemd:/kubepods.slice/" +
+			"cri-containerd-ad46282edd65b1c223e5175af1d71cca1dee615a517cbfcfaab9a1c90db0495b.scope\n0::/\n",
+	)
+	f.Fuzz(func(t *testing.T, content string) {
+		containerID, systemdUnit := nvidiasmi.ParseCgroupIdentity(content)
+		if containerID != "" && systemdUnit != "" {
+			t.Fatalf("returned both container_id %q and systemd_unit %q", containerID, systemdUnit)
+		}
+
+		if containerID != "" && !containerIDShape.MatchString(containerID) {
+			t.Fatalf("returned invalid container_id %q", containerID)
+		}
+
+		if systemdUnit != "" && !validFuzzSystemdUnit(systemdUnit) {
+			t.Fatalf("returned invalid systemd_unit %q", systemdUnit)
+		}
+	})
+}
+
+func validFuzzSystemdUnit(unit string) bool {
+	return utf8.ValidString(unit) &&
+		strings.HasSuffix(unit, ".service") &&
+		!strings.ContainsAny(unit, "/\r\n")
 }

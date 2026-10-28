@@ -153,6 +153,11 @@ tick-identical numbers. Structural differences that remain are real:
 - The NVML flavor synthesizes the extras (the demo backend approximates the
   real nvml backend's surface); the sick-GPU drama and the whole table are
   identical in kind on both sides.
+- Workload identity labels (`container_id`, `systemd_unit`) appear only on the
+  NVML flavor here, because the exec flavor runs `fake-nvidia-smi` through
+  `--nvidia-smi-command` and the exporter refuses local `/proc` attribution
+  when a custom command is set. On real Linux hosts without a custom command,
+  both backends serve those labels.
 
 ## Make the data interesting
 

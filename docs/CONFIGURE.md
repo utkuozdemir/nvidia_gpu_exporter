@@ -129,6 +129,14 @@ Flags:
                                 --collect.graphics-apps, and the nvml or demo
                                 backend). Opt-in because it changes the label
                                 set of the per-process series.
+      --[no-]collect.compute-apps-identity  
+                                Add workload identity labels (container_id,
+                                systemd_unit) from /proc/<pid>/cgroup
+                                to the per-process metrics
+                                (requires --collect.compute-apps or
+                                --collect.graphics-apps, and Linux or the demo
+                                backend). Opt-in because it changes the label
+                                set of the per-process series.
       --[no-]collect.pcie-throughput  
                                 Also export the PCIe TX/RX throughput per
                                 GPU (requires --collect.backend=nvml;
@@ -367,6 +375,16 @@ Things to keep in mind:
   processes are attributed to the parent GPU's UUID, not to MIG instances.
   The nvml backend can add per-instance attribution labels with
   `--collect.compute-apps-mig` (see [METRICS.md](METRICS.md)).
+- `--collect.compute-apps-identity` adds `container_id` and `systemd_unit`
+  labels read from `/proc/<pid>/cgroup` on Linux (or synthesized in demo mode),
+  so per-process series can be attributed to a container, a Kubernetes pod or
+  a systemd service. It is best-effort and requires host PID visibility
+  (`hostPID: true` in Kubernetes, `--pid=host` in Docker) when the exporter
+  runs in a container. It also requires `--collect.compute-apps` or
+  `--collect.graphics-apps` and cannot be combined with a custom
+  `--nvidia-smi-command` (a remote wrapper returns PIDs from another host).
+  See [METRICS.md](METRICS.md#per-process-metrics-opt-in) for the label
+  semantics and the `kube_pod_container_info` join.
 - MIG limits container access. A containerized exporter on a MIG-enabled GPU
   additionally needs to run privileged with the
   `NVIDIA_MIG_MONITOR_DEVICES=all` environment variable (plus host PID
@@ -414,6 +432,7 @@ What each backend can do (`demo` serves synthetic data, see
 | PCIe throughput (`--collect.pcie-throughput`) | no | yes | always on |
 | Per-MIG-instance metrics (`mig_info`, `mig_memory_*`, `mig_*_ratio`) | no | yes | yes |
 | Per-process MIG attribution (`--collect.compute-apps-mig`) | no | yes | yes |
+| Per-process workload identity (`--collect.compute-apps-identity`) | Linux | yes | yes |
 | XID error counters (`xid_errors_total`) | no | yes | yes |
 
 The NVML-only families are documented in [METRICS.md](METRICS.md).
@@ -514,9 +533,10 @@ consistently with the rest:
 - PCIe throughput jitters within configurable bounds
 - XID error counters accumulate over time
 
-Per-process metrics work too, including graphics contexts and the MIG
-attribution labels (`--collect.compute-apps`, `--collect.graphics-apps`,
-`--collect.compute-apps-mig`).
+Per-process metrics work too, including graphics contexts, MIG attribution
+and workload identity labels (`--collect.compute-apps`,
+`--collect.graphics-apps`, `--collect.compute-apps-mig`,
+`--collect.compute-apps-identity`).
 
 The built-in setup simulates two H200 GPUs, a MIG topology on the first one
 and a pre-seeded XID history. `--demo-config` replaces it with your own

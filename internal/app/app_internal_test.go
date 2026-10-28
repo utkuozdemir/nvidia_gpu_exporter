@@ -1,13 +1,19 @@
 package app
 
 import (
+	"context"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/collect"
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvidiasmi"
 )
 
 func TestValidateMetricsPath(t *testing.T) {
@@ -202,6 +208,51 @@ func TestValidateBackendFlags(t *testing.T) {
 			},
 			wantErr: "--collect.compute-apps-mig requires --collect.compute-apps",
 		},
+		{
+			name: "compute apps identity on linux exec",
+			flags: backendFlagSet{
+				backend: backendExec, nvidiaSmiCommand: "nvidia-smi",
+				computeApps: true, computeAppsIdentity: true, goos: "linux",
+			},
+		},
+		{
+			name: "compute apps identity with graphics apps on linux nvml",
+			flags: backendFlagSet{
+				backend: backendNVML, nvidiaSmiCommand: "nvidia-smi",
+				graphicsApps: true, computeAppsIdentity: true, goos: "linux",
+			},
+		},
+		{
+			name: "compute apps identity on non-linux demo",
+			flags: backendFlagSet{
+				backend: backendDemo, nvidiaSmiCommand: "nvidia-smi",
+				computeApps: true, computeAppsIdentity: true, goos: "darwin",
+			},
+		},
+		{
+			name: "compute apps identity requires compute or graphics apps",
+			flags: backendFlagSet{
+				backend: backendExec, nvidiaSmiCommand: "nvidia-smi",
+				computeAppsIdentity: true, goos: "linux",
+			},
+			wantErr: "--collect.compute-apps-identity requires --collect.compute-apps or --collect.graphics-apps",
+		},
+		{
+			name: "compute apps identity rejects custom command",
+			flags: backendFlagSet{
+				backend: backendExec, nvidiaSmiCommand: "ssh gpu-host nvidia-smi",
+				computeApps: true, computeAppsIdentity: true, goos: "linux",
+			},
+			wantErr: "--collect.compute-apps-identity cannot be combined with --nvidia-smi-command",
+		},
+		{
+			name: "compute apps identity rejects non-linux non-demo",
+			flags: backendFlagSet{
+				backend: backendExec, nvidiaSmiCommand: "nvidia-smi",
+				computeApps: true, computeAppsIdentity: true, goos: "windows",
+			},
+			wantErr: "--collect.compute-apps-identity requires Linux or --collect.backend=demo",
+		},
 	}
 
 	for _, testCase := range tests {
@@ -218,4 +269,93 @@ func TestValidateBackendFlags(t *testing.T) {
 			assert.ErrorContains(t, err, testCase.wantErr)
 		})
 	}
+}
+
+type countingFS struct {
+	fs.FS
+
+	opens map[string]int
+}
+
+func (c *countingFS) Open(name string) (fs.File, error) {
+	c.opens[name]++
+
+	//nolint:wrapcheck // test FS wrapper forwarding directly to fstest.MapFS
+	return c.FS.Open(name)
+}
+
+//nolint:funlen // multi-cycle cgroup enrichment and deduplication assertions
+func TestWrapWithProcessIdentity(t *testing.T) {
+	t.Parallel()
+
+	cid := "a3b8c9d0e1f2a3b8c9d0e1f2a3b8c9d0e1f2a3b8c9d0e1f2a3b8c9d0e1f2a3b8"
+
+	mapFS := fstest.MapFS{
+		"100/cgroup": &fstest.MapFile{
+			Data: []byte("0::/system.slice/docker-" + cid + ".scope\n"),
+		},
+		"200/cgroup": &fstest.MapFile{
+			Data: []byte("0::/system.slice/ollama.service\n"),
+		},
+		"400/cgroup": &fstest.MapFile{
+			Data: []byte("0::/system.slice/unrelated-local.service\n"),
+		},
+	}
+
+	procFS := &countingFS{
+		FS:    mapFS,
+		opens: make(map[string]int),
+	}
+
+	inner := func(context.Context) (collect.Reading, int, error) {
+		return collect.Reading{
+			Apps: []nvidiasmi.ComputeApp{
+				{GPUUUID: "gpu-0", PID: "100", ProcessName: "python"},
+				// same PID on a second GPU: must reuse the cached lookup
+				{GPUUUID: "gpu-1", PID: "100", ProcessName: "python"},
+				// vanished process: missing /proc/<pid>/cgroup leaves both empty
+				{GPUUUID: "gpu-0", PID: "300", ProcessName: "python"},
+				// container without hostPID: [Not Found] must skip /proc
+				{GPUUUID: "gpu-0", PID: "400", ProcessName: "[Not Found]"},
+			},
+			GraphicsApps: []nvidiasmi.ComputeApp{
+				// same PID in graphics list: must reuse the cached lookup
+				{GPUUUID: "gpu-0", PID: "100", ProcessName: "python"},
+				{GPUUUID: "gpu-0", PID: "200", ProcessName: "ollama"},
+			},
+		}, 0, nil
+	}
+
+	wrapped := wrapWithProcessIdentity(procFS, inner)
+	reading, code, err := wrapped(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, 0, code)
+
+	assert.Equal(t, cid, reading.Apps[0].ContainerID)
+	assert.Empty(t, reading.Apps[0].SystemdUnit)
+	assert.Equal(t, cid, reading.Apps[1].ContainerID)
+	assert.Empty(t, reading.Apps[2].ContainerID)
+	assert.Empty(t, reading.Apps[2].SystemdUnit)
+	assert.Empty(t, reading.Apps[3].ContainerID)
+	assert.Empty(t, reading.Apps[3].SystemdUnit)
+
+	assert.Equal(t, cid, reading.GraphicsApps[0].ContainerID)
+	assert.Empty(t, reading.GraphicsApps[1].ContainerID)
+	assert.Equal(t, "ollama.service", reading.GraphicsApps[1].SystemdUnit)
+
+	assert.Equal(t, 1, procFS.opens["100/cgroup"], "PID 100 must be read once across GPUs and app lists")
+	assert.Equal(t, 1, procFS.opens["200/cgroup"])
+	assert.Equal(t, 1, procFS.opens["300/cgroup"])
+	assert.Zero(t, procFS.opens["400/cgroup"], "[Not Found] process must not touch /proc")
+
+	// Next collection cycle must re-read /proc so reused PIDs get fresh identity.
+	mapFS["100/cgroup"] = &fstest.MapFile{
+		Data: []byte("0::/system.slice/vllm.service\n"),
+	}
+
+	reading2, _, err := wrapped(t.Context())
+	require.NoError(t, err)
+	assert.Empty(t, reading2.Apps[0].ContainerID)
+	assert.Equal(t, "vllm.service", reading2.Apps[0].SystemdUnit)
+	assert.Equal(t, 2, procFS.opens["100/cgroup"])
 }

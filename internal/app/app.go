@@ -7,11 +7,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/http/pprof"
+	"os"
 	"path"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -175,6 +178,12 @@ func Run(ctx context.Context, args []string, opts Options) error {
 				"--collect.graphics-apps, and the nvml or demo backend). Opt-in because "+
 				"it changes the label set of the per-process series.").
 			Default("false").Bool()
+		collectComputeAppsIdentity = app.Flag("collect.compute-apps-identity",
+			"Add workload identity labels (container_id, systemd_unit) from /proc/<pid>/cgroup "+
+				"to the per-process metrics (requires --collect.compute-apps or "+
+				"--collect.graphics-apps, and Linux or the demo backend). Opt-in because "+
+				"it changes the label set of the per-process series.").
+			Default("false").Bool()
 		collectPcieThroughput = app.Flag("collect.pcie-throughput",
 			"Also export the PCIe TX/RX throughput per GPU (requires --collect.backend=nvml; "+
 				"the demo backend serves the family regardless). "+
@@ -218,13 +227,15 @@ func Run(ctx context.Context, args []string, opts Options) error {
 	}
 
 	backendFlags := backendFlagSet{
-		backend:          *collectBackend,
-		nvidiaSmiCommand: *nvidiaSmiCommand,
-		pcieThroughput:   *collectPcieThroughput,
-		computeApps:      *collectComputeApps,
-		graphicsApps:     *collectGraphicsApps,
-		computeAppsMIG:   *collectComputeAppsMIG,
-		demoConfig:       *demoConfig,
+		backend:             *collectBackend,
+		nvidiaSmiCommand:    *nvidiaSmiCommand,
+		pcieThroughput:      *collectPcieThroughput,
+		computeApps:         *collectComputeApps,
+		graphicsApps:        *collectGraphicsApps,
+		computeAppsMIG:      *collectComputeAppsMIG,
+		computeAppsIdentity: *collectComputeAppsIdentity,
+		demoConfig:          *demoConfig,
+		goos:                runtime.GOOS,
 	}
 
 	if err := validateBackendFlags(backendFlags); err != nil {
@@ -242,18 +253,19 @@ func Run(ctx context.Context, args []string, opts Options) error {
 	eg, ctx := errgroup.WithContext(ctx)
 
 	collectCfg := collectConfig{
-		backend:          *collectBackend,
-		nvidiaSmiCommand: *nvidiaSmiCommand,
-		qFieldsRaw:       *qFields,
-		qFieldsExclude:   *qFieldsExclude,
-		interval:         *collectInterval,
-		timeout:          *collectTimeout,
-		computeApps:      *collectComputeApps,
-		graphicsApps:     *collectGraphicsApps,
-		computeAppsMIG:   *collectComputeAppsMIG,
-		pcieThroughput:   *collectPcieThroughput,
-		demoConfig:       *demoConfig,
-		onFatal:          onFatal,
+		backend:             *collectBackend,
+		nvidiaSmiCommand:    *nvidiaSmiCommand,
+		qFieldsRaw:          *qFields,
+		qFieldsExclude:      *qFieldsExclude,
+		interval:            *collectInterval,
+		timeout:             *collectTimeout,
+		computeApps:         *collectComputeApps,
+		graphicsApps:        *collectGraphicsApps,
+		computeAppsMIG:      *collectComputeAppsMIG,
+		computeAppsIdentity: *collectComputeAppsIdentity,
+		pcieThroughput:      *collectPcieThroughput,
+		demoConfig:          *demoConfig,
+		onFatal:             onFatal,
 	}
 
 	registry := prometheus.NewRegistry()
@@ -342,13 +354,15 @@ func serveHTTP(
 // backendFlagSet carries the flags whose combinations depend on the chosen
 // backend.
 type backendFlagSet struct {
-	backend          string
-	nvidiaSmiCommand string
-	pcieThroughput   bool
-	computeApps      bool
-	graphicsApps     bool
-	computeAppsMIG   bool
-	demoConfig       string
+	backend             string
+	nvidiaSmiCommand    string
+	pcieThroughput      bool
+	computeApps         bool
+	graphicsApps        bool
+	computeAppsMIG      bool
+	computeAppsIdentity bool
+	demoConfig          string
+	goos                string
 }
 
 // validateBackendFlags rejects flag combinations the chosen backend cannot
@@ -381,6 +395,25 @@ func validateBackendFlags(flags backendFlagSet) error {
 
 	if flags.computeAppsMIG && !flags.computeApps && !flags.graphicsApps {
 		return errors.New("--collect.compute-apps-mig requires --collect.compute-apps or --collect.graphics-apps")
+	}
+
+	if flags.computeAppsIdentity {
+		if !flags.computeApps && !flags.graphicsApps {
+			return errors.New(
+				"--collect.compute-apps-identity requires --collect.compute-apps or --collect.graphics-apps",
+			)
+		}
+
+		if flags.nvidiaSmiCommand != nvidiasmi.DefaultCommand {
+			// a custom command such as an ssh wrapper returns PIDs from
+			// another host or namespace, which would be looked up in the
+			// local /proc and misattributed
+			return errors.New("--collect.compute-apps-identity cannot be combined with --nvidia-smi-command")
+		}
+
+		if flags.goos != "linux" && flags.backend != backendDemo {
+			return errors.New("--collect.compute-apps-identity requires Linux or --collect.backend=demo")
+		}
 	}
 
 	if flags.demoConfig != "" && flags.backend != backendDemo {
@@ -490,18 +523,19 @@ var DefaultBackend = backendExec
 // collectConfig carries the collection-related settings from the flags to the
 // exporter setup.
 type collectConfig struct {
-	backend          string
-	nvidiaSmiCommand string
-	qFieldsRaw       string
-	qFieldsExclude   string
-	interval         time.Duration
-	timeout          time.Duration
-	computeApps      bool
-	graphicsApps     bool
-	computeAppsMIG   bool
-	pcieThroughput   bool
-	demoConfig       string
-	onFatal          func(error)
+	backend             string
+	nvidiaSmiCommand    string
+	qFieldsRaw          string
+	qFieldsExclude      string
+	interval            time.Duration
+	timeout             time.Duration
+	computeApps         bool
+	graphicsApps        bool
+	computeAppsMIG      bool
+	computeAppsIdentity bool
+	pcieThroughput      bool
+	demoConfig          string
+	onFatal             func(error)
 }
 
 // setupExporter resolves the query fields, builds the collection source
@@ -522,6 +556,10 @@ func setupExporter(
 		return nil, err
 	}
 
+	if cfg.computeAppsIdentity && cfg.backend != backendDemo {
+		query = wrapWithProcessIdentity(os.DirFS("/proc"), query)
+	}
+
 	var src collect.Source
 
 	switch {
@@ -538,9 +576,10 @@ func setupExporter(
 	extrasCapable := cfg.backend == backendNVML || cfg.backend == backendDemo
 
 	features := exporter.Features{
-		ComputeApps:         cfg.computeApps,
-		GraphicsApps:        cfg.graphicsApps,
-		ComputeAppMIGLabels: cfg.computeAppsMIG,
+		ComputeApps:              cfg.computeApps,
+		GraphicsApps:             cfg.graphicsApps,
+		ComputeAppMIGLabels:      cfg.computeAppsMIG,
+		ComputeAppIdentityLabels: cfg.computeAppsIdentity,
 		// the extras families exist in the nvml backend and its demo twin;
 		// the demo serves the PCIe family unconditionally
 		PCIeThroughput: cfg.pcieThroughput || cfg.backend == backendDemo,
@@ -773,6 +812,63 @@ func buildQueryFunc(
 		}
 
 		return reading, exitCode, nil
+	}
+}
+
+type procIdentity struct {
+	containerID string
+	systemdUnit string
+}
+
+// wrapWithProcessIdentity enriches every collected compute and graphics
+// process in the reading with its cgroup workload identity before the
+// snapshot is stored. A collection-local map deduplicates reads when a
+// process holds contexts on several GPUs or in both lists.
+func wrapWithProcessIdentity(procFS fs.FS, inner collect.QueryFunc) collect.QueryFunc {
+	return func(ctx context.Context) (collect.Reading, int, error) {
+		reading, code, err := inner(ctx)
+		if err != nil {
+			return reading, code, err
+		}
+
+		cache := make(map[string]procIdentity, len(reading.Apps)+len(reading.GraphicsApps))
+		enrichAppsIdentity(ctx, procFS, reading.Apps, cache)
+		enrichAppsIdentity(ctx, procFS, reading.GraphicsApps, cache)
+
+		return reading, code, nil
+	}
+}
+
+func enrichAppsIdentity(
+	ctx context.Context,
+	procFS fs.FS,
+	apps []nvidiasmi.ComputeApp,
+	cache map[string]procIdentity,
+) {
+	for idx := range apps {
+		if ctx.Err() != nil {
+			return
+		}
+
+		// When the exporter runs in a container without hostPID, the
+		// driver reports host PIDs whose process name resolves to
+		// [Not Found]. Skipping /proc/<pid>/cgroup avoids opening a
+		// file that is already known to be absent in this namespace.
+		if strings.EqualFold(strings.TrimSpace(apps[idx].ProcessName), "[Not Found]") {
+			continue
+		}
+
+		pid := apps[idx].PID
+
+		id, ok := cache[pid]
+		if !ok {
+			cid, unit := nvidiasmi.ReadProcessIdentity(procFS, pid)
+			id = procIdentity{containerID: cid, systemdUnit: unit}
+			cache[pid] = id
+		}
+
+		apps[idx].ContainerID = id.containerID
+		apps[idx].SystemdUnit = id.systemdUnit
 	}
 }
 

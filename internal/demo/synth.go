@@ -2,6 +2,7 @@ package demo
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -376,6 +377,36 @@ func attributeApps(uuids []string, extras *extrasConfig, reading *collect.Readin
 		app.GPUInstanceID = strconv.Itoa(ref.gi)
 		app.ComputeInstanceID = strconv.Itoa(ref.ci)
 	}
+}
+
+// synthAppIdentity assigns deterministic container or systemd unit identities
+// to the compute per-process readings, so both columns of the workload
+// identity surface are populated in demo mode. Desktop graphics processes keep
+// empty attribution, matching a login session.
+func synthAppIdentity(reading *collect.Reading) {
+	for i := range reading.Apps {
+		app := &reading.Apps[i]
+		if isGraphicsPID(app.PID) {
+			continue
+		}
+
+		if pidSlot(app.PID, 2) == 1 {
+			sum := sha256.Sum256([]byte("container:" + app.PID))
+			app.ContainerID = hex.EncodeToString(sum[:])
+		} else {
+			app.SystemdUnit = "gpu-workload.service"
+		}
+	}
+}
+
+func isGraphicsPID(pid string) bool {
+	for _, proc := range defaultGraphicsApps {
+		if proc.pid == pid {
+			return true
+		}
+	}
+
+	return false
 }
 
 // pidSlot picks a stable slot for a pid.

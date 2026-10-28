@@ -385,6 +385,46 @@ func TestAttributeApps(t *testing.T) {
 	assert.Equal(t, first.Apps, second.Apps, "the process-to-instance mapping must be stable")
 }
 
+func TestSynthAppIdentity(t *testing.T) {
+	t.Parallel()
+
+	reading := collect.Reading{
+		Apps: []nvidiasmi.ComputeApp{
+			{GPUUUID: "u0", PID: "10291"},
+			{GPUUUID: "u0", PID: "10293"},
+			{GPUUUID: "u0", PID: "10309"},
+			{GPUUUID: "u0", PID: "2165"},
+		},
+		GraphicsApps: []nvidiasmi.ComputeApp{
+			{GPUUUID: "u0", PID: "2165"},
+		},
+	}
+
+	synthAppIdentity(&reading)
+
+	var containers, units int
+
+	for _, app := range reading.Apps[:3] {
+		if app.ContainerID != "" {
+			assert.Len(t, app.ContainerID, 64)
+			assert.Empty(t, app.SystemdUnit)
+
+			containers++
+		} else {
+			assert.Equal(t, "gpu-workload.service", app.SystemdUnit)
+
+			units++
+		}
+	}
+
+	assert.Positive(t, containers)
+	assert.Positive(t, units)
+	assert.Empty(t, reading.Apps[3].ContainerID)
+	assert.Empty(t, reading.Apps[3].SystemdUnit)
+	assert.Empty(t, reading.GraphicsApps[0].ContainerID)
+	assert.Empty(t, reading.GraphicsApps[0].SystemdUnit)
+}
+
 func TestNewBuiltinConfigAndRunFunc(t *testing.T) {
 	t.Parallel()
 
