@@ -49,6 +49,7 @@ services:
       - "--demo-config=/etc/machines/consumer.yaml"
       - "--collect.compute-apps"
       - "--collect.graphics-apps"
+      - "--collect.compute-apps-identity"
     volumes:
       - ./machines:/etc/machines:ro
     ports:
@@ -64,6 +65,7 @@ services:
       - "--collect.compute-apps"
       - "--collect.graphics-apps"
       - "--collect.compute-apps-mig"
+      - "--collect.compute-apps-identity"
     volumes:
       - ./machines:/etc/machines:ro
     ports:

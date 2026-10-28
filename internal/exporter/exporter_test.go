@@ -940,6 +940,67 @@ func TestComputeAppMIGLabels(t *testing.T) {
 	require.Len(t, info.GetMetric()[0].GetLabel(), 3)
 }
 
+func TestComputeAppIdentityLabels(t *testing.T) {
+	t.Parallel()
+
+	cid := "a3b8c9d0e1f2a3b8c9d0e1f2a3b8c9d0e1f2a3b8c9d0e1f2a3b8c9d0e1f2a3b8"
+
+	apps := []nvidiasmi.ComputeApp{{
+		GPUUUID: "abc", PID: "42", ProcessName: "python",
+		UsedMemory: "1 MiB", GPUInstanceID: "3", ComputeInstanceID: "0",
+		ContainerID: cid,
+	}}
+	gApps := []nvidiasmi.ComputeApp{{
+		GPUUUID: "abc", PID: "2620", ProcessName: "/usr/bin/Xwayland",
+		UsedMemory: "128 MiB", GPUInstanceID: "2", ComputeInstanceID: "1",
+		SystemdUnit: "display-manager.service",
+	}}
+
+	snapshot := collect.Snapshot{
+		Attempted: true, Success: true, Table: gpuTable("GPU-ABC"),
+		Apps: apps, AppsAttempted: true, AppsSuccess: true,
+		GraphicsApps: gApps, GraphicsAppsAttempted: true, GraphicsAppsSuccess: true,
+		LastSuccess: time.Now(),
+	}
+
+	// identity labels alone: 5 labels on both info and memory series
+	withIdentity := newExtrasExporter(t,
+		exporter.Features{ComputeApps: true, GraphicsApps: true, ComputeAppIdentityLabels: true}, snapshot)
+	families := gatherFamilies(t, withIdentity)
+
+	for _, name := range []string{"aaa_compute_app_info", "aaa_compute_app_used_memory_bytes"} {
+		fam := families[name]
+		require.NotNil(t, fam)
+		require.Len(t, fam.GetMetric()[0].GetLabel(), 5)
+		assert.Equal(t, cid, labelValue(t, fam.GetMetric()[0], "container_id"))
+		assert.Empty(t, labelValue(t, fam.GetMetric()[0], "systemd_unit"))
+	}
+
+	for _, name := range []string{"aaa_graphics_app_info", "aaa_graphics_app_used_memory_bytes"} {
+		fam := families[name]
+		require.NotNil(t, fam)
+		require.Len(t, fam.GetMetric()[0].GetLabel(), 5)
+		assert.Empty(t, labelValue(t, fam.GetMetric()[0], "container_id"))
+		assert.Equal(t, "display-manager.service", labelValue(t, fam.GetMetric()[0], "systemd_unit"))
+	}
+
+	// combined MIG and identity labels: 7 labels
+	withBoth := newExtrasExporter(t,
+		exporter.Features{
+			ComputeApps: true, GraphicsApps: true,
+			ComputeAppMIGLabels: true, ComputeAppIdentityLabels: true,
+		}, snapshot)
+	families = gatherFamilies(t, withBoth)
+
+	info := families["aaa_compute_app_info"]
+	require.NotNil(t, info)
+	require.Len(t, info.GetMetric()[0].GetLabel(), 7)
+	assert.Equal(t, "3", labelValue(t, info.GetMetric()[0], "gpu_instance_id"))
+	assert.Equal(t, "0", labelValue(t, info.GetMetric()[0], "compute_instance_id"))
+	assert.Equal(t, cid, labelValue(t, info.GetMetric()[0], "container_id"))
+	assert.Empty(t, labelValue(t, info.GetMetric()[0], "systemd_unit"))
+}
+
 // staticXIDs is a canned XIDSource.
 type staticXIDs struct {
 	counters []collect.XIDCounter

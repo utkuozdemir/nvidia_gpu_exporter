@@ -39,10 +39,16 @@ type ComputeApp struct {
 	// GPUInstanceID and ComputeInstanceID attribute the process to a MIG
 	// instance. The nvml backend fills them for processes on
 	// MIG-partitioned GPUs, and the demo backend for its configured
-	// topology; they stay empty otherwise (this query's fixed field set
+	// topology, while they stay empty otherwise (this query's fixed field set
 	// predates MIG and is never extended, per the comment above).
 	GPUInstanceID     string
 	ComputeInstanceID string
+	// ContainerID and SystemdUnit attribute the process to a container or a
+	// systemd service when --collect.compute-apps-identity is enabled. They
+	// are read from /proc/<pid>/cgroup on Linux, or synthesized by the demo
+	// backend, and stay empty otherwise.
+	ContainerID string
+	SystemdUnit string
 }
 
 // QueryComputeApps runs nvidia-smi --query-compute-apps and parses the CSV

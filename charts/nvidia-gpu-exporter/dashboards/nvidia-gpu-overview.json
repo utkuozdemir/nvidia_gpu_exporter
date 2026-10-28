@@ -2122,6 +2122,1092 @@
         "x": 0,
         "y": 45
       },
+      "id": 31,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Percent of time over the past sample period during which one or more kernels was executing on the Encoder Engine, one series per selected GPU.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "percentunit",
+              "min": 0,
+              "noValue": "Not reported by driver",
+              "max": 1
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 46
+          },
+          "id": 32,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "(nvidia_smi_utilization_encoder_ratio{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"}) * on(uuid) group_left(index, name) nvidia_smi_gpu_info{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"}",
+              "instant": false,
+              "range": true,
+              "refId": "A",
+              "legendFormat": "#{{index}} {{name}}"
+            }
+          ],
+          "title": "Encoder Utilization %",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Percent of time over the past sample period during which one or more kernels was executing on the Decoder Engine, one series per selected GPU.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "percentunit",
+              "min": 0,
+              "noValue": "Not reported by driver",
+              "max": 1
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 8,
+            "y": 46
+          },
+          "id": 33,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "(nvidia_smi_utilization_decoder_ratio{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"}) * on(uuid) group_left(index, name) nvidia_smi_gpu_info{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"}",
+              "instant": false,
+              "range": true,
+              "refId": "A",
+              "legendFormat": "#{{index}} {{name}}"
+            }
+          ],
+          "title": "Decoder Utilization %",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Number of active encoder sessions per selected GPU.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "none",
+              "min": 0,
+              "noValue": "Not reported by driver",
+              "decimals": 0
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 16,
+            "y": 46
+          },
+          "id": 34,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "(nvidia_smi_encoder_stats_session_count{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"}) * on(uuid) group_left(index, name) nvidia_smi_gpu_info{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"}",
+              "instant": false,
+              "range": true,
+              "refId": "A",
+              "legendFormat": "#{{index}} {{name}}"
+            }
+          ],
+          "title": "Encoder Sessions",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Average FPS across active encoder sessions per selected GPU.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "fps",
+              "min": 0,
+              "noValue": "Not reported by driver",
+              "decimals": 0
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 54
+          },
+          "id": 35,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "(nvidia_smi_encoder_stats_average_fps{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"}) * on(uuid) group_left(index, name) nvidia_smi_gpu_info{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"}",
+              "instant": false,
+              "range": true,
+              "refId": "A",
+              "legendFormat": "#{{index}} {{name}}"
+            }
+          ],
+          "title": "Encoder Average FPS",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Average encode latency in microseconds across active encoder sessions per selected GPU.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "\u00b5s",
+              "min": 0,
+              "noValue": "Not reported by driver"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 54
+          },
+          "id": 36,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "(nvidia_smi_encoder_stats_average_latency{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"}) * on(uuid) group_left(index, name) nvidia_smi_gpu_info{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"}",
+              "instant": false,
+              "range": true,
+              "refId": "A",
+              "legendFormat": "#{{index}} {{name}}"
+            }
+          ],
+          "title": "Encoder Average Latency",
+          "type": "timeseries"
+        }
+      ],
+      "title": "Video (NVENC / NVDEC)",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 46
+      },
+      "id": 37,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Processes with a compute or graphics context across all selected GPUs on this node, with used memory and its share of that GPU's total VRAM. Click a GPU name to open it in the single-GPU detail dashboard. Requires the exporter to run with --collect.compute-apps and/or --collect.graphics-apps. A memory value of 0 B means the platform does not report per-process memory (e.g. Windows in WDDM mode).",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "text"
+              },
+              "custom": {
+                "align": "left",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false,
+                "filterable": false
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "uuid"
+                },
+                "properties": [
+                  {
+                    "id": "custom.hidden",
+                    "value": true
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "#"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 50
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "GPU"
+                },
+                "properties": [
+                  {
+                    "id": "links",
+                    "value": [
+                      {
+                        "title": "Open in GPU detail",
+                        "url": "/d/vlvPlrgnk/nvidia-gpu-metrics?${datasource:queryparam}&${job:queryparam}&${node:queryparam}&var-gpu=${__data.fields.uuid}&${__url_time_range}"
+                      }
+                    ]
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 220
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Process"
+                },
+                "properties": [
+                  {
+                    "id": "custom.inspect",
+                    "value": true
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "json-view"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "PID"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 80
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "json-view"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Type"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 75
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Container"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 140
+                  },
+                  {
+                    "id": "custom.inspect",
+                    "value": true
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "json-view"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Unit"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 220
+                  },
+                  {
+                    "id": "custom.inspect",
+                    "value": true
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "json-view"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Memory"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "bytes"
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 90
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Share"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "percentunit"
+                  },
+                  {
+                    "id": "min",
+                    "value": 0
+                  },
+                  {
+                    "id": "max",
+                    "value": 1
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 120
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "gauge",
+                      "mode": "gradient"
+                    }
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "purple"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 47,
+            "w": 24,
+            "h": 7
+          },
+          "id": 38,
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false,
+              "reducer": [
+                "sum"
+              ],
+              "countRows": false,
+              "fields": ""
+            },
+            "sortBy": [
+              {
+                "displayName": "Memory",
+                "desc": true
+              }
+            ]
+          },
+          "pluginVersion": "11.2.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "(label_replace(nvidia_smi_compute_app_used_memory_bytes{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"} or (nvidia_smi_compute_app_info{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"} * 0), \"type\", \"compute\", \"\", \"\") or label_replace(nvidia_smi_graphics_app_used_memory_bytes{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"} or (nvidia_smi_graphics_app_info{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"} * 0), \"type\", \"graphics\", \"\", \"\")) * on(uuid) group_left(index, name) (max by (uuid, index, name) (nvidia_smi_gpu_info{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"}))",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "((label_replace(nvidia_smi_compute_app_used_memory_bytes{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"} or (nvidia_smi_compute_app_info{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"} * 0), \"type\", \"compute\", \"\", \"\") or label_replace(nvidia_smi_graphics_app_used_memory_bytes{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"} or (nvidia_smi_graphics_app_info{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"} * 0), \"type\", \"graphics\", \"\", \"\")) / on(uuid) group_left() nvidia_smi_memory_total_bytes{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"}) * on(uuid) group_left(index, name) (max by (uuid, index, name) (nvidia_smi_gpu_info{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"}))",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "",
+              "refId": "B"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "merge",
+              "options": {}
+            },
+            {
+              "id": "filterFieldsByName",
+              "options": {
+                "include": {
+                  "pattern": "^(uuid|index|name|process_name|pid|type|container_id|systemd_unit|Value #.+)$"
+                }
+              }
+            },
+            {
+              "id": "convertFieldType",
+              "options": {
+                "conversions": [
+                  {
+                    "destinationType": "number",
+                    "targetField": "index"
+                  }
+                ],
+                "fields": {}
+              }
+            },
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {},
+                "indexByName": {
+                  "uuid": 0,
+                  "index": 1,
+                  "name": 2,
+                  "process_name": 3,
+                  "pid": 4,
+                  "type": 5,
+                  "container_id": 6,
+                  "systemd_unit": 7,
+                  "Value #A": 8,
+                  "Value #B": 9
+                },
+                "renameByName": {
+                  "index": "#",
+                  "name": "GPU",
+                  "process_name": "Process",
+                  "pid": "PID",
+                  "type": "Type",
+                  "container_id": "Container",
+                  "systemd_unit": "Unit",
+                  "Value #A": "Memory",
+                  "Value #B": "Share"
+                }
+              }
+            }
+          ],
+          "title": "GPU Processes",
+          "type": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "GPU memory per process over time across all selected GPUs, stacked. Processes appear and disappear as they open and close compute or graphics contexts. Empty when --collect.compute-apps and --collect.graphics-apps are off or the platform reports no per-process memory.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 1,
+                "fillOpacity": 35,
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "mode": "normal",
+                  "group": "A"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "transparent",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "bytes",
+              "noValue": "No process data"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 6,
+            "y": 54,
+            "w": 18,
+            "h": 6
+          },
+          "id": 41,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "11.2.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "(nvidia_smi_compute_app_used_memory_bytes{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"} or nvidia_smi_graphics_app_used_memory_bytes{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"}) * on(uuid) group_left(index, name) nvidia_smi_gpu_info{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"}",
+              "legendFormat": "#{{index}} {{process_name}} ({{pid}})",
+              "refId": "A"
+            }
+          ],
+          "title": "Process Memory Over Time",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Health of the compute process collection on the selected node. OK means the last collection succeeded, so an empty table really means no compute processes. Failing means the exporter could not deliver compute process data. Off means the exporter runs without --collect.compute-apps.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 0,
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "Failing",
+                      "color": "#E02F44",
+                      "index": 0
+                    },
+                    "1": {
+                      "text": "OK",
+                      "color": "#56A64B",
+                      "index": 1
+                    }
+                  }
+                }
+              ],
+              "noValue": "Off (--collect.compute-apps)",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6E7B8B",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 54,
+            "w": 6,
+            "h": 3
+          },
+          "id": 39,
+          "options": {
+            "colorMode": "background_solid",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value",
+            "wideLayout": false,
+            "text": {
+              "valueSize": 20
+            }
+          },
+          "pluginVersion": "11.2.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "nvidia_smi_compute_apps_last_collect_success{instance=\"$node\", job=\"$job\"}",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "Compute Collection",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Health of the graphics process collection on the selected node. OK means the last collection succeeded, so an empty table really means no graphics processes. Failing means the exporter could not deliver graphics process data. Off means the exporter runs without --collect.graphics-apps (needs the nvml or demo backend).",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 0,
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "Failing",
+                      "color": "#E02F44",
+                      "index": 0
+                    },
+                    "1": {
+                      "text": "OK",
+                      "color": "#56A64B",
+                      "index": 1
+                    }
+                  }
+                }
+              ],
+              "noValue": "Off (--collect.graphics-apps)",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6E7B8B",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 57,
+            "w": 6,
+            "h": 3
+          },
+          "id": 40,
+          "options": {
+            "colorMode": "background_solid",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value",
+            "wideLayout": false,
+            "text": {
+              "valueSize": 20
+            }
+          },
+          "pluginVersion": "11.2.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "nvidia_smi_graphics_apps_last_collect_success{instance=\"$node\", job=\"$job\"}",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "Graphics Collection",
+          "type": "stat"
+        }
+      ],
+      "title": "Processes",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 47
+      },
       "id": 18,
       "panels": [
         {
@@ -2188,7 +3274,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 46
+            "y": 48
           },
           "id": 19,
           "options": {
@@ -2283,7 +3369,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 46
+            "y": 48
           },
           "id": 20,
           "options": {
@@ -2328,7 +3414,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 46
+        "y": 48
       },
       "id": 21,
       "panels": [
@@ -2395,7 +3481,7 @@
             "h": 8,
             "w": 8,
             "x": 0,
-            "y": 47
+            "y": 49
           },
           "id": 22,
           "options": {
@@ -2490,7 +3576,7 @@
             "h": 8,
             "w": 8,
             "x": 8,
-            "y": 47
+            "y": 49
           },
           "id": 23,
           "options": {
@@ -2585,7 +3671,7 @@
             "h": 8,
             "w": 8,
             "x": 16,
-            "y": 47
+            "y": 49
           },
           "id": 24,
           "options": {
@@ -2680,7 +3766,7 @@
             "h": 8,
             "w": 8,
             "x": 0,
-            "y": 55
+            "y": 57
           },
           "id": 25,
           "options": {
@@ -2733,7 +3819,79 @@
                 }
               ]
             },
-            "overrides": []
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "uuid"
+                },
+                "properties": [
+                  {
+                    "id": "custom.hidden",
+                    "value": true
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "#"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 50
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "GPU"
+                },
+                "properties": [
+                  {
+                    "id": "links",
+                    "value": [
+                      {
+                        "title": "Open in GPU detail",
+                        "url": "/d/vlvPlrgnk/nvidia-gpu-metrics?${datasource:queryparam}&${job:queryparam}&${node:queryparam}&var-gpu=${__data.fields.uuid}&${__url_time_range}"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "XID"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 60
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "json-view"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Since last"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 110
+                  }
+                ]
+              }
+            ]
           },
           "options": {
             "cellHeight": "sm",
@@ -2756,7 +3914,7 @@
             "h": 8,
             "w": 8,
             "x": 8,
-            "y": 55
+            "y": 57
           },
           "targets": [
             {
@@ -2773,17 +3931,29 @@
           ],
           "transformations": [
             {
+              "id": "convertFieldType",
+              "options": {
+                "conversions": [
+                  {
+                    "destinationType": "number",
+                    "targetField": "index"
+                  }
+                ],
+                "fields": {}
+              }
+            },
+            {
               "id": "organize",
               "options": {
                 "excludeByName": {
-                  "Time": true,
-                  "uuid": true
+                  "Time": true
                 },
                 "indexByName": {
-                  "index": 0,
-                  "name": 1,
-                  "xid": 2,
-                  "Value": 3
+                  "uuid": 0,
+                  "index": 1,
+                  "name": 2,
+                  "xid": 3,
+                  "Value": 4
                 },
                 "renameByName": {
                   "index": "#",
@@ -2806,7 +3976,79 @@
               "mappings": [],
               "noValue": "No MIG instances reported"
             },
-            "overrides": []
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "uuid"
+                },
+                "properties": [
+                  {
+                    "id": "custom.hidden",
+                    "value": true
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "#"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 50
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "GPU"
+                },
+                "properties": [
+                  {
+                    "id": "links",
+                    "value": [
+                      {
+                        "title": "Open in GPU detail",
+                        "url": "/d/vlvPlrgnk/nvidia-gpu-metrics?${datasource:queryparam}&${job:queryparam}&${node:queryparam}&var-gpu=${__data.fields.uuid}&${__url_time_range}"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "GPU instance"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 110
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Profile"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 110
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "json-view"
+                    }
+                  }
+                ]
+              }
+            ]
           },
           "options": {
             "cellHeight": "sm",
@@ -2829,7 +4071,7 @@
             "h": 8,
             "w": 8,
             "x": 16,
-            "y": 55
+            "y": 57
           },
           "targets": [
             {
@@ -2846,18 +4088,30 @@
           ],
           "transformations": [
             {
+              "id": "convertFieldType",
+              "options": {
+                "conversions": [
+                  {
+                    "destinationType": "number",
+                    "targetField": "index"
+                  }
+                ],
+                "fields": {}
+              }
+            },
+            {
               "id": "organize",
               "options": {
                 "excludeByName": {
                   "Time": true,
-                  "uuid": true,
                   "Value": true
                 },
                 "indexByName": {
-                  "index": 0,
-                  "name": 1,
-                  "gpu_instance_id": 2,
-                  "profile": 3
+                  "uuid": 0,
+                  "index": 1,
+                  "name": 2,
+                  "gpu_instance_id": 3,
+                  "profile": 4
                 },
                 "renameByName": {
                   "index": "#",
@@ -2932,7 +4186,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 63
+            "y": 65
           },
           "id": 26,
           "options": {
@@ -2976,7 +4230,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 63
+            "y": 65
           },
           "type": "bargauge",
           "pluginVersion": "11.2.0",

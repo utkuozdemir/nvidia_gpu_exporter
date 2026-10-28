@@ -321,6 +321,7 @@ func (b *Backend) overlay(reading *collect.Reading) {
 	b.synthMIG(uuids, snap.extras, reading)
 	synthGraphicsApps(uuids, reading)
 	attributeApps(uuids, snap.extras, reading)
+	synthAppIdentity(reading)
 	b.tickXIDs(uuids, snap.extras, now)
 }
 
