@@ -55,7 +55,7 @@ func TestResolve(t *testing.T) {
 	t.Run("legacy driver spells throttle reasons", func(t *testing.T) {
 		t.Parallel()
 
-		resolved, err := Resolve("AUTO", "", "550.54.14", logger)
+		resolved, err := Resolve("AUTO", "", "525.147.05", logger)
 		require.NoError(t, err)
 		assert.Contains(t, resolved.Query, nvidiasmi.QField("clocks_throttle_reasons.active"))
 		assert.NotContains(t, resolved.Query, nvidiasmi.QField("clocks_event_reasons.active"))

@@ -70,8 +70,8 @@ func identityDevice() *mock.Device {
 			return "GPU-11111111-2222-3333-4444-555555555555", nvml.SUCCESS
 		},
 		GetIndexFunc: func() (int, nvml.Return) { return 0, nvml.SUCCESS },
-		GetPciInfoExtFunc: func() (nvml.PciInfoExt, nvml.Return) {
-			return nvml.PciInfoExt{}, nvml.SUCCESS
+		GetPciInfoFunc: func() (nvml.PciInfo, nvml.Return) {
+			return nvml.PciInfo{}, nvml.SUCCESS
 		},
 		GetDriverModelFunc: func() (nvml.DriverModel, nvml.DriverModel, nvml.Return) {
 			return 0, 0, nvml.ERROR_NOT_SUPPORTED
@@ -116,8 +116,8 @@ func TestCollectHappyPath(t *testing.T) {
 	t.Parallel()
 
 	dev := identityDevice()
-	dev.GetPciInfoExtFunc = func() (nvml.PciInfoExt, nvml.Return) {
-		return nvml.PciInfoExt{PciSubSystemId: 0x10DE}, nvml.SUCCESS
+	dev.GetPciInfoFunc = func() (nvml.PciInfo, nvml.Return) {
+		return nvml.PciInfo{PciSubSystemId: 0x10DE}, nvml.SUCCESS
 	}
 	dev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 12340, nvml.SUCCESS }
 
@@ -852,4 +852,114 @@ func TestClocksEventReasonsActiveLifecycleErrorNotMasked(t *testing.T) {
 	_, code, err := backend.QueryFunc(fields, CollectOptions{})(t.Context())
 	require.Error(t, err)
 	assert.Equal(t, int(nvml.ERROR_GPU_IS_LOST), code)
+}
+
+func TestPciInfoSplitFromPciInfoExt(t *testing.T) {
+	t.Parallel()
+
+	// GetPciInfoExt has no stub on dev: reaching it would panic, proving
+	// the classic PCI fields are served from GetPciInfo alone on pre-550
+	// drivers that lack nvmlDeviceGetPciInfoExt.
+	dev := identityDevice()
+	dev.GetPciInfoFunc = func() (nvml.PciInfo, nvml.Return) {
+		info := nvml.PciInfo{
+			Domain:         0,
+			Bus:            0x0c,
+			Device:         0,
+			PciDeviceId:    0x1E8110DE,
+			PciSubSystemId: 0x37151462,
+		}
+		copy(info.BusId[:], []int8{'0', '0', '0', '0', '0', '0', '0', '0', ':', '0', 'C', ':', '0', '0', '.', '0'})
+
+		return info, nvml.SUCCESS
+	}
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
+
+	fields := resolveFields(t, "pci.bus_id,pci.domain,pci.bus,pci.device,pci.device_id,pci.sub_device_id")
+
+	reading, _, err := backend.QueryFunc(fields, CollectOptions{})(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "00000000:0C:00.0", cellValue(t, reading.Table, "pci.bus_id"))
+	assert.Equal(t, "0x0000", cellValue(t, reading.Table, "pci.domain"))
+	assert.Equal(t, "0x0C", cellValue(t, reading.Table, "pci.bus"))
+	assert.Equal(t, "0x00", cellValue(t, reading.Table, "pci.device"))
+	assert.Equal(t, "0x1E8110DE", cellValue(t, reading.Table, "pci.device_id"))
+	assert.Equal(t, "0x37151462", cellValue(t, reading.Table, "pci.sub_device_id"))
+
+	// requesting pci.baseClass and pci.subClass uses GetPciInfoExt
+	dev.GetPciInfoExtFunc = func() (nvml.PciInfoExt, nvml.Return) {
+		return nvml.PciInfoExt{BaseClass: 0x3, SubClass: 0x0}, nvml.SUCCESS
+	}
+
+	extFields := resolveFields(t, "pci.baseClass,pci.subClass")
+
+	reading, _, err = backend.QueryFunc(extFields, CollectOptions{})(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "0x3", cellValue(t, reading.Table, "pci.baseClass"))
+	assert.Equal(t, "0x0", cellValue(t, reading.Table, "pci.subClass"))
+}
+
+func TestClocksThrottleReasonsFallbackWhenEventReasonsMissing(t *testing.T) {
+	t.Parallel()
+
+	dev := identityDevice()
+	dev.GetSupportedClocksEventReasonsFunc = func() (uint64, nvml.Return) {
+		return 0, nvml.ERROR_FUNCTION_NOT_FOUND
+	}
+	dev.GetCurrentClocksEventReasonsFunc = func() (uint64, nvml.Return) {
+		return 0, nvml.ERROR_FUNCTION_NOT_FOUND
+	}
+	dev.GetSupportedClocksThrottleReasonsFunc = func() (uint64, nvml.Return) {
+		return 0x1ff, nvml.SUCCESS
+	}
+	dev.GetCurrentClocksThrottleReasonsFunc = func() (uint64, nvml.Return) {
+		return reasonGpuIdle, nvml.SUCCESS
+	}
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
+
+	fields, err := Resolve(
+		"clocks_throttle_reasons.supported,clocks_throttle_reasons.active,clocks_throttle_reasons.gpu_idle",
+		"",
+		"525.147.05",
+		slogt.New(t),
+	)
+	require.NoError(t, err)
+
+	reading, _, err := backend.QueryFunc(fields, CollectOptions{})(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "0x00000000000001FF", cellValue(t, reading.Table, "clocks_throttle_reasons.supported"))
+	assert.Equal(t, "0x0000000000000001", cellValue(t, reading.Table, "clocks_throttle_reasons.active"))
+	assert.Equal(t, "Active", cellValue(t, reading.Table, "clocks_throttle_reasons.gpu_idle"))
+}
+
+func TestMemoryInfoFallbackWhenV2Missing(t *testing.T) {
+	t.Parallel()
+
+	dev := identityDevice()
+	dev.GetMemoryInfo_v2Func = func() (nvml.Memory_v2, nvml.Return) {
+		return nvml.Memory_v2{}, nvml.ERROR_FUNCTION_NOT_FOUND
+	}
+	dev.GetMemoryInfoFunc = func() (nvml.Memory, nvml.Return) {
+		return nvml.Memory{
+			Total: 8192 * 1024 * 1024,
+			Used:  1024 * 1024 * 1024,
+			Free:  7168 * 1024 * 1024,
+		}, nvml.SUCCESS
+	}
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
+
+	fields := resolveFields(t, "memory.total,memory.reserved,memory.used,memory.free")
+
+	reading, _, err := backend.QueryFunc(fields, CollectOptions{})(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "8192 MiB", cellValue(t, reading.Table, "memory.total"))
+	assert.Equal(t, "[Function Not Found]", cellValue(t, reading.Table, "memory.reserved"))
+	assert.Equal(t, "1024 MiB", cellValue(t, reading.Table, "memory.used"))
+	assert.Equal(t, "7168 MiB", cellValue(t, reading.Table, "memory.free"))
 }

@@ -157,9 +157,14 @@ var nvmlSymbolRequirements = []symbolRequirement{
 		serves: "index",
 	},
 	{
+		goCall: "GetPciInfo",
+		anyOf:  []string{"nvmlDeviceGetPciInfo", "nvmlDeviceGetPciInfo_v2", "nvmlDeviceGetPciInfo_v3"},
+		serves: "pci.bus_id, pci.domain, pci.bus, pci.device, pci.device_id, pci.sub_device_id",
+	},
+	{
 		goCall: "GetPciInfoExt",
 		anyOf:  []string{"nvmlDeviceGetPciInfoExt", "nvmlDeviceGetPciInfoExt_v2", "nvmlDeviceGetPciInfoExt_v3"},
-		serves: "pci.*",
+		serves: "pci.baseClass, pci.subClass",
 	},
 	{
 		goCall: "GetCurrPcieLinkGeneration",
@@ -317,6 +322,16 @@ var nvmlSymbolRequirements = []symbolRequirement{
 		serves: "clocks_event_reasons.supported and the per-reason flags",
 	},
 	{
+		goCall: "GetSupportedClocksThrottleReasons",
+		anyOf: []string{
+			"nvmlDeviceGetSupportedClocksThrottleReasons",
+			"nvmlDeviceGetSupportedClocksEventReasons",
+			"nvmlDeviceGetSupportedClocksEventReasons_v2",
+			"nvmlDeviceGetSupportedClocksEventReasons_v3",
+		},
+		serves: "clocks_throttle_reasons.supported and the per-reason flags on pre-535 drivers",
+	},
+	{
 		goCall: "GetCurrentClocksEventReasons",
 		anyOf: []string{
 			"nvmlDeviceGetCurrentClocksEventReasons",
@@ -326,11 +341,30 @@ var nvmlSymbolRequirements = []symbolRequirement{
 		serves: "clocks_event_reasons.active and the per-reason flags",
 	},
 	{
+		goCall: "GetCurrentClocksThrottleReasons",
+		anyOf: []string{
+			"nvmlDeviceGetCurrentClocksThrottleReasons",
+			"nvmlDeviceGetCurrentClocksEventReasons",
+			"nvmlDeviceGetCurrentClocksEventReasons_v2",
+			"nvmlDeviceGetCurrentClocksEventReasons_v3",
+		},
+		serves: "clocks_throttle_reasons.active and the per-reason flags on pre-535 drivers",
+	},
+	{
 		goCall: "GetFieldValues",
 		anyOf:  []string{"nvmlDeviceGetFieldValues", "nvmlDeviceGetFieldValues_v2", "nvmlDeviceGetFieldValues_v3"},
 		serves: "power.draw.average/instant, temperature.memory, reason counters, gpu_recovery_action, edpp_multiplier",
 	},
-	{goCall: "GetMemoryInfo_v2", anyOf: []string{"nvmlDeviceGetMemoryInfo_v2"}, serves: "memory.*"},
+	{
+		goCall: "GetMemoryInfo_v2",
+		anyOf:  []string{"nvmlDeviceGetMemoryInfo_v2"},
+		serves: "memory.*",
+	},
+	{
+		goCall: "GetMemoryInfo",
+		anyOf:  []string{"nvmlDeviceGetMemoryInfo", "nvmlDeviceGetMemoryInfo_v2"},
+		serves: "memory.total, memory.used, memory.free on pre-510 drivers",
+	},
 	{
 		goCall: "GetComputeMode",
 		anyOf:  []string{"nvmlDeviceGetComputeMode", "nvmlDeviceGetComputeMode_v2", "nvmlDeviceGetComputeMode_v3"},
