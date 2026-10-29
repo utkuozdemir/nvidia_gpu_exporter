@@ -1,0 +1,88 @@
+name: dashboards
+
+# Publishes the dashboards in docs/grafana as new grafana.com revisions when they
+# differ from the latest one. Every run publishes the tip of main, so re-running
+# an old failed run cannot roll grafana.com back to an older dashboard.
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/grafana/dashboard.json
+      - docs/grafana/dashboard-overview.json
+      - .github/workflows/dashboards.yml
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: grafana-com
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -euo pipefail {0}
+
+jobs:
+  publish:
+    name: publish
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Publish
+        env:
+          GRAFANA_COM_API_KEY: ${{ secrets.GRAFANA_COM_API_KEY }}
+        run: |
+          publish() {
+            local id=$1 file=$2 posted_on='' state rev same new_rev
+            for attempt in 1 2 3 4 5; do
+              (( attempt == 1 )) || sleep $(( attempt * 20 ))
+
+              # one read gives the latest revision number and its JSON. The filter
+              # fails on an empty, truncated or non-JSON body, so a broken read is
+              # retried and never mistaken for a changed dashboard.
+              if ! state=$(curl -fsS --connect-timeout 10 --max-time 30 \
+                "https://grafana.com/api/dashboards/${id}" |
+                jq -er --slurpfile want "${file}" '"\(.revision|numbers) \((.json|objects) == $want[0])"'); then
+                echo "${id}: read failed, attempt ${attempt}" >&2
+                continue
+              fi
+              read -r rev same <<<"${state}"
+
+              if [[ ${same} == true ]]; then
+                echo "${id}: revision ${rev} already matches ${file}"
+                return 0
+              fi
+
+              # a post that timed out may still have landed. A moved revision
+              # number says it did, so never post a second time.
+              if [[ -n ${posted_on} && ${rev} != "${posted_on}" ]]; then
+                echo "${id}: revision ${rev} was created but differs from ${file}" >&2
+                return 1
+              fi
+
+              posted_on=${rev}
+              if new_rev=$(curl -fsS --connect-timeout 10 --max-time 60 \
+                -H "Authorization: Bearer ${GRAFANA_COM_API_KEY}" \
+                -F "json=@${file};type=application/json" \
+                "https://grafana.com/api/dashboards/${id}/revisions" |
+                jq -er '.revision|numbers'); then
+                echo "${id}: published revision ${new_rev} from ${file}"
+                return 0
+              fi
+              echo "${id}: upload failed, attempt ${attempt}" >&2
+            done
+            echo "${id}: giving up" >&2
+            return 1
+          }
+
+          rc=0
+          publish 14574 docs/grafana/dashboard.json || rc=1
+          publish 25547 docs/grafana/dashboard-overview.json || rc=1
+          exit "${rc}"

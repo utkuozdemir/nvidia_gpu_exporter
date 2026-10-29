@@ -23,7 +23,7 @@ By default it runs `nvidia-smi`, parses its CSV output and exports the result, w
 
 The distribution surface is wide for a project this size: archives, native packages, container images on more than one registry, a Helm chart, Windows package manifests, a systemd unit, a native Windows service, and the Grafana dashboards.
 `.goreleaser.yml` and `.github/workflows/release.yml` are the authority on what is published and where.
-Almost all of it is produced by the release pipeline from this repository, with one exception: the dashboards are published to grafana.com by hand.
+All of it is published from this repository: the release pipeline ships everything except the dashboards, whose revisions a separate workflow publishes to grafana.com from `main`.
 
 The niche is deliberate.
 DCGM and the NVIDIA GPU Operator own the datacenter fleet-management case.
@@ -168,7 +168,7 @@ Both are published on grafana.com.
 
 They are authored in the Grafana UI and exported to `docs/grafana/`, which is the source of truth.
 The Helm chart ships copies, and CI compares them byte for byte, so the two locations must be updated together.
-Publishing to grafana.com is a manual step outside the release pipeline.
+`.github/workflows/dashboards.yml` publishes a new revision to grafana.com whenever either file changes on `main`, while the listing screenshots on grafana.com are still updated by hand because its images endpoint is read-only.
 
 `docs/grafana/README.md` carries the query and panel conventions the dashboards depend on.
 Read it before changing any panel query: several of those conventions fail silently when violated.

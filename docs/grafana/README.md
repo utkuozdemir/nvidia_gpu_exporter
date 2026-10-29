@@ -13,8 +13,10 @@ they find each other in Grafana once both are installed.
 
 The Helm chart ships copies under `charts/nvidia-gpu-exporter/dashboards/`, and CI
 compares them byte for byte, so a change here must be mirrored there in the same
-commit. Publishing a new revision to grafana.com is a manual step, separate from
-the release pipeline.
+commit. `.github/workflows/dashboards.yml` publishes a new revision to
+grafana.com whenever either file changes on `main`. Listing screenshots on
+grafana.com are still uploaded in its web UI, because its images API is
+read-only.
 
 `task lint:dashboard` runs
 [grafana/dashboard-linter](https://github.com/grafana/dashboard-linter) in strict
