@@ -287,7 +287,16 @@ func TestComputeAppsHappyPath(t *testing.T) {
 	dev := identityDevice()
 	dev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 100000, nvml.SUCCESS }
 	dev.GetComputeRunningProcessesFunc = func() ([]nvml.ProcessInfo, nvml.Return) {
-		return []nvml.ProcessInfo{{Pid: 4242, UsedGpuMemory: 2 * 1024 * 1024 * 1024}}, nvml.SUCCESS
+		return []nvml.ProcessInfo{
+			{Pid: 4242, UsedGpuMemory: 2 * 1024 * 1024 * 1024},
+			{Pid: 4243, UsedGpuMemory: 512 * 1024 * 1024},
+		}, nvml.SUCCESS
+	}
+	dev.GetProcessUtilizationFunc = func(uint64) ([]nvml.ProcessUtilizationSample, nvml.Return) {
+		return []nvml.ProcessUtilizationSample{
+			{Pid: 4242, TimeStamp: 100, SmUtil: 20, MemUtil: 10, EncUtil: 0, DecUtil: 0},
+			{Pid: 4242, TimeStamp: 200, SmUtil: 85, MemUtil: 40, EncUtil: 0, DecUtil: 0},
+		}, nvml.SUCCESS
 	}
 
 	fake := &fakeAPI{devices: []nvml.Device{dev}}
@@ -295,11 +304,20 @@ func TestComputeAppsHappyPath(t *testing.T) {
 
 	reading, _, err := backend.QueryFunc(resolveFields(t, "power.draw"), CollectOptions{ComputeApps: true})(t.Context())
 	require.NoError(t, err)
-	require.Len(t, reading.Apps, 1)
+	require.Len(t, reading.Apps, 2)
 	assert.Equal(t, "4242", reading.Apps[0].PID)
 	assert.Equal(t, "/usr/bin/burn", reading.Apps[0].ProcessName)
 	assert.Equal(t, "2048 MiB", reading.Apps[0].UsedMemory)
 	assert.Equal(t, "11111111-2222-3333-4444-555555555555", reading.Apps[0].GPUUUID)
+	require.NotNil(t, reading.Apps[0].Utilization, "newest sample per PID must win")
+	assert.InDelta(t, 0.85, reading.Apps[0].Utilization.SMRatio, 1e-9)
+	assert.InDelta(t, 0.40, reading.Apps[0].Utilization.MemoryRatio, 1e-9)
+	assert.Zero(t, reading.Apps[0].Utilization.EncoderRatio)
+	assert.Zero(t, reading.Apps[0].Utilization.DecoderRatio)
+
+	require.NotNil(t, reading.Apps[1].Utilization, "an active process absent from the sample list must report 0")
+	assert.Zero(t, reading.Apps[1].Utilization.SMRatio)
+	assert.Zero(t, reading.Apps[1].Utilization.MemoryRatio)
 }
 
 func TestComputeAppsProcessNameNotFound(t *testing.T) {
@@ -309,6 +327,9 @@ func TestComputeAppsProcessNameNotFound(t *testing.T) {
 	dev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 100000, nvml.SUCCESS }
 	dev.GetComputeRunningProcessesFunc = func() ([]nvml.ProcessInfo, nvml.Return) {
 		return []nvml.ProcessInfo{{Pid: 12256, UsedGpuMemory: 24859 * 1024 * 1024}}, nvml.SUCCESS
+	}
+	dev.GetProcessUtilizationFunc = func(uint64) ([]nvml.ProcessUtilizationSample, nvml.Return) {
+		return nil, nvml.ERROR_NOT_FOUND
 	}
 
 	fake := &fakeAPI{devices: []nvml.Device{dev}}
@@ -324,6 +345,8 @@ func TestComputeAppsProcessNameNotFound(t *testing.T) {
 	assert.Equal(t, "12256", reading.Apps[0].PID)
 	assert.Equal(t, "[Not Found]", reading.Apps[0].ProcessName)
 	assert.Equal(t, "24859 MiB", reading.Apps[0].UsedMemory)
+	require.NotNil(t, reading.Apps[0].Utilization, "ERROR_NOT_FOUND means all active processes were idle (0)")
+	assert.Zero(t, reading.Apps[0].Utilization.SMRatio)
 }
 
 func TestGraphicsAppsHappyPath(t *testing.T) {
@@ -333,6 +356,11 @@ func TestGraphicsAppsHappyPath(t *testing.T) {
 	dev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 100000, nvml.SUCCESS }
 	dev.GetGraphicsRunningProcessesFunc = func() ([]nvml.ProcessInfo, nvml.Return) {
 		return []nvml.ProcessInfo{{Pid: 2620, UsedGpuMemory: 128 * 1024 * 1024}}, nvml.SUCCESS
+	}
+	dev.GetProcessUtilizationFunc = func(uint64) ([]nvml.ProcessUtilizationSample, nvml.Return) {
+		return []nvml.ProcessUtilizationSample{
+			{Pid: 2620, TimeStamp: 500, SmUtil: 12, MemUtil: 5, EncUtil: 8, DecUtil: 4},
+		}, nvml.SUCCESS
 	}
 
 	fake := &fakeAPI{devices: []nvml.Device{dev}}
@@ -352,6 +380,121 @@ func TestGraphicsAppsHappyPath(t *testing.T) {
 	assert.Equal(t, "/usr/bin/burn", reading.GraphicsApps[0].ProcessName)
 	assert.Equal(t, "128 MiB", reading.GraphicsApps[0].UsedMemory)
 	assert.Equal(t, "11111111-2222-3333-4444-555555555555", reading.GraphicsApps[0].GPUUUID)
+	require.NotNil(t, reading.GraphicsApps[0].Utilization)
+	assert.InDelta(t, 0.12, reading.GraphicsApps[0].Utilization.SMRatio, 1e-9)
+	assert.InDelta(t, 0.08, reading.GraphicsApps[0].Utilization.EncoderRatio, 1e-9)
+	assert.InDelta(t, 0.04, reading.GraphicsApps[0].Utilization.DecoderRatio, 1e-9)
+}
+
+func TestComputeAppsUtilizationSkipsIdleDevice(t *testing.T) {
+	t.Parallel()
+
+	// zero running processes must not call GetProcessUtilization (no stub)
+	idleDev := identityDevice()
+	idleDev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 100000, nvml.SUCCESS }
+	idleDev.GetComputeRunningProcessesFunc = func() ([]nvml.ProcessInfo, nvml.Return) {
+		return nil, nvml.SUCCESS
+	}
+
+	idleFake := &fakeAPI{devices: []nvml.Device{idleDev}}
+	idleBackend := newTestBackend(t, idleFake)
+
+	reading, _, err := idleBackend.QueryFunc(
+		resolveFields(t, "power.draw"),
+		CollectOptions{ComputeApps: true},
+	)(t.Context())
+	require.NoError(t, err)
+	assert.True(t, reading.AppsSuccess)
+	assert.Empty(t, reading.Apps)
+}
+
+func TestComputeAppsUtilizationEdgeCases(t *testing.T) {
+	t.Parallel()
+
+	// a non-lifecycle error on GetProcessUtilization keeps the process list
+	// with nil utilization, whereas a lifecycle error marks lost and fails the
+	// per-process pass so remaining unqueried devices are not reported as idle
+	retCode := nvml.SUCCESS
+	dev0 := identityDevice()
+	dev0.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 100000, nvml.SUCCESS }
+	dev0.GetComputeRunningProcessesFunc = func() ([]nvml.ProcessInfo, nvml.Return) {
+		return []nvml.ProcessInfo{{Pid: 77, UsedGpuMemory: 1024 * 1024}}, nvml.SUCCESS
+	}
+	dev0.GetProcessUtilizationFunc = func(lastSeen uint64) ([]nvml.ProcessUtilizationSample, nvml.Return) {
+		assert.Positive(t, lastSeen, "lookback timestamp must be positive")
+
+		return nil, retCode
+	}
+
+	dev1 := identityDevice()
+	dev1.GetUUIDFunc = func() (string, nvml.Return) { return "GPU-11111111-1111-1111-1111-111111111111", nvml.SUCCESS }
+	dev1.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 100000, nvml.SUCCESS }
+	dev1.GetComputeRunningProcessesFunc = func() ([]nvml.ProcessInfo, nvml.Return) {
+		require.NotEqual(t, nvml.ERROR_GPU_IS_LOST, retCode, "must not query device 1 after device 0 marks NVML lost")
+
+		return []nvml.ProcessInfo{{Pid: 88, UsedGpuMemory: 1024 * 1024}}, nvml.SUCCESS
+	}
+	dev1.GetProcessUtilizationFunc = func(_ uint64) ([]nvml.ProcessUtilizationSample, nvml.Return) {
+		return nil, nvml.ERROR_NOT_FOUND
+	}
+
+	fake := &fakeAPI{devices: []nvml.Device{dev0, dev1}}
+	query := newTestBackend(t, fake).QueryFunc(resolveFields(t, "power.draw"), CollectOptions{ComputeApps: true})
+
+	retCode = nvml.ERROR_UNKNOWN
+
+	reading, _, err := query(t.Context())
+	require.NoError(t, err)
+	assert.True(t, reading.AppsSuccess, "non-lifecycle utilization failure must keep the process list intact")
+	require.Len(t, reading.Apps, 2)
+	assert.Nil(t, reading.Apps[0].Utilization)
+	assert.Zero(t, fake.shutdowns.Load())
+
+	retCode = nvml.ERROR_GPU_IS_LOST
+
+	reading, _, err = query(t.Context())
+	require.NoError(t, err)
+	assert.False(t, reading.AppsSuccess, "lifecycle utilization failure must fail the per-process pass")
+	assert.Empty(t, reading.Apps)
+	assert.Equal(t, int64(1), fake.shutdowns.Load(), "lifecycle error must mark the backend for re-init")
+}
+
+func TestDualContextAppsShareUtilizationCall(t *testing.T) {
+	t.Parallel()
+
+	var utilCalls atomic.Uint32
+
+	dev := identityDevice()
+	dev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 100000, nvml.SUCCESS }
+	dev.GetComputeRunningProcessesFunc = func() ([]nvml.ProcessInfo, nvml.Return) {
+		return []nvml.ProcessInfo{{Pid: 2165, UsedGpuMemory: 64 * 1024 * 1024}}, nvml.SUCCESS
+	}
+	dev.GetGraphicsRunningProcessesFunc = func() ([]nvml.ProcessInfo, nvml.Return) {
+		return []nvml.ProcessInfo{{Pid: 2165, UsedGpuMemory: 64 * 1024 * 1024}}, nvml.SUCCESS
+	}
+	dev.GetProcessUtilizationFunc = func(_ uint64) ([]nvml.ProcessUtilizationSample, nvml.Return) {
+		call := utilCalls.Add(1)
+
+		return []nvml.ProcessUtilizationSample{
+			{Pid: 2165, TimeStamp: uint64(call), SmUtil: 10 * call, MemUtil: 5},
+		}, nvml.SUCCESS
+	}
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
+	query := backend.QueryFunc(
+		resolveFields(t, "power.draw"),
+		CollectOptions{ComputeApps: true, GraphicsApps: true},
+	)
+
+	reading, _, err := query(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, uint32(1), utilCalls.Load(), "utilization must be queried once per device per cycle")
+	require.Len(t, reading.Apps, 1)
+	require.Len(t, reading.GraphicsApps, 1)
+	require.NotNil(t, reading.Apps[0].Utilization)
+	require.NotNil(t, reading.GraphicsApps[0].Utilization)
+	assert.Equal(t, reading.Apps[0].Utilization, reading.GraphicsApps[0].Utilization)
 }
 
 func TestAbandonedCollectionFailsFastAndRecovers(t *testing.T) {

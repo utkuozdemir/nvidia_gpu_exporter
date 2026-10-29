@@ -335,6 +335,9 @@ func TestComputeAppsMIGAttribution(t *testing.T) {
 			{Pid: 43, UsedGpuMemory: 1024 * 1024, GpuInstanceId: migInvalidID, ComputeInstanceId: migInvalidID},
 		}, nvml.SUCCESS
 	}
+	dev.GetProcessUtilizationFunc = func(uint64) ([]nvml.ProcessUtilizationSample, nvml.Return) {
+		return nil, nvml.ERROR_NOT_SUPPORTED
+	}
 
 	fake := &fakeAPI{devices: []nvml.Device{dev}}
 	backend := newTestBackend(t, fake)
@@ -347,8 +350,10 @@ func TestComputeAppsMIGAttribution(t *testing.T) {
 
 	assert.Equal(t, "3", reading.Apps[0].GPUInstanceID)
 	assert.Equal(t, "0", reading.Apps[0].ComputeInstanceID)
+	assert.Nil(t, reading.Apps[0].Utilization, "ERROR_NOT_SUPPORTED on MIG must omit utilization")
 	assert.Empty(t, reading.Apps[1].GPUInstanceID, "the invalid-id sentinel must render as an empty label")
 	assert.Empty(t, reading.Apps[1].ComputeInstanceID)
+	assert.Nil(t, reading.Apps[1].Utilization)
 }
 
 func TestMIGGPMMaxWindowReseeds(t *testing.T) {

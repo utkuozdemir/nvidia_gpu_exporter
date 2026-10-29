@@ -306,13 +306,14 @@ func (b *Backend) collectCycle(
 	}
 
 	reading := collect.Reading{Table: table}
+	utilCache := map[int]deviceUtil{}
 
 	if opts.ComputeApps {
 		reading.AppsAttempted = true
 
 		apps, appsErr := b.collectProcesses(ctx, func(dev device) ([]nvml.ProcessInfo, nvml.Return) {
 			return dev.GetComputeRunningProcesses()
-		})
+		}, utilCache)
 		if appsErr != nil {
 			reading.AppsErr = appsErr
 		} else {
@@ -326,7 +327,7 @@ func (b *Backend) collectCycle(
 
 		apps, appsErr := b.collectProcesses(ctx, func(dev device) ([]nvml.ProcessInfo, nvml.Return) {
 			return dev.GetGraphicsRunningProcesses()
-		})
+		}, utilCache)
 		if appsErr != nil {
 			reading.GraphicsAppsErr = appsErr
 		} else {
@@ -1473,6 +1474,15 @@ func collectPlatform(dev device, coll *devCollector, reqs plan) {
 	})
 }
 
+// deviceUtil caches one device's per-process utilization lookup within a
+// single collection cycle so enabling both compute and graphics process
+// collection queries the driver at most once per device and gives dual-context
+// PIDs identical utilization values.
+type deviceUtil struct {
+	byPID     map[uint32]nvml.ProcessUtilizationSample
+	supported bool
+}
+
 // collectProcesses lists running processes on each device using the given
 // getter (compute or graphics). It fails softly per the Reading contract,
 // but lifecycle-class returns still mark the backend for re-initialization so
@@ -1480,6 +1490,7 @@ func collectPlatform(dev device, coll *devCollector, reqs plan) {
 func (b *Backend) collectProcesses(
 	ctx context.Context,
 	list func(device) ([]nvml.ProcessInfo, nvml.Return),
+	utilCache map[int]deviceUtil,
 ) ([]nvidiasmi.ComputeApp, error) {
 	if !b.initialized {
 		return nil, errors.New("NVML is not initialized (lifecycle error earlier in this cycle)")
@@ -1497,33 +1508,126 @@ func (b *Backend) collectProcesses(
 	var apps []nvidiasmi.ComputeApp
 
 	for deviceIdx := range count {
-		if err := ctx.Err(); err != nil {
-			return nil, fmt.Errorf("per-process collection interrupted: %w", err)
+		devApps, err := b.collectDeviceProcesses(ctx, deviceIdx, list, utilCache)
+		if err != nil {
+			return nil, err
 		}
 
-		dev, ret := b.device(deviceIdx)
-		if ret != nvml.SUCCESS {
-			return nil, b.softLifecycle(ret, fmt.Errorf("failed to get device %d", deviceIdx))
+		if !b.initialized {
+			return nil, errors.New("NVML was lost during per-process utilization collection")
 		}
 
-		uuid, ret := dev.GetUUID()
-		if ret != nvml.SUCCESS {
-			return nil, b.softLifecycle(ret, fmt.Errorf("failed to get device %d uuid", deviceIdx))
-		}
+		apps = append(apps, devApps...)
+	}
 
-		procs, ret := list(dev)
-		if ret != nvml.SUCCESS {
-			return nil, b.softLifecycle(ret, fmt.Errorf("failed to list processes of device %d", deviceIdx))
-		}
+	return apps, nil
+}
 
-		nameAvailable := b.avail.Load().has("nvmlSystemGetProcessName")
+func (b *Backend) collectDeviceProcesses(
+	ctx context.Context,
+	deviceIdx int,
+	list func(device) ([]nvml.ProcessInfo, nvml.Return),
+	utilCache map[int]deviceUtil,
+) ([]nvidiasmi.ComputeApp, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("per-process collection interrupted: %w", err)
+	}
 
-		for _, proc := range procs {
-			apps = append(apps, b.toComputeApp(uuid, proc, nameAvailable))
+	dev, ret := b.device(deviceIdx)
+	if ret != nvml.SUCCESS {
+		return nil, b.softLifecycle(ret, fmt.Errorf("failed to get device %d", deviceIdx))
+	}
+
+	uuid, ret := dev.GetUUID()
+	if ret != nvml.SUCCESS {
+		return nil, b.softLifecycle(ret, fmt.Errorf("failed to get device %d uuid", deviceIdx))
+	}
+
+	procs, ret := list(dev)
+	if ret != nvml.SUCCESS {
+		return nil, b.softLifecycle(ret, fmt.Errorf("failed to list processes of device %d", deviceIdx))
+	}
+
+	if len(procs) == 0 {
+		return nil, nil
+	}
+
+	nameAvailable := b.avail.Load().has("nvmlSystemGetProcessName")
+	apps := make([]nvidiasmi.ComputeApp, len(procs))
+
+	for i, proc := range procs {
+		apps[i] = b.toComputeApp(uuid, proc, nameAvailable)
+	}
+
+	util, cached := utilCache[deviceIdx]
+	if !cached {
+		byPID, supported := b.collectProcessUtilization(dev)
+		util = deviceUtil{byPID: byPID, supported: supported}
+		utilCache[deviceIdx] = util
+	}
+
+	if util.supported {
+		for i, proc := range procs {
+			sample, found := util.byPID[proc.Pid]
+			apps[i].Utilization = toProcessUtilization(sample, found)
 		}
 	}
 
 	return apps, nil
+}
+
+// processUtilLookback is the stateless lookback window passed to
+// nvmlDeviceGetProcessUtilization. Three seconds spans several internal
+// driver sampling periods so an active process always has a recent sample,
+// while bounding how long a recently-idle process takes to decay to 0.
+const processUtilLookback = 3 * time.Second
+
+// collectProcessUtilization reads recent per-process utilization samples for
+// dev and indexes the newest sample per PID. The boolean reports whether the
+// device supports per-process utilization at all: when true, processes absent
+// from the returned map were idle during the lookback window and should report
+// zero ratios; when false, the utilization metric families are omitted.
+func (b *Backend) collectProcessUtilization(
+	dev device,
+) (map[uint32]nvml.ProcessUtilizationSample, bool) {
+	lastSeen := uint64(max(0, b.now().Add(-processUtilLookback).UnixMicro()))
+
+	samples, ret := dev.GetProcessUtilization(lastSeen)
+
+	//nolint:exhaustive // all other codes are unexpected failures
+	switch ret {
+	case nvml.SUCCESS, nvml.ERROR_NOT_FOUND:
+		byPID := make(map[uint32]nvml.ProcessUtilizationSample, len(samples))
+		for _, sample := range samples {
+			if prev, ok := byPID[sample.Pid]; !ok || sample.TimeStamp >= prev.TimeStamp {
+				byPID[sample.Pid] = sample
+			}
+		}
+
+		return byPID, true
+	case nvml.ERROR_NOT_SUPPORTED, nvml.ERROR_FUNCTION_NOT_FOUND, nvml.ERROR_NO_PERMISSION:
+		return nil, false
+	default:
+		b.extrasFailure("process-utilization", "cannot read per-process utilization", ret)
+
+		return nil, false
+	}
+}
+
+func toProcessUtilization(
+	sample nvml.ProcessUtilizationSample,
+	found bool,
+) *nvidiasmi.ProcessUtilization {
+	if !found {
+		return &nvidiasmi.ProcessUtilization{}
+	}
+
+	return &nvidiasmi.ProcessUtilization{
+		SMRatio:      float64(sample.SmUtil) / 100.0,
+		MemoryRatio:  float64(sample.MemUtil) / 100.0,
+		EncoderRatio: float64(sample.EncUtil) / 100.0,
+		DecoderRatio: float64(sample.DecUtil) / 100.0,
+	}
 }
 
 // toComputeApp formats an NVML process entry into the exporter's per-process record.

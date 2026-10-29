@@ -371,10 +371,12 @@ Things to keep in mind:
   manage the memory there, so `used_gpu_memory` is not available. The
   `compute_app_info` and `compute_apps` metrics still work, the
   `used_memory_bytes` metric is absent.
-- MIG limits attribution. By default (and always with the exec backend)
-  processes are attributed to the parent GPU's UUID, not to MIG instances.
-  The nvml backend can add per-instance attribution labels with
-  `--collect.compute-apps-mig` (see [METRICS.md](METRICS.md)).
+- MIG limits attribution and utilization. By default (and always with the exec
+  backend) processes are attributed to the parent GPU's UUID, not to MIG
+  instances. The nvml backend can add per-instance attribution labels with
+  `--collect.compute-apps-mig`, while per-process utilization
+  (`*_app_*_utilization_ratio`) is omitted on MIG-enabled GPUs because the
+  driver returns `NVML_ERROR_NOT_SUPPORTED` (see [METRICS.md](METRICS.md)).
 - `--collect.compute-apps-identity` adds `container_id` and `systemd_unit`
   labels read from `/proc/<pid>/cgroup` on Linux (or synthesized in demo mode),
   so per-process series can be attributed to a container, a Kubernetes pod or
@@ -423,6 +425,7 @@ What each backend can do (`demo` serves synthetic data, see
 | Query-field metrics (identical names, labels, values) | yes | yes | synthetic |
 | `gpu_info` with the `cuda_version` label | yes | yes | yes |
 | Per-process metrics (`--collect.compute-apps`) | yes | yes | yes |
+| Per-process engine utilization (`*_app_*_utilization_ratio`) | no | yes | yes |
 | Graphics per-process metrics (`--collect.graphics-apps`) | no | yes | yes |
 | Collection status metric | `command_exit_code` | `nvml_return_code` | `nvml_return_code` |
 | Custom command, remote scraping (`--nvidia-smi-command`, ssh, sudo) | yes | no | no |
@@ -593,6 +596,9 @@ Details worth knowing when developing dashboards against demo data:
   (`--collect.pcie-throughput`) on the real nvml backend. A dashboard
   validated against demo data shows empty PCIe panels on a default nvml
   deployment unless the flag is set there.
+- Per-process utilization is synthesized on every GPU in demo mode so that a
+  single demo card can exercise both MIG and process panels at once. On the
+  real nvml backend, MIG-enabled GPUs omit `*_app_*_utilization_ratio`.
 - The collection status metric is `nvml_return_code`, for name parity with
   the nvml backend. No driver library is involved.
 - For fully reproducible values, set `extras.seed` and leave `fluctuate`

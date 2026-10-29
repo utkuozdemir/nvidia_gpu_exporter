@@ -30,9 +30,12 @@ func newDemoRand(seed *int64) *demoRand {
 	return &demoRand{src: rand.New(rand.NewSource(value))}
 }
 
-// draw returns a uniform value from the range.
+// draw returns a uniform value from the range. The float64 conversion on the
+// product prevents the compiler from fusing the multiply and add into an FMA
+// instruction on arm64, so seeded draws reproduce identically across amd64 and
+// arm64.
 func (r *demoRand) draw(rng rangeCfg) float64 {
-	return rng.Min + r.src.Float64()*(rng.Max-rng.Min)
+	return rng.Min + float64(r.src.Float64()*(rng.Max-rng.Min))
 }
 
 // synthEnergy integrates each GPU's power draw over the injected clock into
@@ -396,6 +399,68 @@ func synthAppIdentity(reading *collect.Reading) {
 		} else {
 			app.SystemdUnit = "gpu-workload.service"
 		}
+	}
+}
+
+// synthAppUtilization populates per-process engine utilization ratios in demo
+// mode. Each (GPU, PID) pair draws from its own narrow band so process lines
+// stay distinct instead of teleporting across the chart. A process holding
+// both a compute and a graphics context on the same GPU shares one reading,
+// since the driver samples by PID.
+func (b *Backend) synthAppUtilization(reading *collect.Reading) {
+	byKey := map[string]*nvidiasmi.ProcessUtilization{}
+
+	for i := range reading.Apps {
+		app := &reading.Apps[i]
+		key := app.GPUUUID + "/" + app.PID
+		util := b.drawAppUtilization(key, app.PID, !isGraphicsPID(app.PID))
+		byKey[key] = util
+		app.Utilization = util
+	}
+
+	for i := range reading.GraphicsApps {
+		app := &reading.GraphicsApps[i]
+		key := app.GPUUUID + "/" + app.PID
+
+		if util, ok := byKey[key]; ok {
+			app.Utilization = util
+
+			continue
+		}
+
+		util := b.drawAppUtilization(key, app.PID, false)
+		byKey[key] = util
+		app.Utilization = util
+	}
+}
+
+func (b *Backend) drawAppUtilization(key, pid string, compute bool) *nvidiasmi.ProcessUtilization {
+	if compute {
+		smBase := float64(18+pidSlot(key, 12)*6) / 100
+		memBase := float64(15+pidSlot("mem:"+key, 10)*6) / 100
+
+		return &nvidiasmi.ProcessUtilization{
+			SMRatio:      b.rng.draw(rangeCfg{Min: smBase, Max: float64(26+pidSlot(key, 12)*6) / 100}),
+			MemoryRatio:  b.rng.draw(rangeCfg{Min: memBase, Max: float64(23+pidSlot("mem:"+key, 10)*6) / 100}),
+			EncoderRatio: 0,
+			DecoderRatio: 0,
+		}
+	}
+
+	var enc, dec float64
+	if pid == defaultGraphicsApps[0].pid {
+		enc = b.rng.draw(rangeCfg{Min: 0.02, Max: 0.10})
+		dec = b.rng.draw(rangeCfg{Min: 0.02, Max: 0.10})
+	}
+
+	smSlot := pidSlot(key, 4)
+	memSlot := pidSlot("mem:"+key, 3)
+
+	return &nvidiasmi.ProcessUtilization{
+		SMRatio:      b.rng.draw(rangeCfg{Min: float64(2+smSlot*2) / 100, Max: float64(5+smSlot*2) / 100}),
+		MemoryRatio:  b.rng.draw(rangeCfg{Min: float64(1+memSlot*2) / 100, Max: float64(3+memSlot*2) / 100}),
+		EncoderRatio: enc,
+		DecoderRatio: dec,
 	}
 }
 

@@ -3290,7 +3290,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "Processes with a compute or graphics context on the selected GPU, with used memory and its share of total VRAM. Requires the exporter to run with --collect.compute-apps and/or --collect.graphics-apps. A memory value of 0 B means the platform does not report per-process memory (e.g. Windows in WDDM mode).",
+          "description": "Processes with a compute or graphics context on the selected GPU, with workload identity, engine utilization (SM, memory bandwidth, video encoder, video decoder), used memory, and share of total VRAM. Requires --collect.compute-apps and/or --collect.graphics-apps; utilization requires the nvml or demo backend on a non-MIG GPU.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3462,6 +3462,190 @@
                     }
                   }
                 ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "SM"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "percentunit"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 65
+                  },
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "type": "value",
+                        "options": {
+                          "-1": {
+                            "text": "n/a",
+                            "color": "#6E7B8B",
+                            "index": 99
+                          }
+                        }
+                      },
+                      {
+                        "type": "special",
+                        "options": {
+                          "match": "null",
+                          "result": {
+                            "text": "n/a",
+                            "color": "#6E7B8B",
+                            "index": 100
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Mem"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "percentunit"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 65
+                  },
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "type": "value",
+                        "options": {
+                          "-1": {
+                            "text": "n/a",
+                            "color": "#6E7B8B",
+                            "index": 99
+                          }
+                        }
+                      },
+                      {
+                        "type": "special",
+                        "options": {
+                          "match": "null",
+                          "result": {
+                            "text": "n/a",
+                            "color": "#6E7B8B",
+                            "index": 100
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Enc"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "percentunit"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 65
+                  },
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "type": "value",
+                        "options": {
+                          "-1": {
+                            "text": "n/a",
+                            "color": "#6E7B8B",
+                            "index": 99
+                          }
+                        }
+                      },
+                      {
+                        "type": "special",
+                        "options": {
+                          "match": "null",
+                          "result": {
+                            "text": "n/a",
+                            "color": "#6E7B8B",
+                            "index": 100
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Dec"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "percentunit"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 65
+                  },
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "type": "value",
+                        "options": {
+                          "-1": {
+                            "text": "n/a",
+                            "color": "#6E7B8B",
+                            "index": 99
+                          }
+                        }
+                      },
+                      {
+                        "type": "special",
+                        "options": {
+                          "match": "null",
+                          "result": {
+                            "text": "n/a",
+                            "color": "#6E7B8B",
+                            "index": 100
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
               }
             ]
           },
@@ -3497,7 +3681,7 @@
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "label_replace(nvidia_smi_compute_app_used_memory_bytes{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} or (nvidia_smi_compute_app_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} * 0), \"type\", \"compute\", \"\", \"\") or label_replace(nvidia_smi_graphics_app_used_memory_bytes{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} or (nvidia_smi_graphics_app_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} * 0), \"type\", \"graphics\", \"\", \"\")",
+              "expr": "label_replace((nvidia_smi_compute_app_used_memory_bytes{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} + 0) or (nvidia_smi_compute_app_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} * 0), \"type\", \"compute\", \"\", \"\") or label_replace((nvidia_smi_graphics_app_used_memory_bytes{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} + 0) or (nvidia_smi_graphics_app_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} * 0), \"type\", \"graphics\", \"\", \"\")",
               "format": "table",
               "instant": true,
               "legendFormat": "",
@@ -3513,6 +3697,50 @@
               "instant": true,
               "legendFormat": "",
               "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "label_replace((nvidia_smi_compute_app_sm_utilization_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} + 0) or (nvidia_smi_compute_app_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} * 0 - 1), \"type\", \"compute\", \"\", \"\") or label_replace((nvidia_smi_graphics_app_sm_utilization_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} + 0) or (nvidia_smi_graphics_app_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} * 0 - 1), \"type\", \"graphics\", \"\", \"\")",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "",
+              "refId": "C"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "label_replace((nvidia_smi_compute_app_memory_utilization_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} + 0) or (nvidia_smi_compute_app_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} * 0 - 1), \"type\", \"compute\", \"\", \"\") or label_replace((nvidia_smi_graphics_app_memory_utilization_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} + 0) or (nvidia_smi_graphics_app_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} * 0 - 1), \"type\", \"graphics\", \"\", \"\")",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "",
+              "refId": "D"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "label_replace((nvidia_smi_compute_app_encoder_utilization_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} + 0) or (nvidia_smi_compute_app_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} * 0 - 1), \"type\", \"compute\", \"\", \"\") or label_replace((nvidia_smi_graphics_app_encoder_utilization_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} + 0) or (nvidia_smi_graphics_app_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} * 0 - 1), \"type\", \"graphics\", \"\", \"\")",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "",
+              "refId": "E"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "label_replace((nvidia_smi_compute_app_decoder_utilization_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} + 0) or (nvidia_smi_compute_app_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} * 0 - 1), \"type\", \"compute\", \"\", \"\") or label_replace((nvidia_smi_graphics_app_decoder_utilization_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} + 0) or (nvidia_smi_graphics_app_info{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} * 0 - 1), \"type\", \"graphics\", \"\", \"\")",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "",
+              "refId": "F"
             }
           ],
           "transformations": [
@@ -3538,8 +3766,12 @@
                   "type": 2,
                   "container_id": 3,
                   "systemd_unit": 4,
-                  "Value #A": 5,
-                  "Value #B": 6
+                  "Value #C": 5,
+                  "Value #D": 6,
+                  "Value #E": 7,
+                  "Value #F": 8,
+                  "Value #A": 9,
+                  "Value #B": 10
                 },
                 "renameByName": {
                   "process_name": "Process",
@@ -3547,6 +3779,10 @@
                   "type": "Type",
                   "container_id": "Container",
                   "systemd_unit": "Unit",
+                  "Value #C": "SM",
+                  "Value #D": "Mem",
+                  "Value #E": "Enc",
+                  "Value #F": "Dec",
                   "Value #A": "Memory",
                   "Value #B": "Share"
                 }
@@ -3555,6 +3791,82 @@
           ],
           "title": "GPU Processes",
           "type": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Per-process SM (3D/compute) utilization over time on the selected GPU. Served by the nvml and demo backends on non-MIG GPUs.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 1,
+                "fillOpacity": 20,
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "mode": "none",
+                  "group": "A"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "transparent",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "percentunit",
+              "noValue": "No process utilization data",
+              "max": 1
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 6,
+            "y": 37,
+            "w": 9,
+            "h": 6
+          },
+          "id": 70,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "11.2.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "max by (uuid, pid, process_name) (nvidia_smi_compute_app_sm_utilization_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} or nvidia_smi_graphics_app_sm_utilization_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"})",
+              "legendFormat": "{{process_name}} ({{pid}})",
+              "refId": "A"
+            }
+          ],
+          "title": "Process SM Utilization",
+          "type": "timeseries"
         },
         {
           "datasource": {
@@ -3598,9 +3910,9 @@
             "overrides": []
           },
           "gridPos": {
-            "x": 6,
+            "x": 15,
             "y": 37,
-            "w": 18,
+            "w": 9,
             "h": 6
           },
           "id": 51,
@@ -3623,7 +3935,7 @@
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "nvidia_smi_compute_app_used_memory_bytes{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} or nvidia_smi_graphics_app_used_memory_bytes{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+              "expr": "max by (uuid, pid, process_name) (nvidia_smi_compute_app_used_memory_bytes{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} or nvidia_smi_graphics_app_used_memory_bytes{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"})",
               "legendFormat": "{{process_name}} ({{pid}})",
               "refId": "A"
             }

@@ -62,7 +62,10 @@ and failed-collection cases, before committing.
   the form `... nvidia_smi_gpu_info * 0 - 1`, and `-1` maps to an n/a-style cell.
   Without it, a totally absent series makes the join drop whole columns. The
   sentinel arm must be aggregated down to the same labels as the joined left
-  side, otherwise it doubles the series.
+  side, otherwise it doubles the series. When a merged table target does not
+  already strip `__name__` via an arithmetic join, add `+ 0` to bare metric
+  selectors so differing `__name__` values do not prevent Grafana's `merge`
+  transformation from joining rows across targets.
 - **MIG joins must tolerate heterogeneous compute instances.** A GPU instance
   hosting several compute instances hard-errors any join carrying the profile
   label. Strip the compute-instance prefix with `label_replace` before

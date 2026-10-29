@@ -154,13 +154,17 @@ type GPUExporter struct {
 	ctx                   context.Context //nolint:containedctx
 }
 
-// appDescs bundles the four descriptors of a per-process metric family
-// (compute or graphics), nil as a whole when the feature is off.
+// appDescs bundles the descriptors of a per-process metric family (compute or
+// graphics), nil as a whole when the feature is off.
 type appDescs struct {
-	info    *prometheus.Desc
-	memory  *prometheus.Desc
-	count   *prometheus.Desc
-	success *prometheus.Desc
+	info        *prometheus.Desc
+	memory      *prometheus.Desc
+	smUtil      *prometheus.Desc
+	memoryUtil  *prometheus.Desc
+	encoderUtil *prometheus.Desc
+	decoderUtil *prometheus.Desc
+	count       *prometheus.Desc
+	success     *prometheus.Desc
 }
 
 func (a *appDescs) all() []*prometheus.Desc {
@@ -168,7 +172,11 @@ func (a *appDescs) all() []*prometheus.Desc {
 		return nil
 	}
 
-	return []*prometheus.Desc{a.info, a.memory, a.count, a.success}
+	return []*prometheus.Desc{
+		a.info, a.memory,
+		a.smUtil, a.memoryUtil, a.encoderUtil, a.decoderUtil,
+		a.count, a.success,
+	}
 }
 
 // migDescs bundles the per-MIG-instance descriptors, nil as a whole when the
@@ -312,8 +320,8 @@ func addHealthDescs(exp *GPUExporter, prefix string, exitCodeMetric ExitCodeMetr
 }
 
 // newAppDescs builds a per-process metric family's descriptors (info, memory,
-// count, success) for the given kind ("compute" or "graphics"), nil when the
-// feature is disabled.
+// utilization, count, success) for the given kind ("compute" or "graphics"),
+// nil when the feature is disabled.
 func newAppDescs(prefix, kind string, enabled, migLabels, identityLabels bool) *appDescs {
 	if !enabled {
 		return nil
@@ -330,6 +338,28 @@ func newAppDescs(prefix, kind string, enabled, migLabels, identityLabels bool) *
 		memory: prometheus.NewDesc(
 			prometheus.BuildFQName(prefix, "", kind+"_app_used_memory_bytes"),
 			"GPU memory used by the process. Absent when the driver cannot report it (e.g. Windows WDDM).",
+			labels,
+			nil),
+		smUtil: prometheus.NewDesc(
+			prometheus.BuildFQName(prefix, "", kind+"_app_sm_utilization_ratio"),
+			"Fraction of time the process used the GPU's SMs (3D/compute) during the most recent sample period (0 to 1).",
+			labels,
+			nil,
+		),
+		memoryUtil: prometheus.NewDesc(
+			prometheus.BuildFQName(prefix, "", kind+"_app_memory_utilization_ratio"),
+			"Fraction of time the process accessed the GPU's framebuffer memory during the most recent sample period (0 to 1).",
+			labels,
+			nil,
+		),
+		encoderUtil: prometheus.NewDesc(
+			prometheus.BuildFQName(prefix, "", kind+"_app_encoder_utilization_ratio"),
+			"Fraction of time the process used the GPU's video encoder during the most recent sample period (0 to 1).",
+			labels,
+			nil),
+		decoderUtil: prometheus.NewDesc(
+			prometheus.BuildFQName(prefix, "", kind+"_app_decoder_utilization_ratio"),
+			"Fraction of time the process used the GPU's video decoder during the most recent sample period (0 to 1).",
 			labels,
 			nil),
 		count: prometheus.NewDesc(
@@ -726,9 +756,16 @@ func (e *GPUExporter) renderAppSet(
 	}
 }
 
-// renderApp emits the info and memory metrics for a single process.
+// renderApp emits the info, utilization, and memory metrics for a single process.
 func (e *GPUExporter) renderApp(metricCh chan<- prometheus.Metric, descs *appDescs, app nvidiasmi.ComputeApp) {
 	e.sendAppMetric(metricCh, descs.info, 1, app)
+
+	if util := app.Utilization; util != nil {
+		e.sendAppMetric(metricCh, descs.smUtil, util.SMRatio, app)
+		e.sendAppMetric(metricCh, descs.memoryUtil, util.MemoryRatio, app)
+		e.sendAppMetric(metricCh, descs.encoderUtil, util.EncoderRatio, app)
+		e.sendAppMetric(metricCh, descs.decoderUtil, util.DecoderRatio, app)
+	}
 
 	if nvidiasmi.IsKnownAbsentValue(app.UsedMemory) {
 		// an expected state ("[N/A]" on Windows WDDM, "[Insufficient
@@ -922,10 +959,14 @@ var fixedMetricNames = []string{
 	// identity
 	"gpu_info",
 	// per-process
-	"compute_app_info", "compute_app_used_memory_bytes", "compute_apps",
-	"compute_apps_last_collect_success",
-	"graphics_app_info", "graphics_app_used_memory_bytes", "graphics_apps",
-	"graphics_apps_last_collect_success",
+	"compute_app_info", "compute_app_used_memory_bytes",
+	"compute_app_sm_utilization_ratio", "compute_app_memory_utilization_ratio",
+	"compute_app_encoder_utilization_ratio", "compute_app_decoder_utilization_ratio",
+	"compute_apps", "compute_apps_last_collect_success",
+	"graphics_app_info", "graphics_app_used_memory_bytes",
+	"graphics_app_sm_utilization_ratio", "graphics_app_memory_utilization_ratio",
+	"graphics_app_encoder_utilization_ratio", "graphics_app_decoder_utilization_ratio",
+	"graphics_apps", "graphics_apps_last_collect_success",
 	// nvml extras
 	"pcie_throughput_tx_bytes_per_second", "pcie_throughput_rx_bytes_per_second",
 	"energy_joules_total",

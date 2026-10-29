@@ -109,7 +109,7 @@ has_nvml_families() {
   # selector out of its five-minute lookback, so a family that stopped being
   # served during this run would still satisfy it
   local family
-  for family in nvidia_smi_mig_info nvidia_smi_energy_joules_total nvidia_smi_xid_errors_total; do
+  for family in nvidia_smi_mig_info nvidia_smi_energy_joules_total nvidia_smi_xid_errors_total nvidia_smi_compute_app_sm_utilization_ratio; do
     has_series "count(time() - timestamp($family{instance=\"$machine\"}) < 20) > 0" || return 1
   done
 }

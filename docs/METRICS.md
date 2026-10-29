@@ -272,18 +272,41 @@ nvidia_smi_compute_apps{uuid="00000000-0000-0000-0000-000000000000"} 2
 nvidia_smi_compute_apps_last_collect_success 1
 ```
 
-On the NVML and demo backends, `--collect.graphics-apps` emits the same four
+On the NVML and demo backends, `--collect.compute-apps` also emits four
+per-process engine utilization gauges (`0.0` to `1.0`) on the same label set:
+
+- `nvidia_smi_compute_app_sm_utilization_ratio`: SM (3D/compute) utilization
+  ratio of the process over the driver's recent sampling window.
+- `nvidia_smi_compute_app_memory_utilization_ratio`: memory bandwidth
+  utilization ratio of the process over the driver's recent sampling window.
+- `nvidia_smi_compute_app_encoder_utilization_ratio`: video encoder (NVENC)
+  utilization ratio of the process over the driver's recent sampling window.
+- `nvidia_smi_compute_app_decoder_utilization_ratio`: video decoder (NVDEC)
+  utilization ratio of the process over the driver's recent sampling window.
+
+Active processes that were idle during the sampling window report `0`. When a
+GPU does not support per-process utilization (such as when MIG mode is enabled
+on the NVML backend), the utilization series are omitted for that GPU while
+`*_app_info` and `*_app_used_memory_bytes` are still served.
+
+On the NVML and demo backends, `--collect.graphics-apps` emits the matching
 series for processes holding a graphics context on a GPU
 (`nvidia_smi_graphics_app_info`, `nvidia_smi_graphics_app_used_memory_bytes`,
+`nvidia_smi_graphics_app_sm_utilization_ratio`,
+`nvidia_smi_graphics_app_memory_utilization_ratio`,
+`nvidia_smi_graphics_app_encoder_utilization_ratio`,
+`nvidia_smi_graphics_app_decoder_utilization_ratio`,
 `nvidia_smi_graphics_apps`, and
 `nvidia_smi_graphics_apps_last_collect_success`). A process that holds both a
-compute and a graphics context appears in both families.
+compute and a graphics context appears in both families and shares the same
+PID-level utilization reading.
 
 With `--collect.compute-apps-identity` (requires `--collect.compute-apps` or
 `--collect.graphics-apps`, and Linux or the demo backend), the per-process
-`*_app_info` and `*_app_used_memory_bytes` series additionally carry two
-best-effort workload identity labels read from `/proc/<pid>/cgroup` (requires
-host PID visibility when the exporter runs in a container):
+`*_app_info`, `*_app_used_memory_bytes`, and `*_app_*_utilization_ratio` series
+additionally carry two best-effort workload identity labels read from
+`/proc/<pid>/cgroup` (requires host PID visibility when the exporter runs in a
+container):
 
 - `container_id`: the lowercase 64-character hexadecimal container ID for
   processes running inside a Docker, containerd, CRI-O or Podman container, or

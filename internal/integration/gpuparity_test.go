@@ -557,6 +557,14 @@ var nvmlOnlyFamilyPrefixes = []string{
 	"nvidia_smi_mig_sm_occupancy_ratio",
 	"nvidia_smi_mig_tensor_activity_ratio",
 	"nvidia_smi_mig_pcie_throughput_",
+	"nvidia_smi_compute_app_sm_utilization_ratio",
+	"nvidia_smi_compute_app_memory_utilization_ratio",
+	"nvidia_smi_compute_app_encoder_utilization_ratio",
+	"nvidia_smi_compute_app_decoder_utilization_ratio",
+	"nvidia_smi_graphics_app_sm_utilization_ratio",
+	"nvidia_smi_graphics_app_memory_utilization_ratio",
+	"nvidia_smi_graphics_app_encoder_utilization_ratio",
+	"nvidia_smi_graphics_app_decoder_utilization_ratio",
 	// xid series appear only after an event is observed, so their presence
 	// is asserted by the GPU-box runbook (which triggers a real XID), not
 	// here
