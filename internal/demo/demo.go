@@ -65,6 +65,7 @@ type Backend struct {
 	rng *demoRand
 
 	energy map[string]*energyState
+	nvlink map[string]*nvlinkState
 	xids   map[string]map[uint64]*xidStat
 	// xidsSeeded records that the initial events were applied (they resolve
 	// GPU indexes against the first served table).
@@ -74,6 +75,9 @@ type Backend struct {
 	// real backend's GPM sampling, utilization needs a sample pair, so the
 	// first cycle that sees a GPU instance serves no utilization for it.
 	seenGIs map[string]bool
+	// seenGPUs tracks whole GPUs previous cycles served for whole-GPU GPM
+	// activity ratios.
+	seenGPUs map[string]bool
 }
 
 // energyState is one GPU's energy integration state.
@@ -81,6 +85,13 @@ type energyState struct {
 	joules    float64
 	lastPower float64
 	lastAt    time.Time
+}
+
+// nvlinkState is one GPU's cumulative NVLink throughput state.
+type nvlinkState struct {
+	txBytes uint64
+	rxBytes uint64
+	lastAt  time.Time
 }
 
 // xidStat is one (GPU, XID code) pair's running state.
@@ -188,6 +199,12 @@ func (b *Backend) XIDCounts() []collect.XIDCounter {
 	return counters
 }
 
+// XIDWatcherEnabled reports that the synthetic XID watcher is active in demo
+// mode.
+func (b *Backend) XIDWatcherEnabled() bool {
+	return true
+}
+
 // preflight proves the configuration actually serves a GPU table: the capture
 // must exist, hold the requested state, and the identity/override resolution
 // must go through. Without it, a bad capture name would pass the YAML
@@ -209,10 +226,12 @@ func (b *Backend) preflight(snap snapshot) error {
 func (b *Backend) resetState(snap snapshot) {
 	b.rng = newDemoRand(snap.extras.Seed)
 	b.energy = map[string]*energyState{}
+	b.nvlink = map[string]*nvlinkState{}
 	b.xids = map[string]map[uint64]*xidStat{}
 	b.xidsSeeded = false
 	b.nextXIDAt = time.Time{}
 	b.seenGIs = map[string]bool{}
+	b.seenGPUs = map[string]bool{}
 }
 
 // loadSnapshot reads and validates one immutable configuration, reconciling
@@ -318,7 +337,10 @@ func (b *Backend) overlay(reading *collect.Reading) {
 
 	b.synthEnergy(uuids, power, snap.extras, now, reading)
 	b.synthPCIe(uuids, snap.extras, reading)
+	synthPCIeReplays(uuids, reading)
+	b.synthNVLink(uuids, now, reading)
 	b.synthMIG(uuids, snap.extras, reading)
+	b.synthGPM(uuids, snap.extras, reading)
 	synthGraphicsApps(uuids, reading)
 	attributeApps(uuids, snap.extras, reading)
 	synthAppIdentity(reading)

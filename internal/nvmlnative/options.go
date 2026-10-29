@@ -13,6 +13,14 @@ type CollectOptions struct {
 	// blocks inside the driver for a 20ms sampling window per direction, so
 	// this is a deliberate opt-in (--collect.pcie-throughput).
 	PCIeThroughput bool
+	// PCIeReplays enables the per-GPU PCIe replay and replay-rollover
+	// counters.
+	PCIeReplays bool
+	// NVLink enables the per-GPU aggregate NVLink throughput counters.
+	NVLink bool
+	// GPM enables the whole-GPU GPM activity ratios on non-MIG GPUs that
+	// support GPM.
+	GPM bool
 	// Energy enables the per-GPU cumulative energy counter.
 	Energy bool
 	// MIG enables the per-MIG-instance readings. GPUs without MIG mode

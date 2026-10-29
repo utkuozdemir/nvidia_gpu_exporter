@@ -127,6 +127,12 @@ required = {
     "NvidiaGpuThermalSlowdown": ["fans", "airflow"],
     "NvidiaGpuSoftwareThermalSlowdown": ["cooling"],
     "NvidiaGpuPowerBrake": ["PSU", "cables"],
+    "NvidiaGpuTemperatureTlimitLow": ["headroom", "airflow"],
+    "NvidiaGpuPcieLinkGenDegraded": ["riser", "BIOS"],
+    "NvidiaGpuPcieLinkWidthDegraded": ["riser", "bifurcation"],
+    "NvidiaGpuPcieReplayRollovers": ["riser", "AER"],
+    "NvidiaGpuIdleVramAllocated": ["idle", "workloads"],
+    "NvidiaGpuComputeAppsInvisible": ["hostPID"],
     "NvidiaGpuExporterCollectionSlow": ["persistence"],
     "NvidiaGpuMissing": ["Xid 79", "reseat"],
 }

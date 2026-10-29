@@ -1649,12 +1649,205 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Fraction of the enforced power limit currently drawn by each selected GPU. Sustained operation near 100% alongside coarse GPU utilization indicates true compute saturation.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 36
+      },
+      "id": 43,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(nvidia_smi_power_draw_watts{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"} / (nvidia_smi_enforced_power_limit_watts{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"} or nvidia_smi_power_limit_watts{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"} or nvidia_smi_power_default_limit_watts{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"})) * on(uuid) group_left(index, name) nvidia_smi_gpu_info{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"}",
+          "instant": false,
+          "range": true,
+          "refId": "A",
+          "legendFormat": "#{{index}} {{name}}"
+        }
+      ],
+      "title": "Power Limit Utilization %",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Fraction of time each selected GPU's clocks were throttled by the software power cap over the rate window. Requires driver 550+ (clocks_event_reasons_counters.sw_power_cap).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "noValue": "N/A"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 36
+      },
+      "id": 44,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(rate(nvidia_smi_clocks_event_reasons_counters_sw_power_cap_seconds{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"}[$__rate_interval])) * on(uuid) group_left(index, name) nvidia_smi_gpu_info{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"}",
+          "instant": false,
+          "range": true,
+          "refId": "A",
+          "legendFormat": "#{{index}} {{name}}"
+        }
+      ],
+      "title": "Power Cap Throttling %",
+      "type": "timeseries"
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 36
+        "y": 44
       },
       "id": 15,
       "panels": [],
@@ -1723,7 +1916,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 37
+        "y": 45
       },
       "id": 16,
       "options": {
@@ -1875,7 +2068,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 37
+        "y": 45
       },
       "id": 17,
       "options": {
@@ -1916,7 +2109,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 44
+        "y": 52
       },
       "id": 4,
       "panels": [
@@ -1983,7 +2176,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 45
+            "y": 53
           },
           "id": 2,
           "options": {
@@ -2078,7 +2271,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 45
+            "y": 53
           },
           "id": 3,
           "options": {
@@ -2120,7 +2313,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 45
+        "y": 53
       },
       "id": 31,
       "panels": [
@@ -2189,7 +2382,7 @@
             "h": 8,
             "w": 8,
             "x": 0,
-            "y": 46
+            "y": 54
           },
           "id": 32,
           "options": {
@@ -2286,7 +2479,7 @@
             "h": 8,
             "w": 8,
             "x": 8,
-            "y": 46
+            "y": 54
           },
           "id": 33,
           "options": {
@@ -2383,7 +2576,7 @@
             "h": 8,
             "w": 8,
             "x": 16,
-            "y": 46
+            "y": 54
           },
           "id": 34,
           "options": {
@@ -2480,7 +2673,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 54
+            "y": 62
           },
           "id": 35,
           "options": {
@@ -2576,7 +2769,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 54
+            "y": 62
           },
           "id": 36,
           "options": {
@@ -2618,7 +2811,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 46
+        "y": 54
       },
       "id": 37,
       "panels": [
@@ -3033,7 +3226,7 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 47,
+            "y": 55,
             "w": 24,
             "h": 7
           },
@@ -3235,7 +3428,7 @@
           },
           "gridPos": {
             "x": 6,
-            "y": 54,
+            "y": 62,
             "w": 9,
             "h": 6
           },
@@ -3310,7 +3503,7 @@
           },
           "gridPos": {
             "x": 15,
-            "y": 54,
+            "y": 62,
             "w": 9,
             "h": 6
           },
@@ -3387,7 +3580,7 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 54,
+            "y": 62,
             "w": 6,
             "h": 3
           },
@@ -3470,7 +3663,7 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 57,
+            "y": 65,
             "w": 6,
             "h": 3
           },
@@ -3518,7 +3711,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 47
+        "y": 55
       },
       "id": 18,
       "panels": [
@@ -3586,7 +3779,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 48
+            "y": 56
           },
           "id": 19,
           "options": {
@@ -3681,7 +3874,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 48
+            "y": 56
           },
           "id": 20,
           "options": {
@@ -3726,7 +3919,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 48
+        "y": 56
       },
       "id": 21,
       "panels": [
@@ -3793,7 +3986,7 @@
             "h": 8,
             "w": 8,
             "x": 0,
-            "y": 49
+            "y": 57
           },
           "id": 22,
           "options": {
@@ -3888,7 +4081,7 @@
             "h": 8,
             "w": 8,
             "x": 8,
-            "y": 49
+            "y": 57
           },
           "id": 23,
           "options": {
@@ -3983,7 +4176,7 @@
             "h": 8,
             "w": 8,
             "x": 16,
-            "y": 49
+            "y": 57
           },
           "id": 24,
           "options": {
@@ -4070,7 +4263,8 @@
                 ]
               },
               "unit": "none",
-              "decimals": 0
+              "decimals": 0,
+              "noValue": "No XID data"
             },
             "overrides": []
           },
@@ -4078,7 +4272,7 @@
             "h": 8,
             "w": 8,
             "x": 0,
-            "y": 57
+            "y": 65
           },
           "id": 25,
           "options": {
@@ -4100,7 +4294,7 @@
                 "uid": "${datasource}"
               },
               "editorMode": "code",
-              "expr": "(sum by (uuid) (nvidia_smi_xid_errors_total{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"})) * on(uuid) group_left(index, name) (max by (uuid, index, name) (nvidia_smi_gpu_info{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"})) or ((max by (uuid, index, name) (nvidia_smi_gpu_info{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"})) * 0) or (sum by (uuid) (nvidia_smi_xid_errors_total{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"}) unless on(uuid) nvidia_smi_gpu_info{instance=\"$node\", job=\"$job\"})",
+              "expr": "(sum by (uuid) (nvidia_smi_xid_errors_total{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"})) * on(uuid) group_left(index, name) (max by (uuid, index, name) (nvidia_smi_gpu_info{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"})) or (((max by (uuid, index, name) (nvidia_smi_gpu_info{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"})) * 0) and on() (max(nvidia_smi_xid_watcher_enabled{instance=\"$node\", job=\"$job\"}) == 1)) or (sum by (uuid) (nvidia_smi_xid_errors_total{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"}) unless on(uuid) nvidia_smi_gpu_info{instance=\"$node\", job=\"$job\"})",
               "instant": false,
               "range": true,
               "refId": "A",
@@ -4118,6 +4312,7 @@
           "fieldConfig": {
             "defaults": {
               "unit": "s",
+              "noValue": "No XID data",
               "mappings": [
                 {
                   "type": "value",
@@ -4221,12 +4416,12 @@
           "type": "table",
           "id": 28,
           "title": "Last XID per GPU",
-          "description": "Seconds since each GPU last raised each XID code. 'Never' means no errors since the exporter started. This is the signal to alert on: unlike increase() on the error counter, it also sees each series' first event (see METRICS.md). Served only by the nvml and demo backends; absent under the default exec backend.",
+          "description": "Seconds since each GPU last raised each XID code. 'Never' means no errors since the exporter started. This is the signal to alert on: unlike increase() on the error counter, it also sees each series' first event (see METRICS.md). Served only by the nvml and demo backends, absent under the default exec backend.",
           "gridPos": {
             "h": 8,
             "w": 8,
             "x": 8,
-            "y": 57
+            "y": 65
           },
           "targets": [
             {
@@ -4234,7 +4429,7 @@
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "(time() - max by (uuid, xid) (nvidia_smi_xid_last_timestamp_seconds{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"})) * on(uuid) group_left(index, name) (max by (uuid, index, name) (nvidia_smi_gpu_info{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"})) or ((max by (uuid, index, name) (nvidia_smi_gpu_info{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"})) * 0 - 1) unless on(uuid) nvidia_smi_xid_last_timestamp_seconds{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"} or ((time() - max by (uuid, xid) (nvidia_smi_xid_last_timestamp_seconds{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"})) unless on(uuid) nvidia_smi_gpu_info{instance=\"$node\", job=\"$job\"})",
+              "expr": "(time() - max by (uuid, xid) (nvidia_smi_xid_last_timestamp_seconds{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"})) * on(uuid) group_left(index, name) (max by (uuid, index, name) (nvidia_smi_gpu_info{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"})) or ((((max by (uuid, index, name) (nvidia_smi_gpu_info{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"})) * 0 - 1) and on() (max(nvidia_smi_xid_watcher_enabled{instance=\"$node\", job=\"$job\"}) == 1)) unless on(uuid) nvidia_smi_xid_last_timestamp_seconds{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"}) or ((time() - max by (uuid, xid) (nvidia_smi_xid_last_timestamp_seconds{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"})) unless on(uuid) nvidia_smi_gpu_info{instance=\"$node\", job=\"$job\"})",
               "format": "table",
               "instant": true,
               "legendFormat": "",
@@ -4383,7 +4578,7 @@
             "h": 8,
             "w": 8,
             "x": 16,
-            "y": 57
+            "y": 65
           },
           "targets": [
             {
@@ -4440,7 +4635,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "SM activity per MIG GPU instance across the node's partitioned GPUs. Empty when no GPU has MIG partitions; the first collection that sees an instance serves nothing (the sampling needs a pair of collections). Served only by the nvml and demo backends; absent under the default exec backend.",
+          "description": "SM activity per MIG GPU instance across partitioned GPUs, and per whole GPU across unpartitioned GPUs. Empty when no GPU supports GPM, and the first collection serves nothing because sampling needs a pair of collections. Served only by the nvml and demo backends, absent under the default exec backend.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -4490,7 +4685,7 @@
                 ]
               },
               "unit": "percentunit",
-              "noValue": "No MIG activity data"
+              "noValue": "No GPM activity data"
             },
             "overrides": []
           },
@@ -4498,7 +4693,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 65
+            "y": 73
           },
           "id": 26,
           "options": {
@@ -4525,9 +4720,21 @@
               "range": true,
               "refId": "A",
               "legendFormat": "#{{index}} GI {{gpu_instance_id}} ({{profile}})"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "(nvidia_smi_sm_activity_ratio{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"}) * on(uuid) group_left(index, name) nvidia_smi_gpu_info{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"}",
+              "instant": false,
+              "range": true,
+              "refId": "B",
+              "legendFormat": "#{{index}} {{name}}"
             }
           ],
-          "title": "MIG SM Activity",
+          "title": "SM Activity (GPM)",
           "type": "timeseries"
         },
         {
@@ -4542,7 +4749,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 65
+            "y": 73
           },
           "type": "bargauge",
           "pluginVersion": "11.2.0",

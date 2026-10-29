@@ -1106,3 +1106,112 @@ func TestMemoryInfoFallbackWhenV2Missing(t *testing.T) {
 	assert.Equal(t, "1024 MiB", cellValue(t, reading.Table, "memory.used"))
 	assert.Equal(t, "7168 MiB", cellValue(t, reading.Table, "memory.free"))
 }
+
+func TestExtrasPcieReplays(t *testing.T) {
+	t.Parallel()
+
+	dev := identityDevice()
+	dev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 12340, nvml.SUCCESS }
+	dev.GetFieldValuesFunc = func(values []nvml.FieldValue) nvml.Return {
+		for idx := range values {
+			values[idx].NvmlReturn = uint32(nvml.SUCCESS)
+			values[idx].ValueType = uint32(nvml.VALUE_TYPE_UNSIGNED_INT)
+
+			switch values[idx].FieldId {
+			case nvml.FI_DEV_PCIE_REPLAY_COUNTER:
+				binary.LittleEndian.PutUint32(values[idx].Value[:], 7)
+			case nvml.FI_DEV_PCIE_REPLAY_ROLLOVER_COUNTER:
+				binary.LittleEndian.PutUint32(values[idx].Value[:], 1)
+			}
+		}
+
+		return nvml.SUCCESS
+	}
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
+
+	reading, _, err := backend.QueryFunc(
+		resolveFields(t, "power.draw"),
+		CollectOptions{PCIeReplays: true},
+	)(t.Context())
+	require.NoError(t, err)
+	require.Len(t, reading.Extras.PCIeReplays, 1)
+	assert.Equal(t, "11111111-2222-3333-4444-555555555555", reading.Extras.PCIeReplays[0].UUID)
+	require.NotNil(t, reading.Extras.PCIeReplays[0].Replays)
+	assert.Equal(t, uint64(7), *reading.Extras.PCIeReplays[0].Replays)
+	require.NotNil(t, reading.Extras.PCIeReplays[0].Rollovers)
+	assert.Equal(t, uint64(1), *reading.Extras.PCIeReplays[0].Rollovers)
+}
+
+func TestExtrasNVLink(t *testing.T) {
+	t.Parallel()
+
+	linkCount := uint32(18)
+	throughputRet := uint32(nvml.SUCCESS)
+
+	dev := identityDevice()
+	dev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 12340, nvml.SUCCESS }
+	dev.GetFieldValuesFunc = func(values []nvml.FieldValue) nvml.Return {
+		fillNVLinkFieldValues(t, values, linkCount, throughputRet)
+
+		return nvml.SUCCESS
+	}
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
+	query := backend.QueryFunc(resolveFields(t, "power.draw"), CollectOptions{NVLink: true})
+
+	reading, _, err := query(t.Context())
+	require.NoError(t, err)
+	require.Len(t, reading.Extras.NVLink, 1)
+	assert.Equal(t, "11111111-2222-3333-4444-555555555555", reading.Extras.NVLink[0].UUID)
+	require.NotNil(t, reading.Extras.NVLink[0].TXBytes)
+	assert.Equal(t, uint64(100*1024), *reading.Extras.NVLink[0].TXBytes)
+	require.NotNil(t, reading.Extras.NVLink[0].RXBytes)
+	assert.Equal(t, uint64(200*1024), *reading.Extras.NVLink[0].RXBytes)
+
+	// connector present (linkCount > 0) but no active NVLink bridge:
+	// ERROR_NOT_SUPPORTED on 138/139 omits the series
+	throughputRet = uint32(nvml.ERROR_NOT_SUPPORTED)
+
+	reading, _, err = query(t.Context())
+	require.NoError(t, err)
+	assert.Empty(t, reading.Extras.NVLink)
+
+	// zero links omits without querying throughput
+	linkCount = 0
+
+	reading, _, err = query(t.Context())
+	require.NoError(t, err)
+	assert.Empty(t, reading.Extras.NVLink)
+}
+
+func fillNVLinkFieldValues(
+	t *testing.T,
+	values []nvml.FieldValue,
+	linkCount, throughputRet uint32,
+) {
+	t.Helper()
+
+	for idx := range values {
+		switch values[idx].FieldId {
+		case nvml.FI_DEV_NVLINK_LINK_COUNT:
+			values[idx].NvmlReturn = uint32(nvml.SUCCESS)
+			values[idx].ValueType = uint32(nvml.VALUE_TYPE_UNSIGNED_INT)
+			binary.LittleEndian.PutUint32(values[idx].Value[:], linkCount)
+		case nvml.FI_DEV_NVLINK_THROUGHPUT_DATA_TX:
+			assert.Equal(t, uint32(0xffffffff), values[idx].ScopeId)
+
+			values[idx].NvmlReturn = throughputRet
+			values[idx].ValueType = uint32(nvml.VALUE_TYPE_UNSIGNED_LONG_LONG)
+			binary.LittleEndian.PutUint64(values[idx].Value[:], 100)
+		case nvml.FI_DEV_NVLINK_THROUGHPUT_DATA_RX:
+			assert.Equal(t, uint32(0xffffffff), values[idx].ScopeId)
+
+			values[idx].NvmlReturn = throughputRet
+			values[idx].ValueType = uint32(nvml.VALUE_TYPE_UNSIGNED_LONG_LONG)
+			binary.LittleEndian.PutUint64(values[idx].Value[:], 200)
+		}
+	}
+}

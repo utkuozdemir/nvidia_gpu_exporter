@@ -270,7 +270,7 @@ func Run(ctx context.Context, args []string, opts Options) error {
 
 	registry := prometheus.NewRegistry()
 
-	exp, err := setupExporter(ctx, eg, collectCfg, registry, logger)
+	exp, peeker, xids, err := setupExporter(ctx, eg, collectCfg, registry, logger)
 	if err != nil {
 		return err
 	}
@@ -280,7 +280,7 @@ func Run(ctx context.Context, args []string, opts Options) error {
 		enablePprof:   *enablePprof,
 		maxRequests:   *maxRequests,
 		timeoutOffset: *timeoutOffset,
-	}, registry, exp, logger)
+	}, registry, exp, peeker, xids, logger)
 	if err != nil {
 		return err
 	}
@@ -458,7 +458,7 @@ func validateWebFlags(metricsPath string, maxRequests int, timeoutOffset time.Du
 // trailing slash reserves exactly that path. The pprof subtree is reserved
 // even in runs that do not enable pprof, so enabling it later cannot turn a
 // working configuration into a startup failure.
-var reservedPaths = []string{"/-/healthy", "/-/ready", "/debug/pprof/"}
+var reservedPaths = []string{"/-/healthy", "/-/ready", "/-/gpu-healthy", "/debug/pprof/"}
 
 // validateMetricsPath rejects telemetry path values that would collide with
 // the exporter's own routes or make the route registration panic at startup.
@@ -544,51 +544,26 @@ type collectConfig struct {
 // registered: the metrics handler collects it under each scrape's own
 // context, so it lives in a per-scrape registry there. The given registry
 // gets the collectors whose output is scrape-independent.
+//
+//nolint:ireturn // returns the collection peeker and XID source interfaces for the health endpoint
 func setupExporter(
 	ctx context.Context,
 	eg *errgroup.Group,
 	cfg collectConfig,
 	registry *prometheus.Registry,
 	logger *slog.Logger,
-) (*exporter.GPUExporter, error) {
+) (*exporter.GPUExporter, collect.Peeker, exporter.XIDSource, error) {
 	resolved, query, xids, exitCodeMetric, err := setupBackend(ctx, eg, cfg, logger)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 
 	if cfg.computeAppsIdentity && cfg.backend != backendDemo {
 		query = wrapWithProcessIdentity(os.DirFS("/proc"), query)
 	}
 
-	var src collect.Source
-
-	switch {
-	case cfg.interval > 0:
-		cached := collect.NewCached(query, cfg.interval, cfg.timeout, cfg.onFatal, logger)
-
-		eg.Go(func() error { return cached.Run(ctx) })
-
-		src = cached
-	default:
-		src = collect.NewLive(query, cfg.timeout, cfg.onFatal, logger)
-	}
-
-	extrasCapable := cfg.backend == backendNVML || cfg.backend == backendDemo
-
-	features := exporter.Features{
-		ComputeApps:              cfg.computeApps,
-		GraphicsApps:             cfg.graphicsApps,
-		ComputeAppMIGLabels:      cfg.computeAppsMIG,
-		ComputeAppIdentityLabels: cfg.computeAppsIdentity,
-		// the extras families exist in the nvml backend and its demo twin;
-		// the demo serves the PCIe family unconditionally
-		PCIeThroughput: cfg.pcieThroughput || cfg.backend == backendDemo,
-		Energy:         extrasCapable,
-		MIG:            extrasCapable,
-		XIDEvents:      extrasCapable,
-	}
-
-	exp := exporter.New(ctx, exporter.DefaultPrefix, resolved, src, features, xids, exitCodeMetric, logger)
+	src, peeker := newCollectionSource(ctx, eg, cfg, query, logger)
+	exp := exporter.New(ctx, exporter.DefaultPrefix, resolved, src, buildFeatures(cfg), xids, exitCodeMetric, logger)
 
 	// the go and process collectors keep the exposed families identical to
 	// what the default registry used to serve
@@ -598,11 +573,52 @@ func setupExporter(
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	} {
 		if err = registry.Register(collector); err != nil {
-			return nil, fmt.Errorf("failed to register collector: %w", err)
+			return nil, nil, nil, fmt.Errorf("failed to register collector: %w", err)
 		}
 	}
 
-	return exp, nil
+	return exp, peeker, xids, nil
+}
+
+//nolint:ireturn // returns the collection source and peeker interfaces
+func newCollectionSource(
+	ctx context.Context,
+	eg *errgroup.Group,
+	cfg collectConfig,
+	query collect.QueryFunc,
+	logger *slog.Logger,
+) (collect.Source, collect.Peeker) {
+	if cfg.interval > 0 {
+		cached := collect.NewCached(query, cfg.interval, cfg.timeout, cfg.onFatal, logger)
+
+		eg.Go(func() error { return cached.Run(ctx) })
+
+		return cached, cached
+	}
+
+	live := collect.NewLive(query, cfg.timeout, cfg.onFatal, logger)
+
+	return live, live
+}
+
+func buildFeatures(cfg collectConfig) exporter.Features {
+	extrasCapable := cfg.backend == backendNVML || cfg.backend == backendDemo
+
+	return exporter.Features{
+		ComputeApps:              cfg.computeApps,
+		GraphicsApps:             cfg.graphicsApps,
+		ComputeAppMIGLabels:      cfg.computeAppsMIG,
+		ComputeAppIdentityLabels: cfg.computeAppsIdentity,
+		// the extras families exist in the nvml backend and its demo twin,
+		// and the demo serves the PCIe family unconditionally
+		PCIeThroughput: cfg.pcieThroughput || cfg.backend == backendDemo,
+		PCIeReplays:    extrasCapable,
+		NVLink:         extrasCapable,
+		GPM:            extrasCapable,
+		Energy:         extrasCapable,
+		MIG:            extrasCapable,
+		XIDEvents:      extrasCapable,
+	}
 }
 
 // setupBackend resolves the query fields and builds the collection function
@@ -694,6 +710,9 @@ func setupNVMLBackend(
 		ComputeApps:    cfg.computeApps,
 		GraphicsApps:   cfg.graphicsApps,
 		PCIeThroughput: cfg.pcieThroughput,
+		PCIeReplays:    true,
+		NVLink:         true,
+		GPM:            true,
 		Energy:         true,
 		MIG:            true,
 	}
@@ -887,6 +906,8 @@ func newServeMux(
 	cfg serveMuxConfig,
 	registry *prometheus.Registry,
 	exp *exporter.GPUExporter,
+	peeker collect.Peeker,
+	xids exporter.XIDSource,
 	logger *slog.Logger,
 ) (*http.ServeMux, error) {
 	mux := http.NewServeMux()
@@ -912,6 +933,7 @@ func newServeMux(
 	// must stay scrapeable so the health metrics can report the failure.
 	mux.HandleFunc("GET /-/healthy", healthHandler("Healthy"))
 	mux.HandleFunc("GET /-/ready", healthHandler("Ready"))
+	mux.HandleFunc("GET /-/gpu-healthy", gpuHealthHandler(peeker, xids))
 
 	if cfg.enablePprof {
 		logger.Info("pprof endpoints enabled")
@@ -1021,6 +1043,84 @@ func healthHandler(status string) http.HandlerFunc {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
 		_, _ = w.Write(body)
+	}
+}
+
+// gpuHealthHandler answers the cached GPU health endpoint (/-/gpu-healthy). It
+// reads the latest completed snapshot without triggering a new collection and
+// reports 200 OK when all GPUs are healthy, or 503 Service Unavailable with
+// one line per failing condition.
+func gpuHealthHandler(peeker collect.Peeker, xids exporter.XIDSource) http.HandlerFunc {
+	okBody := []byte("Nvidia GPU Exporter GPUs are Healthy.\n")
+
+	return func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
+
+		reasons := evaluateGPUHealth(peeker.Peek(), xids)
+		if len(reasons) > 0 {
+			writer.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = writer.Write([]byte(strings.Join(reasons, "\n") + "\n"))
+
+			return
+		}
+
+		_, _ = writer.Write(okBody)
+	}
+}
+
+// evaluateGPUHealth checks the latest snapshot and accumulated XID events for
+// node-level GPU failures, returning a slice of plain-text reasons (empty when
+// healthy).
+//
+//nolint:cyclop // four independent health checks
+func evaluateGPUHealth(snapshot collect.Snapshot, xids exporter.XIDSource) []string {
+	var reasons []string
+
+	switch {
+	case !snapshot.Attempted:
+		reasons = append(reasons, "no collection has completed yet")
+	case !snapshot.Success:
+		reasons = append(reasons, "most recent collection failed")
+	}
+
+	if snapshot.Table != nil {
+		for _, row := range snapshot.Table.Rows {
+			uuid := nvidiasmi.NormalizeUUID(row.QFieldToCells[nvidiasmi.UUIDQField].RawValue)
+
+			if cell, ok := row.QFieldToCells[nvidiasmi.GPURecoveryActionQField]; ok {
+				val, err := nvidiasmi.TransformFieldValue(nvidiasmi.GPURecoveryActionQField, cell.RawValue, 1)
+				if err == nil && val > 0 {
+					reasons = append(reasons, fmt.Sprintf(
+						"gpu %s requires recovery action (%s)", uuid, strings.TrimSpace(cell.RawValue)))
+				}
+			}
+		}
+	}
+
+	for _, uuid := range snapshot.MissingUUIDs {
+		reasons = append(reasons, fmt.Sprintf("gpu %s disappeared since startup", uuid))
+	}
+
+	if xids != nil {
+		for _, counter := range xids.XIDCounts() {
+			if counter.Count > 0 && isFatalXID(counter.XID) {
+				reasons = append(reasons, fmt.Sprintf(
+					"gpu %s observed fatal XID %d (count %d)", counter.UUID, counter.XID, counter.Count))
+			}
+		}
+	}
+
+	return reasons
+}
+
+// isFatalXID reports whether the XID code is a reset- or reboot-class hardware
+// fault (matching the chart's NvidiaGpuXidErrorFatal alert set).
+func isFatalXID(xid uint64) bool {
+	switch xid {
+	case 48, 62, 64, 74, 79, 95, 119, 120:
+		return true
+	default:
+		return false
 	}
 }
 

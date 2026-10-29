@@ -94,6 +94,7 @@ var guardedSymbols = []string{
 	"nvmlDeviceValidateInforom",
 	"nvmlGpmSampleAlloc",
 	"nvmlGpmSampleFree",
+	"nvmlGpmSampleGet",
 	"nvmlGpmMigSampleGet",
 	"nvmlGpmMetricsGet",
 	"nvmlEventSetCreate",

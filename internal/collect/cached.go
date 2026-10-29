@@ -23,8 +23,9 @@ type Cached struct {
 	started atomic.Bool // Run is single-use; protects the one-collection-in-flight invariant
 
 	// owned solely by the Run goroutine
-	failures uint64
-	lastOK   time.Time
+	failures  uint64
+	lastOK    time.Time
+	seenUUIDs map[string]bool
 }
 
 // NewCached returns a background-collecting source that runs a collection
@@ -39,11 +40,12 @@ func NewCached(
 	logger *slog.Logger,
 ) *Cached {
 	return &Cached{
-		query:    query,
-		interval: interval,
-		timeout:  timeout,
-		onFatal:  onFatal,
-		logger:   logger,
+		query:     query,
+		interval:  interval,
+		timeout:   timeout,
+		onFatal:   onFatal,
+		logger:    logger,
+		seenUUIDs: make(map[string]bool),
 	}
 }
 
@@ -84,12 +86,18 @@ func (s *Cached) Latest(_ context.Context) Snapshot {
 	return Snapshot{}
 }
 
+// Peek returns the most recently completed collection outcome without starting
+// a new collection.
+func (s *Cached) Peek() Snapshot {
+	return s.Latest(context.Background())
+}
+
 // tick runs one collection and publishes its outcome. The published snapshot
 // is immutable: it is never modified after Store, which is what makes the
 // lock-free reads in Latest safe.
 func (s *Cached) tick(ctx context.Context) {
 	snapshot, fatal := collectOnce(ctx, s.query, s.timeout, s.logger)
-	foldCumulative(&snapshot, &s.failures, &s.lastOK)
+	foldCumulative(&snapshot, &s.failures, &s.lastOK, s.seenUUIDs)
 	s.cur.Store(&snapshot)
 
 	// only after the outcome is published, see collectOnce

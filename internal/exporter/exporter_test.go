@@ -1054,9 +1054,12 @@ func TestComputeAppIdentityLabels(t *testing.T) {
 // staticXIDs is a canned XIDSource.
 type staticXIDs struct {
 	counters []collect.XIDCounter
+	enabled  bool
 }
 
 func (s *staticXIDs) XIDCounts() []collect.XIDCounter { return s.counters }
+
+func (s *staticXIDs) XIDWatcherEnabled() bool { return s.enabled }
 
 func TestXIDsRenderEvenWhenCollectionFails(t *testing.T) {
 	t.Parallel()

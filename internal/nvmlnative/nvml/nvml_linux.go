@@ -96,6 +96,11 @@ const (
 	FI_DEV_CLOCKS_EVENT_REASON_SYNC_BOOST              = gonvml.FI_DEV_CLOCKS_EVENT_REASON_SYNC_BOOST
 	FI_DEV_GET_GPU_RECOVERY_ACTION                     = gonvml.FI_DEV_GET_GPU_RECOVERY_ACTION
 	FI_DEV_MEMORY_TEMP                                 = gonvml.FI_DEV_MEMORY_TEMP
+	FI_DEV_NVLINK_LINK_COUNT                           = gonvml.FI_DEV_NVLINK_LINK_COUNT
+	FI_DEV_NVLINK_THROUGHPUT_DATA_RX                   = gonvml.FI_DEV_NVLINK_THROUGHPUT_DATA_RX
+	FI_DEV_NVLINK_THROUGHPUT_DATA_TX                   = gonvml.FI_DEV_NVLINK_THROUGHPUT_DATA_TX
+	FI_DEV_PCIE_REPLAY_COUNTER                         = gonvml.FI_DEV_PCIE_REPLAY_COUNTER
+	FI_DEV_PCIE_REPLAY_ROLLOVER_COUNTER                = gonvml.FI_DEV_PCIE_REPLAY_ROLLOVER_COUNTER
 	FI_DEV_POWER_AVERAGE                               = gonvml.FI_DEV_POWER_AVERAGE
 	FI_DEV_POWER_INSTANT                               = gonvml.FI_DEV_POWER_INSTANT
 
@@ -142,6 +147,7 @@ var (
 	GpmMigSampleGet            = gonvml.GpmMigSampleGet
 	GpmSampleAlloc             = gonvml.GpmSampleAlloc
 	GpmSampleFree              = gonvml.GpmSampleFree
+	GpmSampleGet               = gonvml.GpmSampleGet
 	Init                       = gonvml.Init
 	Shutdown                   = gonvml.Shutdown
 	SystemGetCudaDriverVersion = gonvml.SystemGetCudaDriverVersion

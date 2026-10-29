@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -20,10 +21,13 @@ type Live struct {
 	onFatal func(error)
 	logger  *slog.Logger
 
-	mu       sync.Mutex // guards the fields below
-	inflight *flight
-	failures uint64
-	lastOK   time.Time
+	cur atomic.Pointer[Snapshot]
+
+	mu        sync.Mutex // guards the fields below
+	inflight  *flight
+	failures  uint64
+	lastOK    time.Time
+	seenUUIDs map[string]bool
 }
 
 // flight is one shared collection run. Waiters block on done and read the
@@ -40,10 +44,11 @@ type flight struct {
 // unbounded. The onFatal callback implements shutdown-on-error and may be nil.
 func NewLive(query QueryFunc, timeout time.Duration, onFatal func(error), logger *slog.Logger) *Live {
 	return &Live{
-		query:   query,
-		timeout: timeout,
-		onFatal: onFatal,
-		logger:  logger,
+		query:     query,
+		timeout:   timeout,
+		onFatal:   onFatal,
+		logger:    logger,
+		seenUUIDs: make(map[string]bool),
 	}
 }
 
@@ -74,6 +79,16 @@ func (s *Live) Latest(ctx context.Context) Snapshot {
 			return s.noResult()
 		}
 	}
+}
+
+// Peek returns the most recently completed collection outcome without starting
+// a new collection.
+func (s *Live) Peek() Snapshot {
+	if snapshot := s.cur.Load(); snapshot != nil {
+		return *snapshot
+	}
+
+	return Snapshot{}
 }
 
 // join registers the caller as a waiter on the in-flight run, starting one
@@ -130,9 +145,10 @@ func (s *Live) run(ctx context.Context, shared *flight) {
 
 	s.mu.Lock()
 
-	foldCumulative(&snapshot, &s.failures, &s.lastOK)
+	foldCumulative(&snapshot, &s.failures, &s.lastOK, s.seenUUIDs)
 
 	if s.inflight == shared {
+		s.cur.Store(&snapshot)
 		s.inflight = nil
 	}
 

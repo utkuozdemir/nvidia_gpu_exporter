@@ -331,6 +331,29 @@ so a host whose `nvidia-smi` is failing stays scrapeable and the failure stays
 visible in the health metrics, instead of the target disappearing from
 scraping. The Helm chart's liveness and readiness probes use these endpoints.
 
+`/-/gpu-healthy` inspects the most recent collection snapshot without
+triggering a new collection and answers `200 OK` when all observed GPUs are
+healthy, or `503 Service Unavailable` with one plain-text line per failing
+condition when:
+
+- no collection has completed yet, or the most recent collection failed
+- `nvidia_smi_gpu_recovery_action > 0` on any GPU (when `gpu_recovery_action`
+  is queried and supported by the driver)
+- any GPU UUID seen in an earlier successful collection is missing from the
+  latest snapshot (for example a GPU that fell off the bus)
+- a reset/reboot-class XID (`48`, `62`, `64`, `74`, `79`, `95`, `119` or `120`)
+  has been observed since startup (`nvml` and `demo` backends)
+
+In the default synchronous mode (`--collect.interval=0`), collections only run
+when `/metrics` is scraped, so `/-/gpu-healthy` answers `503` until the first
+scrape and reflects the most recent scrape thereafter. When polling
+`/-/gpu-healthy` standalone (or to keep its reading fresh independently of
+scrape traffic), pair it with `--collect.interval`.
+
+Use `/-/gpu-healthy` for external node health scripts (such as Kubernetes Node
+Problem Detector or load-balancer health checks), and never configure it as the
+exporter container's own liveness or readiness probe.
+
 ## Per-process GPU metrics
 
 `--collect.compute-apps` additionally exports one set of metrics per process
@@ -433,10 +456,13 @@ What each backend can do (`demo` serves synthetic data, see
 | Brand-new driver fields before the catalog catches up (`AUTO`) | yes | no | no |
 | Total energy counter (`energy_joules_total`) | no | yes | yes |
 | PCIe throughput (`--collect.pcie-throughput`) | no | yes | always on |
+| PCIe replay counters (`pcie_replays_total`, `pcie_replay_rollovers_total`) | no | yes | yes |
+| Aggregate NVLink counters (`nvlink_tx_bytes_total`, `nvlink_rx_bytes_total`) | no | yes | yes |
+| Whole-GPU GPM activity ratios (`*_activity_ratio`, `sm_occupancy_ratio`, `dram_bandwidth_utilization_ratio`) | no | yes | yes |
 | Per-MIG-instance metrics (`mig_info`, `mig_memory_*`, `mig_*_ratio`) | no | yes | yes |
 | Per-process MIG attribution (`--collect.compute-apps-mig`) | no | yes | yes |
 | Per-process workload identity (`--collect.compute-apps-identity`) | Linux | yes | yes |
-| XID error counters (`xid_errors_total`) | no | yes | yes |
+| XID error counters and watcher status (`xid_errors_total`, `xid_watcher_enabled`) | no | yes | yes |
 
 The NVML-only families are documented in [METRICS.md](METRICS.md).
 

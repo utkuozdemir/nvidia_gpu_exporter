@@ -167,6 +167,11 @@ const (
 	FI_DEV_CLOCKS_EVENT_REASON_SW_POWER_CAP            = 74
 	FI_DEV_CLOCKS_EVENT_REASON_SYNC_BOOST              = 76
 	FI_DEV_MEMORY_TEMP                                 = 82
+	FI_DEV_NVLINK_LINK_COUNT                           = 91
+	FI_DEV_PCIE_REPLAY_COUNTER                         = 94
+	FI_DEV_PCIE_REPLAY_ROLLOVER_COUNTER                = 95
+	FI_DEV_NVLINK_THROUGHPUT_DATA_TX                   = 138
+	FI_DEV_NVLINK_THROUGHPUT_DATA_RX                   = 139
 	FI_DEV_POWER_AVERAGE                               = 185
 	FI_DEV_POWER_INSTANT                               = 186
 	FI_DEV_GET_GPU_RECOVERY_ACTION                     = 230
@@ -741,6 +746,28 @@ func GpmSampleAlloc() (GpmSample, Return) {
 // GpmSampleFree frees a GPM sample handle.
 func GpmSampleFree(sample GpmSample) Return {
 	return sample.Free()
+}
+
+// GpmSampleGet reads a whole-GPU GPM sample.
+func GpmSampleGet(device Device, sample GpmSample) Return {
+	dev, ok := device.(winDevice)
+	if !ok {
+		return ERROR_INVALID_ARGUMENT
+	}
+
+	smp, ok := sample.(winGpmSample)
+	if !ok {
+		return ERROR_INVALID_ARGUMENT
+	}
+
+	proc, ok := findProc("nvmlGpmSampleGet")
+	if !ok {
+		return ERROR_FUNCTION_NOT_FOUND
+	}
+
+	r1, _, _ := proc.Call(dev.handle, smp.handle)
+
+	return toReturn(r1)
 }
 
 // GpmMigSampleGet reads a MIG GPU instance GPM sample.

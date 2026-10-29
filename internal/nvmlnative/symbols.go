@@ -87,6 +87,11 @@ var nvmlSymbolRequirements = []symbolRequirement{
 		serves: "mig_*_ratio, mig_pcie_throughput_*",
 	},
 	{
+		goCall: "gpmSampleGet",
+		anyOf:  []string{"nvmlGpmSampleGet"},
+		serves: "graphics/sm/tensor_activity_ratio, sm_occupancy_ratio, dram_bandwidth_utilization_ratio",
+	},
+	{
 		goCall: "gpmMigSampleGet",
 		anyOf:  []string{"nvmlGpmMigSampleGet"},
 		serves: "mig_*_ratio, mig_pcie_throughput_*",

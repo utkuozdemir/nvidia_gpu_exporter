@@ -574,3 +574,56 @@ func TestLiveSerializesConcurrentCalls(t *testing.T) {
 
 	assert.Equal(t, int32(0), overlaps.Load())
 }
+
+func TestLivePeekAndMissingUUIDs(t *testing.T) {
+	t.Parallel()
+
+	rowWithUUID := func(uuid string) nvidiasmi.Row {
+		return nvidiasmi.Row{
+			QFieldToCells: map[nvidiasmi.QField]nvidiasmi.Cell{
+				nvidiasmi.UUIDQField: {RawValue: uuid},
+			},
+		}
+	}
+
+	var calls atomic.Int32
+
+	query := func(_ context.Context) (collect.Reading, int, error) {
+		switch calls.Add(1) {
+		case 1:
+			return collect.Reading{
+				Table: &nvidiasmi.Table{
+					Rows: []nvidiasmi.Row{
+						rowWithUUID("GPU-11111111-1111-1111-1111-111111111111"),
+						rowWithUUID("GPU-22222222-2222-2222-2222-222222222222"),
+					},
+				},
+			}, 0, nil
+		default:
+			return collect.Reading{
+				Table: &nvidiasmi.Table{
+					Rows: []nvidiasmi.Row{
+						rowWithUUID("GPU-11111111-1111-1111-1111-111111111111"),
+					},
+				},
+			}, 0, nil
+		}
+	}
+
+	live := collect.NewLive(query, 0, nil, slogt.New(t))
+
+	before := live.Peek()
+	assert.False(t, before.Attempted)
+	assert.Equal(t, int32(0), calls.Load(), "Peek must never trigger a collection")
+
+	first := live.Latest(t.Context())
+	assert.True(t, first.Success)
+	assert.Empty(t, first.MissingUUIDs)
+	assert.Equal(t, first, live.Peek())
+	assert.Equal(t, int32(1), calls.Load())
+
+	second := live.Latest(t.Context())
+	assert.True(t, second.Success)
+	assert.Equal(t, []string{"22222222-2222-2222-2222-222222222222"}, second.MissingUUIDs)
+	assert.Equal(t, second, live.Peek())
+}

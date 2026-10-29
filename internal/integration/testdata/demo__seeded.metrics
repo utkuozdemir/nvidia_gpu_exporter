@@ -443,6 +443,14 @@ nvidia_smi_mig_mode_pending{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
 # TYPE nvidia_smi_name gauge
 nvidia_smi_name{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 200
 nvidia_smi_name{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 200
+# HELP nvidia_smi_nvlink_rx_bytes_total Total bytes received by the GPU across all active NVLink links.
+# TYPE nvidia_smi_nvlink_rx_bytes_total counter
+nvidia_smi_nvlink_rx_bytes_total{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_nvlink_rx_bytes_total{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
+# HELP nvidia_smi_nvlink_tx_bytes_total Total bytes transmitted by the GPU across all active NVLink links.
+# TYPE nvidia_smi_nvlink_tx_bytes_total counter
+nvidia_smi_nvlink_tx_bytes_total{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_nvlink_tx_bytes_total{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
 # HELP nvidia_smi_nvml_return_code NVML return code of the most recent collection (0 = success)
 # TYPE nvidia_smi_nvml_return_code gauge
 nvidia_smi_nvml_return_code 0
@@ -498,6 +506,14 @@ nvidia_smi_pcie_link_width_current{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 
 # TYPE nvidia_smi_pcie_link_width_max gauge
 nvidia_smi_pcie_link_width_max{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 16
 nvidia_smi_pcie_link_width_max{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 16
+# HELP nvidia_smi_pcie_replay_rollovers_total Total PCIe link replay rollovers on the GPU since the last GPU reset or driver reload.
+# TYPE nvidia_smi_pcie_replay_rollovers_total counter
+nvidia_smi_pcie_replay_rollovers_total{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_pcie_replay_rollovers_total{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
+# HELP nvidia_smi_pcie_replays_total Total PCIe link replays on the GPU since the last GPU reset or driver reload.
+# TYPE nvidia_smi_pcie_replays_total counter
+nvidia_smi_pcie_replays_total{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_pcie_replays_total{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 4
 # HELP nvidia_smi_pcie_throughput_rx_bytes_per_second PCIe traffic received by the GPU, sampled by the driver over a dedicated 20ms window.
 # TYPE nvidia_smi_pcie_throughput_rx_bytes_per_second gauge
 nvidia_smi_pcie_throughput_rx_bytes_per_second{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 9.950037259513843e+08
@@ -653,3 +669,6 @@ nvidia_smi_utilization_ofa_ratio{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
 # HELP nvidia_smi_xid_errors_total Number of XID errors observed on the GPU since the exporter started. A series appears when its first event arrives; earlier history cannot be replayed.
 # TYPE nvidia_smi_xid_errors_total counter
 nvidia_smi_xid_errors_total{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9",xid="79"} 2
+# HELP nvidia_smi_xid_watcher_enabled Whether the XID event watcher is registered and watching for GPU XID events (1) or not (0).
+# TYPE nvidia_smi_xid_watcher_enabled gauge
+nvidia_smi_xid_watcher_enabled 1

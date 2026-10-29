@@ -97,10 +97,16 @@ func (a *xidAccumulator) counts() []collect.XIDCounter {
 }
 
 // XIDCounts serves the accumulated XID error counts to the exporter. Safe
-// for concurrent use; independent of the collection pipeline by design, so
+// for concurrent use, and independent of the collection pipeline by design, so
 // the counters stay visible while collections fail.
 func (b *Backend) XIDCounts() []collect.XIDCounter {
 	return b.xids.counts()
+}
+
+// XIDWatcherEnabled reports whether the XID event watcher currently holds an
+// active event registration on at least one GPU.
+func (b *Backend) XIDWatcherEnabled() bool {
+	return b.xidWatcherEnabled.Load()
 }
 
 // xidWatcherLog makes each watcher failure mode visible exactly once, so a
@@ -120,12 +126,16 @@ type xidWatcherLog struct {
 // dies underneath it, the watcher drives the re-initialization itself, so
 // event collection recovers even when nothing is scraping.
 func (b *Backend) RunXIDWatcher(ctx context.Context) error {
+	defer b.xidWatcherEnabled.Store(false)
+
 	warnings := &xidWatcherLog{}
 	backoff := xidBackoffStart
 
 	for ctx.Err() == nil {
 		set, uuids, generation, ok, recoverNeeded := b.xidRegister(warnings)
 		if !ok {
+			b.xidWatcherEnabled.Store(false)
+
 			if recoverNeeded {
 				// registration failed because the driver generation is
 				// dead: recover it here rather than waiting for a scrape
@@ -141,11 +151,15 @@ func (b *Backend) RunXIDWatcher(ctx context.Context) error {
 			continue
 		}
 
+		b.xidWatcherEnabled.Store(true)
+
 		// a fresh registration round may fail for fresh reasons: make them
 		// visible again instead of staying silenced forever
 		*warnings = xidWatcherLog{}
 
 		healthy := b.xidWait(ctx, set, uuids, generation)
+		b.xidWatcherEnabled.Store(false)
+
 		if healthy {
 			backoff = xidBackoffStart
 
