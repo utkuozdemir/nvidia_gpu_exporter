@@ -32,7 +32,7 @@ ARG DASHBOARD_LINTER_VERSION=0.4.0
 # renovate: depName=markdownlint-cli datasource=npm
 ARG MARKDOWNLINT_VERSION=0.50.0
 # renovate: depName=node datasource=docker
-ARG NODE_VERSION=24.22.2
+ARG NODE_VERSION=26.13.0
 # renovate: depName=koalaman/shellcheck datasource=docker
 ARG SHELLCHECK_VERSION=v0.11.0
 # the single declaration of the goreleaser version: the workflows read it from
