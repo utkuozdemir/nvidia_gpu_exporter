@@ -49,6 +49,20 @@ type ComputeApp struct {
 	// backend, and stay empty otherwise.
 	ContainerID string
 	SystemdUnit string
+	// Utilization holds per-process engine utilization ratios (0.0 to 1.0)
+	// from nvmlDeviceGetProcessUtilization in the nvml backend, or
+	// synthesized values in the demo backend. It is nil in the exec backend
+	// and on GPUs where process utilization is unsupported (such as MIG).
+	Utilization *ProcessUtilization
+}
+
+// ProcessUtilization holds the recent engine utilization ratios (0.0 to 1.0)
+// for a single GPU process.
+type ProcessUtilization struct {
+	SMRatio      float64
+	MemoryRatio  float64
+	EncoderRatio float64
+	DecoderRatio float64
 }
 
 // QueryComputeApps runs nvidia-smi --query-compute-apps and parses the CSV

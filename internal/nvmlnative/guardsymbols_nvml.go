@@ -75,6 +75,7 @@ var guardedSymbols = []string{
 	"nvmlDeviceGetPowerManagementLimit",
 	"nvmlDeviceGetPowerManagementLimitConstraints",
 	"nvmlDeviceGetPowerUsage",
+	"nvmlDeviceGetProcessUtilization",
 	"nvmlDeviceGetRemappedRows",
 	"nvmlDeviceGetRemappedRows_v2",
 	"nvmlDeviceGetRetiredPages",

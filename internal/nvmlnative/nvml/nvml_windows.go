@@ -202,6 +202,15 @@ type ProcessInfo struct {
 	ComputeInstanceId uint32
 }
 
+type ProcessUtilizationSample struct {
+	Pid       uint32
+	TimeStamp uint64
+	SmUtil    uint32
+	MemUtil   uint32
+	EncUtil   uint32
+	DecUtil   uint32
+}
+
 type processInfoV1 struct {
 	Pid           uint32
 	UsedGpuMemory uint64
@@ -384,6 +393,7 @@ const (
 	_ = uint(8-unsafe.Sizeof(DeviceAddressingMode{})) + uint(unsafe.Sizeof(DeviceAddressingMode{})-8)
 	_ = uint(4-unsafe.Sizeof(C2cModeInfo_v1{})) + uint(unsafe.Sizeof(C2cModeInfo_v1{})-4)
 	_ = uint(24-unsafe.Sizeof(ProcessInfo{})) + uint(unsafe.Sizeof(ProcessInfo{})-24)
+	_ = uint(32-unsafe.Sizeof(ProcessUtilizationSample{})) + uint(unsafe.Sizeof(ProcessUtilizationSample{})-32)
 	_ = uint(16-unsafe.Sizeof(processInfoV1{})) + uint(unsafe.Sizeof(processInfoV1{})-16)
 	_ = uint(24-unsafe.Sizeof(Memory{})) + uint(unsafe.Sizeof(Memory{})-24)
 	_ = uint(40-unsafe.Sizeof(Memory_v2{})) + uint(unsafe.Sizeof(Memory_v2{})-40)
@@ -522,6 +532,7 @@ type Device interface {
 	GetPowerManagementLimit() (uint32, Return)
 	GetPowerManagementLimitConstraints() (uint32, uint32, Return)
 	GetPowerUsage() (uint32, Return)
+	GetProcessUtilization(lastSeenTimestamp uint64) ([]ProcessUtilizationSample, Return)
 	GetRemappedRows() (int, int, bool, bool, Return)
 	GetRemappedRows_v2() (RemappedRowsInfo_v2, Return)
 	GetRetiredPages(cause PageRetirementCause) ([]uint64, Return)
@@ -1338,6 +1349,47 @@ func (d winDevice) GetPowerManagementLimitConstraints() (uint32, uint32, Return)
 
 func (d winDevice) GetPowerUsage() (uint32, Return) {
 	return d.getUint32("nvmlDeviceGetPowerUsage")
+}
+
+func (d winDevice) GetProcessUtilization(lastSeenTimestamp uint64) ([]ProcessUtilizationSample, Return) {
+	proc, ok := findProc("nvmlDeviceGetProcessUtilization")
+	if !ok {
+		return nil, ERROR_FUNCTION_NOT_FOUND
+	}
+
+	var count uint32
+
+	r1, _, _ := proc.Call(
+		d.handle,
+		0,
+		uintptr(unsafe.Pointer(&count)),
+		uintptr(lastSeenTimestamp),
+	)
+
+	ret := toReturn(r1)
+	if ret != ERROR_INSUFFICIENT_SIZE {
+		return nil, ret
+	}
+
+	if count == 0 {
+		return nil, SUCCESS
+	}
+
+	samples := make([]ProcessUtilizationSample, count)
+
+	r1, _, _ = proc.Call(
+		d.handle,
+		uintptr(unsafe.Pointer(&samples[0])),
+		uintptr(unsafe.Pointer(&count)),
+		uintptr(lastSeenTimestamp),
+	)
+
+	ret = toReturn(r1)
+	if ret != SUCCESS {
+		return nil, ret
+	}
+
+	return samples[:count], SUCCESS
 }
 
 func (d winDevice) GetRemappedRows() (int, int, bool, bool, Return) {

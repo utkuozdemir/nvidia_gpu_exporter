@@ -721,6 +721,56 @@ func TestCollectGraphicsApps(t *testing.T) {
 	assertFloat(t, 128*1024*1024, memory.GetMetric()[0].GetGauge().GetValue())
 }
 
+func TestCollectAppUtilizationAndWDDMAbsentMemory(t *testing.T) {
+	t.Parallel()
+
+	apps := []nvidiasmi.ComputeApp{
+		{
+			GPUUUID:     "abc",
+			PID:         "42",
+			ProcessName: "python",
+			UsedMemory:  "[N/A]",
+			Utilization: &nvidiasmi.ProcessUtilization{
+				SMRatio:      0.75,
+				MemoryRatio:  0.40,
+				EncoderRatio: 0.10,
+				DecoderRatio: 0.05,
+			},
+		},
+		{
+			GPUUUID:     "abc",
+			PID:         "99",
+			ProcessName: "unsupported-mig",
+			UsedMemory:  "64 MiB",
+		},
+	}
+
+	snap := appsSnapshot(gpuTable("GPU-ABC"), apps, true)
+	exp := newExtrasExporter(t, exporter.Features{ComputeApps: true}, snap)
+	families := gatherFamilies(t, exp)
+
+	// pid 42 has "[N/A]" memory (Windows WDDM) so only pid 99 emits memory
+	memory, ok := families["aaa_compute_app_used_memory_bytes"]
+	require.True(t, ok)
+	require.Len(t, memory.GetMetric(), 1)
+	assert.Equal(t, "99", labelValue(t, memory.GetMetric()[0], "pid"))
+
+	// pid 42 still emits utilization despite absent memory; pid 99 has nil
+	// utilization and emits none
+	for name, want := range map[string]float64{
+		"aaa_compute_app_sm_utilization_ratio":      0.75,
+		"aaa_compute_app_memory_utilization_ratio":  0.40,
+		"aaa_compute_app_encoder_utilization_ratio": 0.10,
+		"aaa_compute_app_decoder_utilization_ratio": 0.05,
+	} {
+		fam, exists := families[name]
+		require.True(t, exists, "missing family %s", name)
+		require.Len(t, fam.GetMetric(), 1)
+		assert.Equal(t, "42", labelValue(t, fam.GetMetric()[0], "pid"))
+		assertFloat(t, want, fam.GetMetric()[0].GetGauge().GetValue())
+	}
+}
+
 // extrasSnapshot builds a successful snapshot carrying the given extras.
 func extrasSnapshot(table *nvidiasmi.Table, extras collect.Extras) collect.Snapshot {
 	return collect.Snapshot{

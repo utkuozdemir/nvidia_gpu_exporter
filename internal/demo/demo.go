@@ -323,6 +323,7 @@ func (b *Backend) overlay(reading *collect.Reading) {
 	attributeApps(uuids, snap.extras, reading)
 	synthAppIdentity(reading)
 	b.tickXIDs(uuids, snap.extras, now)
+	b.synthAppUtilization(reading)
 }
 
 // privatePower fills the power draws the public query left out, from the

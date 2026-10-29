@@ -79,6 +79,7 @@ type device interface {
 	GetPowerManagementLimit() (uint32, nvml.Return)
 	GetPowerManagementLimitConstraints() (uint32, uint32, nvml.Return)
 	GetPowerUsage() (uint32, nvml.Return)
+	GetProcessUtilization(lastSeenTimestamp uint64) ([]nvml.ProcessUtilizationSample, nvml.Return)
 	GetRemappedRows() (int, int, bool, bool, nvml.Return)
 	GetRemappedRows_v2() (nvml.RemappedRowsInfo_v2, nvml.Return)
 	GetRetiredPages(cause nvml.PageRetirementCause) ([]uint64, nvml.Return)
@@ -656,6 +657,14 @@ func (g guardedDevice) GetPowerUsage() (uint32, nvml.Return) {
 	}
 
 	return g.dev.GetPowerUsage()
+}
+
+func (g guardedDevice) GetProcessUtilization(lastSeenTimestamp uint64) ([]nvml.ProcessUtilizationSample, nvml.Return) {
+	if !g.avail.has("nvmlDeviceGetProcessUtilization") {
+		return nil, nvml.ERROR_FUNCTION_NOT_FOUND
+	}
+
+	return g.dev.GetProcessUtilization(lastSeenTimestamp)
 }
 
 func (g guardedDevice) GetRemappedRows() (int, int, bool, bool, nvml.Return) {

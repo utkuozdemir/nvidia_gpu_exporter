@@ -624,4 +624,9 @@ var nvmlSymbolRequirements = []symbolRequirement{
 		},
 		serves: "per-process metrics",
 	},
+	{
+		goCall: "GetProcessUtilization",
+		anyOf:  []string{"nvmlDeviceGetProcessUtilization"},
+		serves: "per-process utilization metrics",
+	},
 }

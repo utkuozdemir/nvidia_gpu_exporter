@@ -39,6 +39,7 @@ type (
 	PciInfoExt                 = gonvml.PciInfoExt
 	PlatformInfo               = gonvml.PlatformInfo
 	ProcessInfo                = gonvml.ProcessInfo
+	ProcessUtilizationSample   = gonvml.ProcessUtilizationSample
 	Pstates                    = gonvml.Pstates
 	RemappedRowsInfo_v2        = gonvml.RemappedRowsInfo_v2
 	Return                     = gonvml.Return

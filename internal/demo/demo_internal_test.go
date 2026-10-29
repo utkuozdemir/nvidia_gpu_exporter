@@ -633,3 +633,42 @@ func TestWrapQueryFuncSerializesCycles(t *testing.T) {
 
 	assert.Equal(t, int64(1), peak.Load(), "cycles must never overlap: one snapshot rules one whole cycle")
 }
+
+func TestSynthAppUtilizationDualContext(t *testing.T) {
+	t.Parallel()
+
+	seed := int64(42)
+	backend := &Backend{rng: newDemoRand(&seed)}
+
+	reading := collect.Reading{
+		Apps: []nvidiasmi.ComputeApp{
+			{GPUUUID: "u0", PID: "1001", ProcessName: "train"},
+			{GPUUUID: "u1", PID: "1002", ProcessName: "train"},
+			{GPUUUID: "u1", PID: "2165", ProcessName: "/usr/bin/kwin_wayland"},
+		},
+		GraphicsApps: []nvidiasmi.ComputeApp{
+			{GPUUUID: "u0", PID: "2165", ProcessName: "/usr/bin/kwin_wayland"},
+			{GPUUUID: "u1", PID: "2165", ProcessName: "/usr/bin/kwin_wayland"},
+			{GPUUUID: "u1", PID: "2620", ProcessName: "/usr/bin/Xwayland"},
+		},
+	}
+
+	backend.synthAppUtilization(&reading)
+
+	require.NotNil(t, reading.Apps[0].Utilization)
+	assert.GreaterOrEqual(t, reading.Apps[0].Utilization.SMRatio, 0.18)
+	assert.Zero(t, reading.Apps[0].Utilization.EncoderRatio)
+
+	require.NotNil(t, reading.Apps[1].Utilization)
+	assert.GreaterOrEqual(t, reading.Apps[1].Utilization.SMRatio, 0.18)
+	assert.Zero(t, reading.Apps[1].Utilization.EncoderRatio)
+
+	require.NotNil(t, reading.Apps[2].Utilization)
+	require.NotNil(t, reading.GraphicsApps[1].Utilization)
+	assert.Same(t, reading.Apps[2].Utilization, reading.GraphicsApps[1].Utilization,
+		"dual-context PID on the same GPU must share one utilization reading")
+	assert.Greater(t, reading.GraphicsApps[1].Utilization.EncoderRatio, 0.0)
+
+	require.NotNil(t, reading.GraphicsApps[2].Utilization)
+	assert.Zero(t, reading.GraphicsApps[2].Utilization.EncoderRatio)
+}
