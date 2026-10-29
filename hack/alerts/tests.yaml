@@ -192,6 +192,79 @@ tests:
         exp_alerts:
           - exp_labels: {job: gpu, instance: a, uuid: g0, severity: warning}
 
+  # thermal tlimit headroom (rendered with the default 5C)
+  - interval: 1m
+    input_series:
+      - series: 'nvidia_smi_temperature_gpu_tlimit{job="gpu", instance="a", uuid="g0"}'
+        values: "3x20"
+      - series: 'nvidia_smi_temperature_gpu_tlimit{job="gpu", instance="a", uuid="g1"}'
+        values: "25x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: NvidiaGpuTemperatureTlimitLow
+        exp_alerts:
+          - exp_labels: {job: gpu, instance: a, uuid: g0, severity: warning}
+
+  # PCIe link generation and width degradation under load (>50% utilization),
+  # plus PCIe replay rollovers; an idle downshifted GPU (g2) must stay quiet
+  - interval: 1m
+    input_series:
+      - series: 'nvidia_smi_pcie_link_gen_current{job="gpu", instance="a", uuid="g0"}'
+        values: "2x20"
+      - series: 'nvidia_smi_pcie_link_gen_max{job="gpu", instance="a", uuid="g0"}'
+        values: "4x20"
+      - series: 'nvidia_smi_utilization_gpu_ratio{job="gpu", instance="a", uuid="g0"}'
+        values: "0.8x20"
+      - series: 'nvidia_smi_pcie_link_width_current{job="gpu", instance="a", uuid="g1"}'
+        values: "8x20"
+      - series: 'nvidia_smi_pcie_link_width_max{job="gpu", instance="a", uuid="g1"}'
+        values: "16x20"
+      - series: 'nvidia_smi_utilization_gpu_ratio{job="gpu", instance="a", uuid="g1"}'
+        values: "0.9x20"
+      - series: 'nvidia_smi_pcie_link_gen_current{job="gpu", instance="a", uuid="g2"}'
+        values: "1x20"
+      - series: 'nvidia_smi_pcie_link_gen_max{job="gpu", instance="a", uuid="g2"}'
+        values: "4x20"
+      - series: 'nvidia_smi_utilization_gpu_ratio{job="gpu", instance="a", uuid="g2"}'
+        values: "0.0x20"
+      - series: 'nvidia_smi_pcie_replay_rollovers_total{job="gpu", instance="a", uuid="g0"}'
+        values: "0 0 0 0 0 1x15"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: NvidiaGpuPcieLinkGenDegraded
+        exp_alerts:
+          - exp_labels: {job: gpu, instance: a, uuid: g0, severity: warning}
+      - eval_time: 15m
+        alertname: NvidiaGpuPcieLinkWidthDegraded
+        exp_alerts:
+          - exp_labels: {job: gpu, instance: a, uuid: g1, severity: warning}
+      - eval_time: 15m
+        alertname: NvidiaGpuPcieReplayRollovers
+        exp_alerts:
+          - exp_labels: {job: gpu, instance: a, uuid: g0, severity: warning}
+
+  # idle VRAM holding >50% memory with <5% utilization over 1h, and invisible
+  # compute apps (>1 GiB used with 0 visible compute processes for 30m)
+  - interval: 1m
+    input_series:
+      - series: 'nvidia_smi_memory_used_bytes{job="gpu", instance="a", uuid="g0"}'
+        values: "64424509440x80"
+      - series: 'nvidia_smi_memory_total_bytes{job="gpu", instance="a", uuid="g0"}'
+        values: "85899345920x80"
+      - series: 'nvidia_smi_utilization_gpu_ratio{job="gpu", instance="a", uuid="g0"}'
+        values: "0.01x80"
+      - series: 'nvidia_smi_compute_apps{job="gpu", instance="a", uuid="g0"}'
+        values: "0x80"
+    alert_rule_test:
+      - eval_time: 75m
+        alertname: NvidiaGpuIdleVramAllocated
+        exp_alerts:
+          - exp_labels: {job: gpu, instance: a, uuid: g0, severity: info}
+      - eval_time: 75m
+        alertname: NvidiaGpuComputeAppsInvisible
+        exp_alerts:
+          - exp_labels: {job: gpu, instance: a, uuid: g0, severity: warning}
+
   # GpuMissing, partial drop: one of two GPUs stops reporting at t=15m while
   # collection stays healthy
   - interval: 1m
@@ -248,6 +321,26 @@ tests:
         values: "0x30"
       - series: 'nvidia_smi_temperature_gpu{job="gpu", instance="a", uuid="g0"}'
         values: "70x30"
+      - series: 'nvidia_smi_temperature_gpu_tlimit{job="gpu", instance="a", uuid="g0"}'
+        values: "20x30"
+      - series: 'nvidia_smi_pcie_link_gen_current{job="gpu", instance="a", uuid="g0"}'
+        values: "4x30"
+      - series: 'nvidia_smi_pcie_link_gen_max{job="gpu", instance="a", uuid="g0"}'
+        values: "4x30"
+      - series: 'nvidia_smi_pcie_link_width_current{job="gpu", instance="a", uuid="g0"}'
+        values: "16x30"
+      - series: 'nvidia_smi_pcie_link_width_max{job="gpu", instance="a", uuid="g0"}'
+        values: "16x30"
+      - series: 'nvidia_smi_pcie_replay_rollovers_total{job="gpu", instance="a", uuid="g0"}'
+        values: "0x30"
+      - series: 'nvidia_smi_utilization_gpu_ratio{job="gpu", instance="a", uuid="g0"}'
+        values: "0.75x30"
+      - series: 'nvidia_smi_memory_used_bytes{job="gpu", instance="a", uuid="g0"}'
+        values: "42949672960x30"
+      - series: 'nvidia_smi_memory_total_bytes{job="gpu", instance="a", uuid="g0"}'
+        values: "85899345920x30"
+      - series: 'nvidia_smi_compute_apps{job="gpu", instance="a", uuid="g0"}'
+        values: "1x30"
       - series: 'nvidia_smi_gpu_info{job="gpu", instance="a", uuid="g0"}'
         values: "1x30"
     alert_rule_test:
@@ -280,6 +373,24 @@ tests:
         exp_alerts: []
       - eval_time: 25m
         alertname: NvidiaGpuTemperatureHigh
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: NvidiaGpuTemperatureTlimitLow
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: NvidiaGpuPcieLinkGenDegraded
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: NvidiaGpuPcieLinkWidthDegraded
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: NvidiaGpuPcieReplayRollovers
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: NvidiaGpuIdleVramAllocated
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: NvidiaGpuComputeAppsInvisible
         exp_alerts: []
       - eval_time: 25m
         alertname: NvidiaGpuMissing

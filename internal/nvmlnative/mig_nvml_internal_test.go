@@ -19,6 +19,7 @@ import (
 // values keyed by metric id.
 type gpmFake struct {
 	allocs, frees int
+	sampleRet     nvml.Return
 	migSampleRet  nvml.Return
 	metricsRet    nvml.Return
 	values        map[uint32]float64
@@ -34,6 +35,9 @@ func (g *gpmFake) install(api *nvmlAPI) {
 		g.frees++
 
 		return nvml.SUCCESS
+	}
+	api.gpmSampleGet = func(nvml.Device, nvml.GpmSample) nvml.Return {
+		return g.sampleRet
 	}
 	api.gpmMigSampleGet = func(nvml.Device, int, nvml.GpmSample) nvml.Return {
 		return g.migSampleRet
@@ -175,6 +179,7 @@ func TestMIGGPMCrossCycle(t *testing.T) {
 		gpmMetricSMUtil:        90.668,
 		gpmMetricSMOccupancy:   50,
 		gpmMetricAnyTensorUtil: 22.7059,
+		gpmMetricDramBwUtil:    65.5,
 		gpmMetricPcieTxPerSec:  100,
 		gpmMetricPcieRxPerSec:  50,
 	}}
@@ -211,6 +216,8 @@ func TestMIGGPMCrossCycle(t *testing.T) {
 	assert.InDelta(t, 0.90668, *util.SMActivityRatio, 1e-9)
 	require.NotNil(t, util.TensorActivityRatio)
 	assert.InDelta(t, 0.227059, *util.TensorActivityRatio, 1e-9)
+	require.NotNil(t, util.DRAMBandwidthUtilizationRatio)
+	assert.InDelta(t, 0.655, *util.DRAMBandwidthUtilizationRatio, 1e-9)
 	require.NotNil(t, util.PCIeTXBytesPerSecond)
 	assert.InDelta(t, 100*1048576, *util.PCIeTXBytesPerSecond, 1e-9, "GPM PCIe is MiB/s, not KB/s")
 	assert.Equal(t, 1, gpm.live(), "exactly one retained sample per GPU instance")
@@ -592,5 +599,66 @@ func TestMIGGPMFingerprintProfileChange(t *testing.T) {
 	reading, _, err := query(t.Context())
 	require.NoError(t, err)
 	assert.Nil(t, reading.Extras.MIG[0].Utilization, "a changed profile must reseed the retention")
+	assert.Equal(t, 1, gpm.live())
+}
+
+func TestWholeGPUGPMCrossCycle(t *testing.T) {
+	t.Parallel()
+
+	dev := identityDevice()
+	dev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 12340, nvml.SUCCESS }
+	dev.GetMigModeFunc = func() (int, int, nvml.Return) {
+		return nvml.DEVICE_MIG_DISABLE, nvml.DEVICE_MIG_DISABLE, nvml.SUCCESS
+	}
+	dev.GpmQueryDeviceSupportFunc = func() (nvml.GpmSupport, nvml.Return) {
+		return nvml.GpmSupport{IsSupportedDevice: 1}, nvml.SUCCESS
+	}
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+
+	gpm := &gpmFake{values: map[uint32]float64{
+		gpmMetricGraphicsUtil:  88.5,
+		gpmMetricSMUtil:        75.0,
+		gpmMetricSMOccupancy:   45.0,
+		gpmMetricAnyTensorUtil: 30.0,
+		gpmMetricDramBwUtil:    52.0,
+	}}
+
+	api := fake.api()
+	gpm.install(&api)
+
+	backend, err := newWithAPI(api, slogt.New(t))
+	require.NoError(t, err)
+
+	current := time.Now()
+	backend.now = func() time.Time { return current }
+
+	query := backend.QueryFunc(resolveFields(t, "power.draw"), CollectOptions{GPM: true})
+
+	// first cycle seeds the sample and emits nothing
+	reading, _, err := query(t.Context())
+	require.NoError(t, err)
+	assert.Empty(t, reading.Extras.GPM)
+	assert.Equal(t, 1, gpm.live())
+
+	// second cycle diffs against the retained sample
+	current = current.Add(5 * time.Second)
+
+	reading, _, err = query(t.Context())
+	require.NoError(t, err)
+	require.Len(t, reading.Extras.GPM, 1)
+
+	util := reading.Extras.GPM[0]
+	assert.Equal(t, "11111111-2222-3333-4444-555555555555", util.UUID)
+	require.NotNil(t, util.GraphicsActivityRatio)
+	assert.InDelta(t, 0.885, *util.GraphicsActivityRatio, 1e-9)
+	require.NotNil(t, util.SMActivityRatio)
+	assert.InDelta(t, 0.75, *util.SMActivityRatio, 1e-9)
+	require.NotNil(t, util.SMOccupancyRatio)
+	assert.InDelta(t, 0.45, *util.SMOccupancyRatio, 1e-9)
+	require.NotNil(t, util.TensorActivityRatio)
+	assert.InDelta(t, 0.30, *util.TensorActivityRatio, 1e-9)
+	require.NotNil(t, util.DRAMBandwidthUtilizationRatio)
+	assert.InDelta(t, 0.52, *util.DRAMBandwidthUtilizationRatio, 1e-9)
 	assert.Equal(t, 1, gpm.live())
 }

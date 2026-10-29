@@ -48,3 +48,8 @@ func (b *Backend) RunXIDWatcher(_ context.Context) error {
 func (b *Backend) XIDCounts() []collect.XIDCounter {
 	panic("nvml backend is not available in this build")
 }
+
+// XIDWatcherEnabled is never reachable: New always fails first.
+func (b *Backend) XIDWatcherEnabled() bool {
+	panic("nvml backend is not available in this build")
+}

@@ -10,19 +10,57 @@ import "time"
 // scrapers, so a retained slice must never be mutated in place.
 type Extras struct {
 	// CUDAVersion is the CUDA version the installed driver supports (for
-	// example "13.1"), empty when unknown. Both backends fill it; the
+	// example "13.1"), empty when unknown. Both backends fill it, and the
 	// exporter renders it as the cuda_version label on gpu_info.
 	CUDAVersion string
 	// PCIe holds per-GPU PCIe throughput samples. The nvml backend fills it
-	// under --collect.pcie-throughput; the demo backend always fills it.
+	// under --collect.pcie-throughput, and the demo backend always fills it.
 	PCIe []PCIeThroughput
+	// PCIeReplays holds per-GPU PCIe replay and replay-rollover counters.
+	// The nvml and demo backends fill it when supported.
+	PCIeReplays []PCIeReplayCounter
+	// NVLink holds per-GPU aggregate NVLink throughput counters in bytes.
+	// The nvml and demo backends fill it when active NVLink links exist.
+	NVLink []NVLinkThroughput
+	// GPM holds whole-GPU GPM activity readings over the inter-collection
+	// window. The nvml and demo backends fill it on non-MIG GPUs that
+	// support GPM.
+	GPM []GPUUtilization
 	// Energy holds per-GPU cumulative energy counters. The nvml and demo
-	// backends fill it; devices that cannot report it are absent.
+	// backends fill it, and devices that cannot report it are absent.
 	Energy []EnergyCounter
 	// MIG holds per-MIG-instance readings. The nvml backend fills it for
-	// GPUs with MIG mode enabled; the demo backend synthesizes its
+	// GPUs with MIG mode enabled, and the demo backend synthesizes its
 	// configured topology.
 	MIG []MIGInstance
+}
+
+// PCIeReplayCounter is one GPU's cumulative PCIe replay and replay-rollover
+// counts since the last GPU reset or driver reload.
+type PCIeReplayCounter struct {
+	UUID      string
+	Replays   *uint64
+	Rollovers *uint64
+}
+
+// NVLinkThroughput is one GPU's cumulative NVLink data traffic in bytes,
+// summed across all active links on the device.
+type NVLinkThroughput struct {
+	UUID    string
+	TXBytes *uint64
+	RXBytes *uint64
+}
+
+// GPUUtilization is one whole GPU's GPM activity over the window between the
+// two most recent collections. Each value is nil when that particular metric
+// could not be read.
+type GPUUtilization struct {
+	UUID                          string
+	GraphicsActivityRatio         *float64
+	SMActivityRatio               *float64
+	SMOccupancyRatio              *float64
+	TensorActivityRatio           *float64
+	DRAMBandwidthUtilizationRatio *float64
 }
 
 // PCIeThroughput is one GPU's sampled PCIe throughput.
@@ -100,12 +138,14 @@ type MIGMemory struct {
 // two most recent collections. Each value is nil when that particular metric
 // could not be read.
 type MIGUtilization struct {
-	// GraphicsActivityRatio, SMActivityRatio, SMOccupancyRatio and
-	// TensorActivityRatio are fractions of the window, 0 to 1.
-	GraphicsActivityRatio *float64
-	SMActivityRatio       *float64
-	SMOccupancyRatio      *float64
-	TensorActivityRatio   *float64
+	// GraphicsActivityRatio, SMActivityRatio, SMOccupancyRatio,
+	// TensorActivityRatio and DRAMBandwidthUtilizationRatio are fractions
+	// of the window, 0 to 1.
+	GraphicsActivityRatio         *float64
+	SMActivityRatio               *float64
+	SMOccupancyRatio              *float64
+	TensorActivityRatio           *float64
+	DRAMBandwidthUtilizationRatio *float64
 	// PCIeTXBytesPerSecond and PCIeRXBytesPerSecond are the instance's PCIe
 	// traffic over the window.
 	PCIeTXBytesPerSecond *float64

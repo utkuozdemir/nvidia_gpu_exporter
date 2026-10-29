@@ -15,7 +15,7 @@ What the project intends to do, and not do, in the next year or so. This is a si
 
 ## Not doing
 
-- Datacenter fleet management features: profiling counters, NVLink topology, GPU Operator integration. DCGM and the GPU Operator own that space and do it better. This exporter targets what `nvidia-smi` can reach and heavier tooling cannot or will not.
+- Datacenter fleet management features: deep hardware profiling counters (beyond the NVML GPM activity ratios runtime-probed via `nvmlGpmQueryDeviceSupport` on Hopper and newer supported devices, which are absent on Ada and earlier architectures), per-lane NVLink topology matrices, and GPU Operator integration. DCGM and the GPU Operator own that space and do it better. This exporter targets what `nvidia-smi` and lightweight NVML queries can reach and heavier tooling cannot or will not.
 - Other GPU vendors. AMD or Apple GPUs would be a separate project, not a backend here.
 - Renaming or relabeling established metrics. The metric names are a public contract with dashboards and alerts built on them. New things get new names.
 - A web UI. Grafana is the UI, and the two official dashboards are maintained here.

@@ -108,6 +108,14 @@ type Features struct {
 	// PCIeThroughput enables the per-GPU PCIe throughput gauges (nvml
 	// backend, --collect.pcie-throughput).
 	PCIeThroughput bool
+	// PCIeReplays enables the per-GPU PCIe replay and replay-rollover
+	// counters (nvml backend).
+	PCIeReplays bool
+	// NVLink enables the per-GPU aggregate NVLink throughput counters
+	// (nvml backend).
+	NVLink bool
+	// GPM enables the whole-GPU GPM activity ratios (nvml backend).
+	GPM bool
 	// Energy enables the per-GPU cumulative energy counter (nvml backend).
 	Energy bool
 	// MIG enables the per-MIG-instance metric families (nvml backend).
@@ -117,12 +125,13 @@ type Features struct {
 	XIDEvents bool
 }
 
-// XIDSource serves the cumulative XID error counts. It is read at scrape
-// time, independently of the collection pipeline, so the counters stay
-// visible while collections fail (which is exactly when XIDs happen). The
-// implementation must be safe for concurrent use.
+// XIDSource serves the cumulative XID error counts and watcher status. It is
+// read at scrape time, independently of the collection pipeline, so the
+// counters stay visible while collections fail (which is exactly when XIDs
+// happen). The implementation must be safe for concurrent use.
 type XIDSource interface {
 	XIDCounts() []collect.XIDCounter
+	XIDWatcherEnabled() bool
 }
 
 // GPUExporter renders the latest collection as Prometheus metrics. It is
@@ -143,6 +152,11 @@ type GPUExporter struct {
 	graphicsAppDescs      *appDescs
 	pcieTxDesc            *prometheus.Desc
 	pcieRxDesc            *prometheus.Desc
+	pcieReplaysDesc       *prometheus.Desc
+	pcieRolloversDesc     *prometheus.Desc
+	nvlinkTxDesc          *prometheus.Desc
+	nvlinkRxDesc          *prometheus.Desc
+	gpmDescs              *gpmDescs
 	energyDesc            *prometheus.Desc
 	migDescs              *migDescs
 	appMIGLabels          bool
@@ -150,6 +164,7 @@ type GPUExporter struct {
 	xids                  XIDSource
 	xidCountDesc          *prometheus.Desc
 	xidTimestampDesc      *prometheus.Desc
+	xidWatcherDesc        *prometheus.Desc
 	logger                *slog.Logger
 	ctx                   context.Context //nolint:containedctx
 }
@@ -179,6 +194,27 @@ func (a *appDescs) all() []*prometheus.Desc {
 	}
 }
 
+// gpmDescs bundles the whole-GPU GPM activity descriptors, nil as a whole when
+// the feature is off.
+type gpmDescs struct {
+	graphicsActivity *prometheus.Desc
+	smActivity       *prometheus.Desc
+	smOccupancy      *prometheus.Desc
+	tensorActivity   *prometheus.Desc
+	dramBwUtil       *prometheus.Desc
+}
+
+func (g *gpmDescs) all() []*prometheus.Desc {
+	if g == nil {
+		return nil
+	}
+
+	return []*prometheus.Desc{
+		g.graphicsActivity, g.smActivity, g.smOccupancy,
+		g.tensorActivity, g.dramBwUtil,
+	}
+}
+
 // migDescs bundles the per-MIG-instance descriptors, nil as a whole when the
 // feature is off.
 type migDescs struct {
@@ -191,6 +227,7 @@ type migDescs struct {
 	smActivity       *prometheus.Desc
 	smOccupancy      *prometheus.Desc
 	tensorActivity   *prometheus.Desc
+	dramBwUtil       *prometheus.Desc
 	pcieTx           *prometheus.Desc
 	pcieRx           *prometheus.Desc
 }
@@ -204,7 +241,7 @@ func (m *migDescs) all() []*prometheus.Desc {
 	return []*prometheus.Desc{
 		m.info, m.memTotal, m.memUsed, m.memFree, m.memReserved,
 		m.graphicsActivity, m.smActivity, m.smOccupancy, m.tensorActivity,
-		m.pcieTx, m.pcieRx,
+		m.dramBwUtil, m.pcieTx, m.pcieRx,
 	}
 }
 
@@ -234,6 +271,8 @@ func New(
 	infoLabels = append(infoLabels, "cuda_version")
 
 	pcieTxDesc, pcieRxDesc := newPCIeDescs(prefix, features.PCIeThroughput)
+	pcieReplaysDesc, pcieRolloversDesc := newPCIeReplayDescs(prefix, features.PCIeReplays)
+	nvlinkTxDesc, nvlinkRxDesc := newNVLinkDescs(prefix, features.NVLink)
 
 	exp := &GPUExporter{
 		ctx:                   ctx,
@@ -249,6 +288,11 @@ func New(
 			features.ComputeAppMIGLabels, features.ComputeAppIdentityLabels),
 		pcieTxDesc:        pcieTxDesc,
 		pcieRxDesc:        pcieRxDesc,
+		pcieReplaysDesc:   pcieReplaysDesc,
+		pcieRolloversDesc: pcieRolloversDesc,
+		nvlinkTxDesc:      nvlinkTxDesc,
+		nvlinkRxDesc:      nvlinkRxDesc,
+		gpmDescs:          newGPMDescs(prefix, features.GPM),
 		energyDesc:        newEnergyDesc(prefix, features.Energy),
 		migDescs:          newMIGDescs(prefix, features.MIG),
 		appMIGLabels:      features.ComputeAppMIGLabels,
@@ -287,6 +331,11 @@ func addXIDDescs(exp *GPUExporter, prefix string, enabled bool) {
 		"Unix timestamp of the most recently observed XID error, as received by the exporter "+
 			"(the driver events carry no timestamp of their own).",
 		[]string{uuidLabel, "xid"},
+		nil)
+	exp.xidWatcherDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(prefix, "", "xid_watcher_enabled"),
+		"Whether the XID event watcher is registered and watching for GPU XID events (1) or not (0).",
+		nil,
 		nil)
 }
 
@@ -396,6 +445,78 @@ func newPCIeDescs(prefix string, enabled bool) (*prometheus.Desc, *prometheus.De
 	return tx, rx
 }
 
+// newPCIeReplayDescs builds the PCIe replay and replay-rollover counter
+// descriptors, nil when the feature is disabled.
+func newPCIeReplayDescs(prefix string, enabled bool) (*prometheus.Desc, *prometheus.Desc) {
+	if !enabled {
+		return nil, nil
+	}
+
+	replays := prometheus.NewDesc(
+		prometheus.BuildFQName(prefix, "", "pcie_replays_total"),
+		"Total PCIe link replays on the GPU since the last GPU reset or driver reload.",
+		[]string{uuidLabel},
+		nil)
+	rollovers := prometheus.NewDesc(
+		prometheus.BuildFQName(prefix, "", "pcie_replay_rollovers_total"),
+		"Total PCIe link replay rollovers on the GPU since the last GPU reset or driver reload.",
+		[]string{uuidLabel},
+		nil)
+
+	return replays, rollovers
+}
+
+// newNVLinkDescs builds the aggregate NVLink throughput counter descriptors,
+// nil when the feature is disabled.
+func newNVLinkDescs(prefix string, enabled bool) (*prometheus.Desc, *prometheus.Desc) {
+	if !enabled {
+		return nil, nil
+	}
+
+	tx := prometheus.NewDesc(
+		prometheus.BuildFQName(prefix, "", "nvlink_tx_bytes_total"),
+		"Total bytes transmitted by the GPU across all active NVLink links.",
+		[]string{uuidLabel},
+		nil)
+	rx := prometheus.NewDesc(
+		prometheus.BuildFQName(prefix, "", "nvlink_rx_bytes_total"),
+		"Total bytes received by the GPU across all active NVLink links.",
+		[]string{uuidLabel},
+		nil)
+
+	return tx, rx
+}
+
+// newGPMDescs builds the whole-GPU GPM activity descriptors, nil when the
+// feature is disabled.
+func newGPMDescs(prefix string, enabled bool) *gpmDescs {
+	if !enabled {
+		return nil
+	}
+
+	activityDesc := func(name, help string) *prometheus.Desc {
+		return prometheus.NewDesc(
+			prometheus.BuildFQName(prefix, "", name),
+			help+" Computed over the window between the two most recent collections, "+
+				"absent on the first collection that sees the GPU.",
+			[]string{uuidLabel},
+			nil)
+	}
+
+	return &gpmDescs{
+		graphicsActivity: activityDesc("graphics_activity_ratio",
+			"Fraction of time the GPU's graphics/compute engines were active."),
+		smActivity: activityDesc("sm_activity_ratio",
+			"Fraction of time the GPU's SMs were active."),
+		smOccupancy: activityDesc("sm_occupancy_ratio",
+			"Fraction of the GPU's resident warp slots that were occupied."),
+		tensorActivity: activityDesc("tensor_activity_ratio",
+			"Fraction of time the GPU's tensor pipes were active."),
+		dramBwUtil: activityDesc("dram_bandwidth_utilization_ratio",
+			"Fraction of peak memory bandwidth used by the GPU."),
+	}
+}
+
 // newEnergyDesc builds the energy counter descriptor, nil when the feature is
 // disabled.
 func newEnergyDesc(prefix string, enabled bool) *prometheus.Desc {
@@ -434,7 +555,7 @@ func newMIGDescs(prefix string, enabled bool) *migDescs {
 	activityDesc := func(name, help string) *prometheus.Desc {
 		return prometheus.NewDesc(
 			prometheus.BuildFQName(prefix, "", name),
-			help+" Computed over the window between the two most recent collections; "+
+			help+" Computed over the window between the two most recent collections, "+
 				"absent on the first collection that sees the GPU instance.",
 			instanceLabels,
 			nil)
@@ -460,6 +581,8 @@ func newMIGDescs(prefix string, enabled bool) *migDescs {
 			"Fraction of the GPU instance's resident warp slots that were occupied."),
 		tensorActivity: activityDesc("mig_tensor_activity_ratio",
 			"Fraction of time the GPU instance's tensor pipes were active."),
+		dramBwUtil: activityDesc("mig_dram_bandwidth_utilization_ratio",
+			"Fraction of peak memory bandwidth used by the GPU instance."),
 		pcieTx: activityDesc("mig_pcie_throughput_tx_bytes_per_second",
 			"PCIe traffic transmitted by the GPU instance."),
 		pcieRx: activityDesc("mig_pcie_throughput_rx_bytes_per_second",
@@ -501,23 +624,7 @@ func (e *GPUExporter) Describe(descCh chan<- *prometheus.Desc) {
 		e.sendDesc(descCh, desc)
 	}
 
-	if e.pcieTxDesc != nil {
-		e.sendDesc(descCh, e.pcieTxDesc)
-		e.sendDesc(descCh, e.pcieRxDesc)
-	}
-
-	if e.energyDesc != nil {
-		e.sendDesc(descCh, e.energyDesc)
-	}
-
-	for _, desc := range e.migDescs.all() {
-		e.sendDesc(descCh, desc)
-	}
-
-	if e.xidCountDesc != nil {
-		e.sendDesc(descCh, e.xidCountDesc)
-		e.sendDesc(descCh, e.xidTimestampDesc)
-	}
+	e.describeExtras(descCh)
 }
 
 // Collect fetches the latest reading from the source and delivers it as
@@ -547,6 +654,41 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 	e.renderExtras(metricCh, snapshot)
 }
 
+func (e *GPUExporter) describeExtras(descCh chan<- *prometheus.Desc) {
+	if e.pcieTxDesc != nil {
+		e.sendDesc(descCh, e.pcieTxDesc)
+		e.sendDesc(descCh, e.pcieRxDesc)
+	}
+
+	if e.pcieReplaysDesc != nil {
+		e.sendDesc(descCh, e.pcieReplaysDesc)
+		e.sendDesc(descCh, e.pcieRolloversDesc)
+	}
+
+	if e.nvlinkTxDesc != nil {
+		e.sendDesc(descCh, e.nvlinkTxDesc)
+		e.sendDesc(descCh, e.nvlinkRxDesc)
+	}
+
+	for _, desc := range e.gpmDescs.all() {
+		e.sendDesc(descCh, desc)
+	}
+
+	if e.energyDesc != nil {
+		e.sendDesc(descCh, e.energyDesc)
+	}
+
+	for _, desc := range e.migDescs.all() {
+		e.sendDesc(descCh, desc)
+	}
+
+	if e.xidCountDesc != nil {
+		e.sendDesc(descCh, e.xidCountDesc)
+		e.sendDesc(descCh, e.xidTimestampDesc)
+		e.sendDesc(descCh, e.xidWatcherDesc)
+	}
+}
+
 // renderXIDs emits the XID error counters from the dedicated source. Unlike
 // every other family they do not come from the snapshot: the counts are
 // event-driven, cumulative in-process state served fresh on every scrape.
@@ -554,6 +696,13 @@ func (e *GPUExporter) renderXIDs(metricCh chan<- prometheus.Metric) {
 	if e.xidCountDesc == nil || e.xids == nil {
 		return
 	}
+
+	enabled := 0.0
+	if e.xids.XIDWatcherEnabled() {
+		enabled = 1
+	}
+
+	e.sendConst(metricCh, e.xidWatcherDesc, prometheus.GaugeValue, enabled)
 
 	for _, counter := range e.xids.XIDCounts() {
 		xid := strconv.FormatUint(counter.XID, 10)
@@ -585,6 +734,8 @@ func (e *GPUExporter) sendLabeledCounter(
 // renderExtras emits the backend-specific families carried outside the
 // query-field schema. A nil descriptor (feature off) or an empty family emits
 // nothing: per family, absence is the signal for "could not be read".
+//
+//nolint:cyclop // flat per-family rendering
 func (e *GPUExporter) renderExtras(metricCh chan<- prometheus.Metric, snapshot collect.Snapshot) {
 	if e.pcieTxDesc != nil {
 		for _, sample := range snapshot.Extras.PCIe {
@@ -592,6 +743,40 @@ func (e *GPUExporter) renderExtras(metricCh chan<- prometheus.Metric, snapshot c
 				sample.TXBytesPerSecond, sample.UUID)
 			e.sendConstWithUUID(metricCh, e.pcieRxDesc, prometheus.GaugeValue,
 				sample.RXBytesPerSecond, sample.UUID)
+		}
+	}
+
+	if e.pcieReplaysDesc != nil {
+		for _, sample := range snapshot.Extras.PCIeReplays {
+			if sample.Replays != nil {
+				e.sendConstWithUUID(metricCh, e.pcieReplaysDesc, prometheus.CounterValue,
+					float64(*sample.Replays), sample.UUID)
+			}
+
+			if sample.Rollovers != nil {
+				e.sendConstWithUUID(metricCh, e.pcieRolloversDesc, prometheus.CounterValue,
+					float64(*sample.Rollovers), sample.UUID)
+			}
+		}
+	}
+
+	if e.nvlinkTxDesc != nil {
+		for _, sample := range snapshot.Extras.NVLink {
+			if sample.TXBytes != nil {
+				e.sendConstWithUUID(metricCh, e.nvlinkTxDesc, prometheus.CounterValue,
+					float64(*sample.TXBytes), sample.UUID)
+			}
+
+			if sample.RXBytes != nil {
+				e.sendConstWithUUID(metricCh, e.nvlinkRxDesc, prometheus.CounterValue,
+					float64(*sample.RXBytes), sample.UUID)
+			}
+		}
+	}
+
+	if e.gpmDescs != nil {
+		for _, util := range snapshot.Extras.GPM {
+			e.renderGPUUtilization(metricCh, util)
 		}
 	}
 
@@ -610,6 +795,25 @@ func (e *GPUExporter) renderExtras(metricCh chan<- prometheus.Metric, snapshot c
 		for _, instance := range snapshot.Extras.MIG {
 			e.renderMIGInstance(metricCh, instance, emittedGIs)
 		}
+	}
+}
+
+func (e *GPUExporter) renderGPUUtilization(metricCh chan<- prometheus.Metric, util collect.GPUUtilization) {
+	for _, entry := range []struct {
+		desc  *prometheus.Desc
+		value *float64
+	}{
+		{e.gpmDescs.graphicsActivity, util.GraphicsActivityRatio},
+		{e.gpmDescs.smActivity, util.SMActivityRatio},
+		{e.gpmDescs.smOccupancy, util.SMOccupancyRatio},
+		{e.gpmDescs.tensorActivity, util.TensorActivityRatio},
+		{e.gpmDescs.dramBwUtil, util.DRAMBandwidthUtilizationRatio},
+	} {
+		if entry.value == nil {
+			continue
+		}
+
+		e.sendConstWithUUID(metricCh, entry.desc, prometheus.GaugeValue, *entry.value, util.UUID)
 	}
 }
 
@@ -654,6 +858,7 @@ func (e *GPUExporter) renderMIGInstance(
 		{e.migDescs.smActivity, util.SMActivityRatio},
 		{e.migDescs.smOccupancy, util.SMOccupancyRatio},
 		{e.migDescs.tensorActivity, util.TensorActivityRatio},
+		{e.migDescs.dramBwUtil, util.DRAMBandwidthUtilizationRatio},
 		{e.migDescs.pcieTx, util.PCIeTXBytesPerSecond},
 		{e.migDescs.pcieRx, util.PCIeRXBytesPerSecond},
 	} {
@@ -969,14 +1174,18 @@ var fixedMetricNames = []string{
 	"graphics_apps", "graphics_apps_last_collect_success",
 	// nvml extras
 	"pcie_throughput_tx_bytes_per_second", "pcie_throughput_rx_bytes_per_second",
+	"pcie_replays_total", "pcie_replay_rollovers_total",
+	"nvlink_tx_bytes_total", "nvlink_rx_bytes_total",
+	"graphics_activity_ratio", "sm_activity_ratio", "sm_occupancy_ratio",
+	"tensor_activity_ratio", "dram_bandwidth_utilization_ratio",
 	"energy_joules_total",
 	"mig_info", "mig_memory_total_bytes", "mig_memory_used_bytes",
 	"mig_memory_free_bytes", "mig_memory_reserved_bytes",
 	"mig_graphics_activity_ratio", "mig_sm_activity_ratio", "mig_sm_occupancy_ratio",
-	"mig_tensor_activity_ratio",
+	"mig_tensor_activity_ratio", "mig_dram_bandwidth_utilization_ratio",
 	"mig_pcie_throughput_tx_bytes_per_second", "mig_pcie_throughput_rx_bytes_per_second",
 	// XID
-	"xid_errors_total", "xid_last_timestamp_seconds",
+	"xid_errors_total", "xid_last_timestamp_seconds", "xid_watcher_enabled",
 }
 
 // reservedMetricNames returns the fully-qualified names no query field may

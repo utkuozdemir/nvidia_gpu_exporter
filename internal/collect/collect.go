@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"os/exec"
+	"slices"
 	"time"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvidiasmi"
@@ -46,6 +47,9 @@ type Snapshot struct {
 	LastSuccess time.Time
 	// Failures is the cumulative count of failed collections.
 	Failures uint64
+	// MissingUUIDs lists GPU UUIDs seen in earlier successful collections
+	// since startup that are absent from Table, sorted.
+	MissingUUIDs []string
 	// Err is the most recent attempt's error, kept for source-owned logging and tests.
 	Err error
 }
@@ -53,6 +57,12 @@ type Snapshot struct {
 // Source produces the latest reading. The exporter depends only on this.
 type Source interface {
 	Latest(ctx context.Context) Snapshot
+}
+
+// Peeker returns the most recently completed collection outcome without
+// starting a new collection.
+type Peeker interface {
+	Peek() Snapshot
 }
 
 // Reading is what one collection cycle produced. The GPU table is the primary
@@ -190,17 +200,48 @@ func collectOnce(
 }
 
 // foldCumulative merges one collection outcome into the cumulative failure
-// count and last-success time, and stamps the updated values onto the
-// snapshot. The caller owns the synchronization of the two counters.
-func foldCumulative(snapshot *Snapshot, failures *uint64, lastOK *time.Time) {
+// count, last-success time, and seen GPU UUID set, and stamps the updated
+// values onto the snapshot. The caller owns the synchronization of the state.
+func foldCumulative(snapshot *Snapshot, failures *uint64, lastOK *time.Time, seenUUIDs map[string]bool) {
 	if snapshot.Success {
 		*lastOK = snapshot.LastSuccess
+		snapshot.MissingUUIDs = foldSeenUUIDs(snapshot.Table, seenUUIDs)
 	} else {
 		*failures++
 	}
 
 	snapshot.Failures = *failures
 	snapshot.LastSuccess = *lastOK
+}
+
+func foldSeenUUIDs(table *nvidiasmi.Table, seenUUIDs map[string]bool) []string {
+	if table == nil {
+		return nil
+	}
+
+	current := make(map[string]bool, len(table.Rows))
+
+	for _, row := range table.Rows {
+		uuid := nvidiasmi.NormalizeUUID(row.QFieldToCells[nvidiasmi.UUIDQField].RawValue)
+		if uuid == "" {
+			continue
+		}
+
+		current[uuid] = true
+		seenUUIDs[uuid] = true
+	}
+
+	var missing []string
+
+	for uuid := range seenUUIDs {
+		if !current[uuid] {
+			missing = append(missing, uuid)
+		}
+	}
+
+	slices.Sort(missing)
+
+	return missing
 }
 
 // withOptionalTimeout bounds ctx by d, where a zero d means no bound. A plain

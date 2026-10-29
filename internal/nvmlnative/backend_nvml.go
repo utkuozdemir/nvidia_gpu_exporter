@@ -39,6 +39,7 @@ type nvmlAPI struct {
 	// type assertion), so they must live on the seam
 	gpmSampleAlloc  func() (nvml.GpmSample, nvml.Return)
 	gpmSampleFree   func(nvml.GpmSample) nvml.Return
+	gpmSampleGet    func(nvml.Device, nvml.GpmSample) nvml.Return
 	gpmMigSampleGet func(nvml.Device, int, nvml.GpmSample) nvml.Return
 	gpmMetricsGet   func(*nvml.GpmMetricsGetType) nvml.Return
 	// eventSetCreate is package-level in go-nvml, hence on the seam; the
@@ -68,6 +69,7 @@ func realNVML() nvmlAPI {
 		validateInforom:   nvml.DeviceValidateInforom,
 		gpmSampleAlloc:    nvml.GpmSampleAlloc,
 		gpmSampleFree:     nvml.GpmSampleFree,
+		gpmSampleGet:      nvml.GpmSampleGet,
 		gpmMigSampleGet:   nvml.GpmMigSampleGet,
 		gpmMetricsGet:     nvml.GpmMetricsGet,
 		eventSetCreate:    nvml.EventSetCreate,
@@ -123,8 +125,9 @@ type Backend struct {
 	// xids accumulates the XID error events observed by the watcher. It
 	// has its own lock and is read at scrape time, outside the snapshot
 	// pipeline.
-	xids   xidAccumulator
-	logger *slog.Logger
+	xids              xidAccumulator
+	xidWatcherEnabled atomic.Bool
+	logger            *slog.Logger
 }
 
 // New dlopens and initializes NVML. Failure here is a startup error: the
@@ -193,6 +196,7 @@ func (b *Backend) Close() {
 
 	b.initialized = false
 	b.genLive.Store(false)
+	b.xidWatcherEnabled.Store(false)
 
 	if !b.tryLifecycleLock() {
 		b.logger.Warn("skipping NVML shutdown: the XID watcher is stuck inside the driver")
@@ -475,6 +479,7 @@ func (b *Backend) markLost() {
 
 	b.initialized = false
 	b.genLive.Store(false)
+	b.xidWatcherEnabled.Store(false)
 
 	if !b.tryLifecycleLock() {
 		b.logger.Warn("skipping NVML shutdown: the XID watcher is stuck inside the driver")
@@ -1670,17 +1675,21 @@ func (b *Backend) softLifecycle(ret nvml.Return, err error) error {
 }
 
 // pcieThroughputKBMultiplier converts the driver's PCIe throughput reading
-// to bytes per second. NVML documents the unit as "KB/s"; whether that is
+// to bytes per second. NVML documents the unit as "KB/s", whether that is
 // 1000 or 1024 bytes is pending live calibration, 1000 until proven
 // otherwise.
 const pcieThroughputKBMultiplier = 1000
+
+// nvlinkThroughputKiBMultiplier converts NVML's KiB NVLink throughput counters
+// to bytes.
+const nvlinkThroughputKiBMultiplier = 1024
 
 // collectExtras gathers the backend-specific readings that live outside the
 // query-field schema. Extras fail softly per the Reading contract: a family
 // that cannot be read is simply absent and the collection stays green. A
 // lifecycle-class return still marks the backend for re-initialization and
 // aborts the remaining extras work, since after markLost the library is
-// already shut down; whatever was collected before the abort is kept. The
+// already shut down, and whatever was collected before the abort is kept. The
 // caller holds the backend lock.
 //
 //nolint:cyclop // one linear pass over the extras families with per-device fallbacks
@@ -1709,7 +1718,7 @@ func (b *Backend) collectExtras(ctx context.Context, opts CollectOptions) collec
 		b.warnOnce("cuda-version", "cannot read the CUDA version", ret)
 	}
 
-	if !opts.Energy && !opts.PCIeThroughput && !opts.MIG {
+	if !opts.Energy && !opts.PCIeThroughput && !opts.PCIeReplays && !opts.NVLink && !opts.GPM && !opts.MIG {
 		return extras
 	}
 
@@ -1732,7 +1741,7 @@ func (b *Backend) collectExtras(ctx context.Context, opts CollectOptions) collec
 		}
 	}
 
-	if opts.MIG {
+	if opts.MIG || opts.GPM {
 		// only after a complete pass: an aborted cycle must not mistake
 		// unvisited GPU instances for disappeared ones
 		b.dropOrphanGPMStates(seenGIs)
@@ -1744,6 +1753,8 @@ func (b *Backend) collectExtras(ctx context.Context, opts CollectOptions) collec
 // collectDeviceExtras gathers one device's extras families. Reports whether
 // extras collection may continue: a non-lifecycle failure skips just this
 // device, a lifecycle-class one aborts the pass.
+//
+//nolint:cyclop // flat per-family dispatch
 func (b *Backend) collectDeviceExtras(
 	ctx context.Context,
 	deviceIdx int,
@@ -1771,11 +1782,153 @@ func (b *Backend) collectDeviceExtras(
 		return false
 	}
 
+	if opts.PCIeReplays && !b.collectPCIeReplays(dev, uuid, extras) {
+		return false
+	}
+
+	if opts.NVLink && !b.collectNVLink(dev, uuid, extras) {
+		return false
+	}
+
+	if opts.GPM && !b.collectGPM(dev, uuid, extras, seenGIs) {
+		return false
+	}
+
 	if opts.MIG && !b.collectMIG(dev, uuid, extras, seenGIs) {
 		return false
 	}
 
 	return true
+}
+
+// collectPCIeReplays appends one device's PCIe replay and replay-rollover
+// counters. Devices or drivers that report NOT_SUPPORTED are skipped silently.
+// Reports whether extras collection may continue.
+func (b *Backend) collectPCIeReplays(dev device, uuid string, extras *collect.Extras) bool {
+	values := []nvml.FieldValue{
+		{FieldId: nvml.FI_DEV_PCIE_REPLAY_COUNTER},
+		{FieldId: nvml.FI_DEV_PCIE_REPLAY_ROLLOVER_COUNTER},
+	}
+
+	ok, supported := b.queryExtraFieldValues(dev, "pcie-replays", "cannot read the PCIe replay counters", values)
+	if !ok || !supported {
+		return ok
+	}
+
+	replays, ok := b.decodeExtraFieldCounter("pcie-replays", values[0])
+	if !ok {
+		return false
+	}
+
+	rollovers, ok := b.decodeExtraFieldCounter("pcie-replays", values[1])
+	if !ok {
+		return false
+	}
+
+	if replays != nil || rollovers != nil {
+		extras.PCIeReplays = append(extras.PCIeReplays, collect.PCIeReplayCounter{
+			UUID:      uuid,
+			Replays:   replays,
+			Rollovers: rollovers,
+		})
+	}
+
+	return true
+}
+
+// collectNVLink appends one device's aggregate NVLink throughput counters in
+// bytes when NVLink links are present and supported. Devices without NVLink or
+// with unpopulated NVLink connectors return NOT_SUPPORTED and are skipped
+// silently. Reports whether extras collection may continue.
+func (b *Backend) collectNVLink(dev device, uuid string, extras *collect.Extras) bool {
+	values := []nvml.FieldValue{
+		{FieldId: nvml.FI_DEV_NVLINK_LINK_COUNT},
+		{FieldId: nvml.FI_DEV_NVLINK_THROUGHPUT_DATA_TX, ScopeId: math.MaxUint32},
+		{FieldId: nvml.FI_DEV_NVLINK_THROUGHPUT_DATA_RX, ScopeId: math.MaxUint32},
+	}
+
+	ok, supported := b.queryExtraFieldValues(dev, "nvlink", "cannot read the NVLink throughput counters", values)
+	if !ok || !supported {
+		return ok
+	}
+
+	linkCount, ok := b.decodeExtraFieldCounter("nvlink", values[0])
+	if !ok || linkCount == nil || *linkCount == 0 {
+		return ok
+	}
+
+	txKiB, ok := b.decodeExtraFieldCounter("nvlink", values[1])
+	if !ok {
+		return false
+	}
+
+	rxKiB, ok := b.decodeExtraFieldCounter("nvlink", values[2])
+	if !ok {
+		return false
+	}
+
+	txBytes := scaleCounterKiB(txKiB)
+	rxBytes := scaleCounterKiB(rxKiB)
+
+	if txBytes != nil || rxBytes != nil {
+		extras.NVLink = append(extras.NVLink, collect.NVLinkThroughput{
+			UUID:    uuid,
+			TXBytes: txBytes,
+			RXBytes: rxBytes,
+		})
+	}
+
+	return true
+}
+
+func (b *Backend) queryExtraFieldValues(
+	dev device,
+	family, errMsg string,
+	values []nvml.FieldValue,
+) (bool, bool) {
+	ret := dev.GetFieldValues(values)
+
+	//nolint:exhaustive // all other codes are unexpected failures
+	switch ret {
+	case nvml.SUCCESS:
+		return true, true
+	case nvml.ERROR_NOT_SUPPORTED, nvml.ERROR_FUNCTION_NOT_FOUND:
+		return true, false
+	default:
+		return b.extrasFailure(family, errMsg, ret), false
+	}
+}
+
+func scaleCounterKiB(val *uint64) *uint64 {
+	if val == nil {
+		return nil
+	}
+
+	return new(*val * nvlinkThroughputKiBMultiplier)
+}
+
+// decodeExtraFieldCounter decodes one uint64 counter from a FieldValue entry.
+// Unsupported or absent returns yield (nil, true). Lifecycle-class returns
+// mark the backend lost and return (nil, false).
+func (b *Backend) decodeExtraFieldCounter(family string, fieldValue nvml.FieldValue) (*uint64, bool) {
+	fret := nvml.Return(fieldValue.NvmlReturn) //nolint:gosec // G115: the field carries an nvmlReturn_t
+
+	//nolint:exhaustive // all other codes are unexpected failures
+	switch fret {
+	case nvml.SUCCESS:
+		val, ok := decodeFieldValue(fieldValue)
+		if !ok || val < 0 || math.IsNaN(val) || math.IsInf(val, 0) {
+			return nil, true
+		}
+
+		count := uint64(val)
+
+		return &count, true
+	case nvml.ERROR_NOT_SUPPORTED, nvml.ERROR_FUNCTION_NOT_FOUND, nvml.ERROR_NOT_FOUND, nvml.ERROR_NO_DATA:
+		return nil, true
+	default:
+		return nil, b.extrasFailure(family, "cannot read an NVML field counter", fret)
+	}
 }
 
 // collectEnergy appends one device's cumulative energy reading. A device

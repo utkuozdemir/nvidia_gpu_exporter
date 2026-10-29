@@ -242,6 +242,41 @@ prometheusRule:
     enabled: false
     # -- Core temperature in Celsius above which the alert fires
     thresholdCelsius: 85
+  temperatureTlimitLow:
+    # -- Alert when a GPU has less than the threshold of thermal headroom
+    # remaining before slowdown (`temperature.gpu.tlimit`) for 10 minutes.
+    # Uses the GPU's own per-SKU target temperature, and is silently absent on
+    # older GPUs and drivers that do not report `temperature.gpu.tlimit`.
+    enabled: true
+    # -- Remaining thermal headroom in Celsius below which the alert fires
+    thresholdCelsius: 5
+  pcieLinkGenDegraded:
+    # -- Alert when a GPU runs at a lower PCIe link generation than its
+    # maximum while above 50% compute utilization for 10 minutes. Idle GPUs
+    # downshift PCIe generation to save power, which is normal.
+    enabled: true
+  pcieLinkWidthDegraded:
+    # -- Alert when a GPU negotiates fewer PCIe lanes than its maximum width
+    # while above 50% compute utilization for 10 minutes. Off by default:
+    # cards intentionally installed in narrower PCIe slots report a lower
+    # current width permanently.
+    enabled: false
+  pcieReplayRollovers:
+    # -- Alert when a GPU records PCIe link replay rollovers in the last hour.
+    # Off by default: requires the NVML backend.
+    enabled: false
+  idleVramAllocated:
+    # -- Informational alert when a GPU holds more than 50% of its VRAM
+    # allocated while its peak compute utilization over the last hour stays
+    # below 5%. Off by default: idle inference servers keeping weights loaded
+    # in VRAM are often intentional.
+    enabled: false
+  computeAppsInvisible:
+    # -- Alert when a GPU has more than 1 GiB of memory in use for 30 minutes
+    # while `nvidia_smi_compute_apps` reports zero processes, which catches
+    # `computeApps.enabled: true` without `hostPID: true`. Silently inactive
+    # when `computeApps.enabled` is false.
+    enabled: true
   gpuMissing:
     # -- Alert when a machine reports fewer GPUs than its recent maximum
     # while collection stays healthy, which catches GPUs that silently fall

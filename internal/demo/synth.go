@@ -101,6 +101,110 @@ func (b *Backend) synthPCIe(uuids []string, extras *extrasConfig, reading *colle
 	}
 }
 
+// synthPCIeReplays populates cumulative PCIe replay and replay-rollover
+// counters for each GPU.
+func synthPCIeReplays(uuids []string, reading *collect.Reading) {
+	for idx, uuid := range uuids {
+		replays := uint64(idx * 4)
+		rollovers := uint64(0)
+
+		reading.Extras.PCIeReplays = append(reading.Extras.PCIeReplays, collect.PCIeReplayCounter{
+			UUID:      uuid,
+			Replays:   &replays,
+			Rollovers: &rollovers,
+		})
+	}
+}
+
+// synthNVLink integrates each GPU's cumulative NVLink traffic in bytes (aligned
+// to 1024-byte KiB increments, matching NVML's field values). The first sample
+// of a GPU emits zero, mirroring synthEnergy.
+func (b *Backend) synthNVLink(uuids []string, now time.Time, reading *collect.Reading) {
+	seen := map[string]bool{}
+
+	for _, uuid := range uuids {
+		seen[uuid] = true
+
+		state := b.nvlink[uuid]
+		if state == nil {
+			state = &nvlinkState{}
+			b.nvlink[uuid] = state
+		} else {
+			elapsed := now.Sub(state.lastAt).Seconds()
+			if elapsed > 0 {
+				txDelta := uint64(b.rng.draw(rangeCfg{Min: 2e9, Max: 15e9})*elapsed) &^ 1023
+				rxDelta := uint64(b.rng.draw(rangeCfg{Min: 2e9, Max: 15e9})*elapsed) &^ 1023
+				state.txBytes += txDelta
+				state.rxBytes += rxDelta
+			}
+		}
+
+		state.lastAt = now
+
+		tx := state.txBytes
+		rx := state.rxBytes
+
+		reading.Extras.NVLink = append(reading.Extras.NVLink, collect.NVLinkThroughput{
+			UUID:    uuid,
+			TXBytes: &tx,
+			RXBytes: &rx,
+		})
+	}
+
+	for uuid := range b.nvlink {
+		if !seen[uuid] {
+			delete(b.nvlink, uuid)
+		}
+	}
+}
+
+// synthGPM populates whole-GPU GPM activity ratios for non-MIG GPUs after the
+// first collection cycle that observes each GPU, matching the real backend's
+// two-sample window requirement.
+func (b *Backend) synthGPM(uuids []string, extras *extrasConfig, reading *collect.Reading) {
+	migGPUs := map[int]bool{}
+	for _, gpu := range extras.MIG {
+		migGPUs[gpu.GPU] = true
+	}
+
+	live := map[string]bool{}
+
+	value := func(rng rangeCfg) *float64 {
+		v := b.rng.draw(rng)
+
+		return &v
+	}
+
+	for idx, uuid := range uuids {
+		if migGPUs[idx] {
+			continue
+		}
+
+		live[uuid] = true
+
+		if !b.seenGPUs[uuid] {
+			b.seenGPUs[uuid] = true
+
+			continue
+		}
+
+		reading.Extras.GPM = append(reading.Extras.GPM, collect.GPUUtilization{
+			UUID:                          uuid,
+			GraphicsActivityRatio:         value(rangeCfg{Min: 0.45, Max: 0.85}),
+			SMActivityRatio:               value(rangeCfg{Min: 0.50, Max: 0.90}),
+			SMOccupancyRatio:              value(rangeCfg{Min: 0.35, Max: 0.75}),
+			TensorActivityRatio:           value(rangeCfg{Min: 0.30, Max: 0.70}),
+			DRAMBandwidthUtilizationRatio: value(rangeCfg{Min: 0.40, Max: 0.80}),
+		})
+	}
+
+	for uuid := range b.seenGPUs {
+		if !live[uuid] {
+			delete(b.seenGPUs, uuid)
+		}
+	}
+}
+
 // synthMIG builds the configured MIG topology, mirroring the real backend's
 // semantics: deterministic MIG uuids, sibling compute instances carrying
 // identical GPU-instance-scoped memory and utilization (the exporter dedups
@@ -192,10 +296,11 @@ func (b *Backend) migUtilization(instance migInstanceConfig, extras *extrasConfi
 	}
 
 	return &collect.MIGUtilization{
-		GraphicsActivityRatio: value(activity),
-		SMActivityRatio:       value(activity),
-		SMOccupancyRatio:      value(activity),
-		TensorActivityRatio:   value(rangeCfg{Min: activity.Min * 0.5, Max: activity.Max * 0.8}),
+		GraphicsActivityRatio:         value(activity),
+		SMActivityRatio:               value(activity),
+		SMOccupancyRatio:              value(activity),
+		TensorActivityRatio:           value(rangeCfg{Min: activity.Min * 0.5, Max: activity.Max * 0.8}),
+		DRAMBandwidthUtilizationRatio: value(rangeCfg{Min: activity.Min * 0.6, Max: activity.Max * 0.9}),
 		PCIeTXBytesPerSecond: value(rangeCfg{
 			Min: extras.PCIe.TXBytesPerSecond.Min * pcieShare.Min,
 			Max: extras.PCIe.TXBytesPerSecond.Max * pcieShare.Max,

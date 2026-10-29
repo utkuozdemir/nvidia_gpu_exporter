@@ -19,6 +19,12 @@ The two original rules keep their full knobs for compatibility.
   "swThermalSlowdown" (dig "swThermalSlowdown" "enabled" false $pr)
   "powerBrake" (dig "powerBrake" "enabled" true $pr)
   "temperatureHigh" (dig "temperatureHigh" "enabled" false $pr)
+  "temperatureTlimitLow" (dig "temperatureTlimitLow" "enabled" true $pr)
+  "pcieLinkGenDegraded" (dig "pcieLinkGenDegraded" "enabled" true $pr)
+  "pcieLinkWidthDegraded" (dig "pcieLinkWidthDegraded" "enabled" false $pr)
+  "pcieReplayRollovers" (dig "pcieReplayRollovers" "enabled" false $pr)
+  "idleVramAllocated" (dig "idleVramAllocated" "enabled" false $pr)
+  "computeAppsInvisible" (dig "computeAppsInvisible" "enabled" true $pr)
   "gpuMissing" (dig "gpuMissing" "enabled" false $pr)
 }}
 {{- $any := false }}
@@ -247,6 +253,106 @@ spec:
               {{ dig "temperatureHigh" "thresholdCelsius" 85 $pr }}C for 10 minutes. Check
               cooling and airflow. This rule is opt-in because safe temperatures differ per
               GPU generation; tune the threshold to your fleet.
+        {{- end }}
+        {{- if get $on "temperatureTlimitLow" }}
+        - alert: NvidiaGpuTemperatureTlimitLow
+          expr: nvidia_smi_temperature_gpu_tlimit < {{ dig "temperatureTlimitLow" "thresholdCelsius" 5 $pr }}
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: A GPU on {{ printf "{{ $labels.instance }}" }} is close to its thermal slowdown limit
+            description: >-
+              GPU {{ printf "{{ $labels.uuid }}" }} has less than
+              {{ dig "temperatureTlimitLow" "thresholdCelsius" 5 $pr }}C of thermal headroom
+              remaining before slowdown (temperature.gpu.tlimit, current value:
+              {{ printf "{{ $value }}" }}C) for 10 minutes. Unlike a fixed temperature
+              threshold, tlimit uses the GPU's own per-SKU target temperature. Check fans,
+              airflow, dust and ambient temperature.
+        {{- end }}
+        {{- if get $on "pcieLinkGenDegraded" }}
+        - alert: NvidiaGpuPcieLinkGenDegraded
+          expr: >-
+            nvidia_smi_pcie_link_gen_current < nvidia_smi_pcie_link_gen_max
+            and nvidia_smi_utilization_gpu_ratio > 0.5
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: PCIe link generation is degraded under load on {{ printf "{{ $labels.instance }}" }}
+            description: >-
+              GPU {{ printf "{{ $labels.uuid }}" }} has been running at a lower PCIe link
+              generation than its maximum while above 50% compute utilization for 10 minutes
+              (current generation: {{ printf "{{ $value }}" }}). Idle GPUs downshift PCIe
+              generation to save power, which is normal, whereas sustained downshifting under
+              load points to a riser cable, slot seating or motherboard BIOS configuration
+              issue. Reseat the card or riser cable and check PCIe slot settings in the BIOS.
+        {{- end }}
+        {{- if get $on "pcieLinkWidthDegraded" }}
+        - alert: NvidiaGpuPcieLinkWidthDegraded
+          expr: >-
+            nvidia_smi_pcie_link_width_current < nvidia_smi_pcie_link_width_max
+            and nvidia_smi_utilization_gpu_ratio > 0.5
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: PCIe link width is degraded under load on {{ printf "{{ $labels.instance }}" }}
+            description: >-
+              GPU {{ printf "{{ $labels.uuid }}" }} has been negotiated to fewer PCIe lanes
+              than its maximum width while above 50% compute utilization for 10 minutes
+              (current width: x{{ printf "{{ $value }}" }}). If the card is installed in a
+              full-width slot, reseat the GPU or riser cable and check BIOS PCIe bifurcation
+              settings. This rule is opt-in because cards intentionally installed in narrower
+              slots report a lower current width permanently.
+        {{- end }}
+        {{- if get $on "pcieReplayRollovers" }}
+        - alert: NvidiaGpuPcieReplayRollovers
+          expr: increase(nvidia_smi_pcie_replay_rollovers_total[1h]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: PCIe link replay rollovers on {{ printf "{{ $labels.instance }}" }}
+            description: >-
+              GPU {{ printf "{{ $labels.uuid }}" }} recorded PCIe link replay rollovers in
+              the last hour. Replay rollovers indicate sustained PCIe signal integrity
+              problems rather than isolated transient retries. Reseat the GPU or PCIe riser
+              cable, inspect the slot for dust or damage, and check dmesg for PCIe AER
+              messages. Requires the NVML backend.
+        {{- end }}
+        {{- if get $on "idleVramAllocated" }}
+        - alert: NvidiaGpuIdleVramAllocated
+          expr: >-
+            (nvidia_smi_memory_used_bytes / nvidia_smi_memory_total_bytes > 0.5)
+            and (max_over_time(nvidia_smi_utilization_gpu_ratio[1h]) < 0.05)
+          for: 15m
+          labels:
+            severity: info
+          annotations:
+            summary: A GPU on {{ printf "{{ $labels.instance }}" }} is holding VRAM while idle
+            description: >-
+              GPU {{ printf "{{ $labels.uuid }}" }} has more than 50% of its framebuffer
+              allocated while its peak compute utilization over the last hour stayed below
+              5%. Check for leaked or idle workloads holding GPU memory and terminate or
+              scale down unused jobs.
+        {{- end }}
+        {{- if get $on "computeAppsInvisible" }}
+        - alert: NvidiaGpuComputeAppsInvisible
+          expr: >-
+            nvidia_smi_compute_apps == 0
+            and nvidia_smi_memory_used_bytes > 1073741824
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: GPU memory is in use with zero visible compute processes on {{ printf "{{ $labels.instance }}" }}
+            description: >-
+              GPU {{ printf "{{ $labels.uuid }}" }} has more than 1 GiB of memory in use for
+              30 minutes while nvidia_smi_compute_apps reports zero processes. In Kubernetes,
+              the exporter cannot see processes in other pods when computeApps.enabled is
+              turned on without hostPID: true. Enable hostPID: true in the chart values if
+              you want cross-pod process visibility, or disable computeApps.enabled if
+              per-process metrics are not needed.
         {{- end }}
         {{- if get $on "gpuMissing" }}
         - alert: NvidiaGpuMissing

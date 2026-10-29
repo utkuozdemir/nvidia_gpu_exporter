@@ -141,6 +141,7 @@ func TestXIDWatcherCountsEvents(t *testing.T) {
 	}, 5*time.Second, 5*time.Millisecond, "both xid series must appear")
 
 	counts := backend.XIDCounts()
+	assert.True(t, backend.XIDWatcherEnabled())
 	assert.Equal(t, "11111111-2222-3333-4444-555555555555", counts[0].UUID,
 		"the uuid must come from the registration-time cache, normalized")
 	assert.Equal(t, uint64(31), counts[0].XID, "output must be sorted")
@@ -152,6 +153,7 @@ func TestXIDWatcherCountsEvents(t *testing.T) {
 	cancel()
 	wg.Wait()
 
+	assert.False(t, backend.XIDWatcherEnabled())
 	assert.Equal(t, xid.creates.Load(), xid.frees.Load(), "every event set must be freed")
 }
 
@@ -175,6 +177,7 @@ func TestXIDWatcherUnsupportedIdles(t *testing.T) {
 	}, 5*time.Second, 5*time.Millisecond)
 
 	assert.Empty(t, backend.XIDCounts())
+	assert.False(t, backend.XIDWatcherEnabled())
 	assert.Equal(t, int64(1), fake.inits.Load(),
 		"unsupported event registration is not a lifecycle failure and must not re-initialize NVML")
 	assert.Equal(t, int64(0), fake.shutdowns.Load(),

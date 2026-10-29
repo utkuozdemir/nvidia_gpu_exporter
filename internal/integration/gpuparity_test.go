@@ -392,8 +392,15 @@ func TestBackendMetricFamilyParityOnRealGPU(t *testing.T) {
 	// a silently broken extras path must not pass as an accepted absence
 	// (the energy counter requires Volta or newer, which every GPU box
 	// qualifies as)
-	if !hasFamilyWithPrefix(nativeFamilies, "nvidia_smi_energy_joules_total") {
-		t.Error("nvml-only metric family missing from the nvml backend: nvidia_smi_energy_joules_total")
+	for _, family := range []string{
+		"nvidia_smi_energy_joules_total",
+		"nvidia_smi_pcie_replays_total",
+		"nvidia_smi_pcie_replay_rollovers_total",
+		"nvidia_smi_xid_watcher_enabled",
+	} {
+		if !hasFamilyWithPrefix(nativeFamilies, family) {
+			t.Errorf("nvml-only metric family missing from the nvml backend: %s", family)
+		}
 	}
 
 	// cuda_version is derived independently per backend (the nvidia-smi
@@ -546,7 +553,15 @@ func compareFamiliesNVMLToExec(t *testing.T, execFamilies, nativeFamilies map[st
 //nolint:gochecknoglobals // shared test fixture
 var nvmlOnlyFamilyPrefixes = []string{
 	"nvidia_smi_energy_joules_total",
+	"nvidia_smi_pcie_replays_total",
+	"nvidia_smi_pcie_replay_rollovers_total",
 	"nvidia_smi_pcie_throughput_",
+	"nvidia_smi_nvlink_",
+	"nvidia_smi_graphics_activity_ratio",
+	"nvidia_smi_sm_activity_ratio",
+	"nvidia_smi_sm_occupancy_ratio",
+	"nvidia_smi_tensor_activity_ratio",
+	"nvidia_smi_dram_bandwidth_utilization_ratio",
 	// deliberately NOT a bare "nvidia_smi_mig_" prefix: the shared
 	// mig.mode.* query fields render as nvidia_smi_mig_mode_*, and those
 	// must stay under the parity requirement
@@ -556,6 +571,7 @@ var nvmlOnlyFamilyPrefixes = []string{
 	"nvidia_smi_mig_sm_activity_ratio",
 	"nvidia_smi_mig_sm_occupancy_ratio",
 	"nvidia_smi_mig_tensor_activity_ratio",
+	"nvidia_smi_mig_dram_bandwidth_utilization_ratio",
 	"nvidia_smi_mig_pcie_throughput_",
 	"nvidia_smi_compute_app_sm_utilization_ratio",
 	"nvidia_smi_compute_app_memory_utilization_ratio",

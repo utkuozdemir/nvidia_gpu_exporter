@@ -1031,6 +1031,10 @@ func TestDemoBackendDefaultConfig(t *testing.T) {
 		"nvidia_smi_graphics_app_info",
 		"nvidia_smi_energy_joules_total",
 		"nvidia_smi_pcie_throughput_tx_bytes_per_second",
+		"nvidia_smi_pcie_replays_total",
+		"nvidia_smi_pcie_replay_rollovers_total",
+		"nvidia_smi_nvlink_tx_bytes_total",
+		"nvidia_smi_nvlink_rx_bytes_total",
 		"nvidia_smi_mig_info",
 		"nvidia_smi_mig_memory_used_bytes",
 		"nvidia_smi_xid_errors_total",
@@ -1039,13 +1043,23 @@ func TestDemoBackendDefaultConfig(t *testing.T) {
 		assert.Contains(t, first, family+"{", "family %s must be served by the built-in demo config", family)
 	}
 
+	assert.Contains(t, first, "nvidia_smi_xid_watcher_enabled 1")
+
 	assert.Regexp(t, `nvidia_smi_compute_app_info\{[^}]*container_id="[0-9a-f]{64}"`, first)
 	assert.Regexp(t, `nvidia_smi_compute_app_info\{[^}]*systemd_unit="gpu-workload\.service"`, first)
 
 	assert.NotContains(t, first, "nvidia_smi_mig_sm_activity_ratio",
 		"MIG utilization needs a sample pair, like the real backend")
+	assert.NotContains(t, first, "nvidia_smi_sm_activity_ratio",
+		"whole-GPU GPM utilization needs a sample pair, like the real backend")
 	assert.Contains(t, second, "nvidia_smi_mig_sm_activity_ratio{",
 		"the second collection must serve MIG utilization")
+	assert.Contains(t, second, "nvidia_smi_mig_dram_bandwidth_utilization_ratio{",
+		"the second collection must serve MIG DRAM bandwidth utilization")
+	assert.Contains(t, second, "nvidia_smi_sm_activity_ratio{",
+		"the second collection must serve whole-GPU GPM utilization")
+	assert.Contains(t, second, "nvidia_smi_dram_bandwidth_utilization_ratio{",
+		"the second collection must serve whole-GPU DRAM bandwidth utilization")
 
 	assert.Regexp(t, `nvidia_smi_mig_mode_current\{[^}]*\} 1`, first,
 		"a GPU carrying a MIG topology must report the mode on")

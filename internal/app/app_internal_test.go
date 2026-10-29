@@ -48,6 +48,7 @@ func TestValidateMetricsPath(t *testing.T) {
 		{path: "/metrics#frag", wantErr: true},
 		{path: "/-/healthy", wantErr: true},
 		{path: "/-/ready", wantErr: true},
+		{path: "/-/gpu-healthy", wantErr: true},
 		{path: "/debug/pprof", wantErr: true},
 		{path: "/debug/pprof/heap", wantErr: true},
 	}
@@ -358,4 +359,127 @@ func TestWrapWithProcessIdentity(t *testing.T) {
 	assert.Empty(t, reading2.Apps[0].ContainerID)
 	assert.Equal(t, "vllm.service", reading2.Apps[0].SystemdUnit)
 	assert.Equal(t, 2, procFS.opens["100/cgroup"])
+}
+
+type fakePeeker struct {
+	snapshot collect.Snapshot
+}
+
+func (f fakePeeker) Peek() collect.Snapshot {
+	return f.snapshot
+}
+
+type fakeXIDSource struct {
+	counters []collect.XIDCounter
+}
+
+func (f fakeXIDSource) XIDCounts() []collect.XIDCounter {
+	return f.counters
+}
+
+func (f fakeXIDSource) XIDWatcherEnabled() bool {
+	return true
+}
+
+//nolint:funlen // table-driven GPU health evaluation test
+func TestGPUHealthHandler(t *testing.T) {
+	t.Parallel()
+
+	healthyRow := func(uuid, recovery string) nvidiasmi.Row {
+		cells := map[nvidiasmi.QField]nvidiasmi.Cell{
+			nvidiasmi.UUIDQField: {RawValue: uuid},
+		}
+		if recovery != "" {
+			cells[nvidiasmi.GPURecoveryActionQField] = nvidiasmi.Cell{RawValue: recovery}
+		}
+
+		return nvidiasmi.Row{QFieldToCells: cells}
+	}
+
+	tests := []struct {
+		name       string
+		snapshot   collect.Snapshot
+		xids       []collect.XIDCounter
+		wantStatus int
+		wantBody   string
+	}{
+		{
+			name:       "no collection yet",
+			snapshot:   collect.Snapshot{},
+			wantStatus: http.StatusServiceUnavailable,
+			wantBody:   "no collection has completed yet\n",
+		},
+		{
+			name:       "failed collection",
+			snapshot:   collect.Snapshot{Attempted: true, Success: false},
+			wantStatus: http.StatusServiceUnavailable,
+			wantBody:   "most recent collection failed\n",
+		},
+		{
+			name: "healthy collection with None recovery action and non-fatal XID",
+			snapshot: collect.Snapshot{
+				Attempted: true,
+				Success:   true,
+				Table: &nvidiasmi.Table{
+					Rows: []nvidiasmi.Row{healthyRow("GPU-u0", "None")},
+				},
+			},
+			xids:       []collect.XIDCounter{{UUID: "u0", XID: 31, Count: 1}},
+			wantStatus: http.StatusOK,
+			wantBody:   "Nvidia GPU Exporter GPUs are Healthy.\n",
+		},
+		{
+			name: "non-zero gpu_recovery_action",
+			snapshot: collect.Snapshot{
+				Attempted: true,
+				Success:   true,
+				Table: &nvidiasmi.Table{
+					Rows: []nvidiasmi.Row{healthyRow("GPU-u0", "GPU Reset")},
+				},
+			},
+			wantStatus: http.StatusServiceUnavailable,
+			wantBody:   "gpu u0 requires recovery action (GPU Reset)\n",
+		},
+		{
+			name: "missing GPU UUID",
+			snapshot: collect.Snapshot{
+				Attempted:    true,
+				Success:      true,
+				MissingUUIDs: []string{"u1"},
+				Table: &nvidiasmi.Table{
+					Rows: []nvidiasmi.Row{healthyRow("GPU-u0", "None")},
+				},
+			},
+			wantStatus: http.StatusServiceUnavailable,
+			wantBody:   "gpu u1 disappeared since startup\n",
+		},
+		{
+			name: "reset-class XID observed",
+			snapshot: collect.Snapshot{
+				Attempted: true,
+				Success:   true,
+				Table: &nvidiasmi.Table{
+					Rows: []nvidiasmi.Row{healthyRow("GPU-u0", "None")},
+				},
+			},
+			xids:       []collect.XIDCounter{{UUID: "u0", XID: 79, Count: 2}},
+			wantStatus: http.StatusServiceUnavailable,
+			wantBody:   "gpu u0 observed fatal XID 79 (count 2)\n",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			handler := gpuHealthHandler(fakePeeker{snapshot: testCase.snapshot}, fakeXIDSource{counters: testCase.xids})
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/-/gpu-healthy", nil)
+
+			handler(rec, req)
+
+			assert.Equal(t, testCase.wantStatus, rec.Code)
+			assert.Equal(t, testCase.wantBody, rec.Body.String())
+		})
+	}
 }

@@ -31,7 +31,7 @@ backend's surface with synthetic data, see
 Some readings exist in the driver library but not in the `nvidia-smi` query
 interface, so only the NVML backend can export them.
 
-### Energy and PCIe throughput
+### Energy, PCIe and NVLink
 
 - `nvidia_smi_energy_joules_total{uuid}` (counter): total energy consumed by
   the GPU in joules since the driver was last loaded. Always on in the NVML
@@ -45,6 +45,37 @@ interface, so only the NVML backend can export them.
   [CONFIGURE.md](CONFIGURE.md). The driver samples each direction over its
   own 20ms counter window, so the two values are consecutive samples, not a
   simultaneous pair.
+- `nvidia_smi_pcie_replays_total{uuid}` and
+  `nvidia_smi_pcie_replay_rollovers_total{uuid}` (counters): PCIe data link
+  layer replay and replay-rollover counts (`FI_DEV_PCIE_REPLAY_COUNTER` and
+  `FI_DEV_PCIE_REPLAY_ROLLOVER_COUNTER`). Always on in the NVML backend and
+  omitted when the driver reports `NVML_ERROR_NOT_SUPPORTED`. Both counters
+  reset on GPU reset or driver reload, so read them through `rate()` or
+  `increase()`.
+- `nvidia_smi_nvlink_tx_bytes_total{uuid}` and
+  `nvidia_smi_nvlink_rx_bytes_total{uuid}` (counters): aggregate NVLink data
+  payload bytes transmitted and received across all links on the GPU
+  (`FI_DEV_NVLINK_THROUGHPUT_DATA_TX` and `FI_DEV_NVLINK_THROUGHPUT_DATA_RX`,
+  converted from KiB to bytes). Always on in the NVML backend when
+  `FI_DEV_NVLINK_LINK_COUNT > 0` and omitted on GPUs without NVLink or when
+  the driver reports `NVML_ERROR_NOT_SUPPORTED`. Both counters reset on GPU
+  reset or driver reload, so read them through `rate()` or `increase()`.
+
+### Whole-GPU GPM activity
+
+- `nvidia_smi_graphics_activity_ratio{uuid}`,
+  `nvidia_smi_sm_activity_ratio{uuid}`,
+  `nvidia_smi_sm_occupancy_ratio{uuid}`,
+  `nvidia_smi_tensor_activity_ratio{uuid}` and
+  `nvidia_smi_dram_bandwidth_utilization_ratio{uuid}` (gauges, `0.0` to `1.0`):
+  fine-grained engine activity and DRAM bandwidth utilization from NVML GPU
+  Performance Monitoring (`nvmlGpmSampleGet`), computed over the window
+  between the two most recent collections. Always on in the NVML backend and
+  probed at runtime via `nvmlGpmQueryDeviceSupport`: present on Hopper and
+  newer supported GPUs when MIG mode is disabled, and absent on Ada and
+  earlier architectures (or when MIG mode is enabled, where the per-MIG GPM
+  metrics below take over). Whole-GPU GPM uses the same two-sample window
+  guards described below for MIG instances.
 
 ### MIG instances
 
@@ -60,7 +91,7 @@ metrics. Nothing to configure, they appear when MIG instances exist.
   instance and is shared by its compute instances, so memory is reported
   once per GPU instance. Labeling it per MIG device would double-count on
   instances hosting several compute slices.
-- `nvidia_smi_mig_{graphics_activity,sm_activity,sm_occupancy,tensor_activity}_ratio{uuid, gpu_instance_id}`
+- `nvidia_smi_mig_{graphics_activity,sm_activity,sm_occupancy,tensor_activity,dram_bandwidth_utilization}_ratio{uuid, gpu_instance_id}`
   and `nvidia_smi_mig_pcie_throughput_{tx,rx}_bytes_per_second{uuid, gpu_instance_id}`
   (gauges): the GPU instance's activity, computed over the window between
   the two most recent collections.
@@ -117,6 +148,11 @@ through driver events or the kernel log.
 - `nvidia_smi_xid_last_timestamp_seconds{uuid, xid}` (gauge): when the most
   recent event was received by the exporter. The driver events carry no
   timestamp of their own.
+- `nvidia_smi_xid_watcher_enabled` (gauge): `1` when the NVML XID event
+  watcher is registered and active, or `0` when event registration is
+  unsupported or unavailable (for example on Windows under the WDDM driver
+  model). Lets alerts distinguish "zero XIDs observed" from "XID watching is
+  inactive".
 
 For alerting, prefer the timestamp and filter to an explicit code allowlist:
 
@@ -340,3 +376,57 @@ nvidia_smi_compute_app_used_memory_bytes{container_id!=""}
       )
     )
 ```
+
+### Correlating with vLLM (pod attribution and energy per token)
+
+When running `vLLM` (or another inference server that exports Prometheus
+metrics) alongside `nvidia_gpu_exporter`, the same `container_id` join bridges
+the GPU's `uuid` to the `vLLM` pod (`namespace`, `pod`). Once `uuid` is mapped
+to `(namespace, pod)`, any per-GPU series (`nvidia_smi_power_draw_watts`,
+`nvidia_smi_energy_joules_total`, `nvidia_smi_temperature_gpu`,
+`nvidia_smi_dram_bandwidth_utilization_ratio`) can be grouped by pod or joined
+with `vLLM` series:
+
+```promql
+max by (uuid, namespace, pod) (
+  nvidia_smi_compute_app_info{container_id!=""}
+    * on (container_id) group_left (namespace, pod)
+      max by (container_id, namespace, pod) (
+        label_replace(
+          kube_pod_container_info{container_id!=""},
+          "container_id", "$1", "container_id", "^[a-z0-9-]+://([0-9a-f]{64})$"
+        )
+      )
+)
+```
+
+To compute GPU energy in joules per generated token over a 1-hour window on a
+dedicated single-workload node, use the hardware energy counter in `nvml` mode:
+
+```promql
+sum(increase(nvidia_smi_energy_joules_total[1h]))
+  / (sum(increase(vllm:generation_tokens_total[1h])) > 0)
+```
+
+In `exec` mode, where `nvidia_smi_energy_joules_total` is not available,
+integrate sampled power draw over the same window (`1 W * 3600 s = 3600 J`):
+
+```promql
+sum(avg_over_time(nvidia_smi_power_draw_watts[1h]) * 3600)
+  / (sum(increase(vllm:generation_tokens_total[1h])) > 0)
+```
+
+On nodes running multiple `vLLM` pods on dedicated GPUs, join the numerator
+with the `(uuid, namespace, pod)` mapping above and aggregate both sides
+`by (namespace, pod)`.
+
+Keep three constraints in mind for clean attribution:
+
+- Use the same lookback window (`[1h]` above) in both the numerator and the
+  denominator.
+- Filter zero-token windows (`> 0` on the denominator) so idle periods do not
+  divide idle GPU baseload power by zero or near-zero token counts.
+- `nvidia_smi_energy_joules_total` and `nvidia_smi_power_draw_watts` are
+  per-GPU, so per-pod energy attribution requires dedicated GPU assignment per
+  `vLLM` pod (no time-slicing or multi-tenant sharing on the same physical
+  GPU).

@@ -40,7 +40,7 @@ var fieldValueMappers = map[QField]func(string) (float64, error){
 	// Both the short and prefixed spellings are accepted because nvidia-smi's
 	// exact wording is not fully pinned down (no bad-GPU capture to verify);
 	// anything unrecognized is reported by the exporter rather than dropped.
-	gpuRecoveryActionQField: enumValueMapper(gpuRecoveryActionQField, map[string]float64{
+	GPURecoveryActionQField: enumValueMapper(GPURecoveryActionQField, map[string]float64{
 		"none": 0, "gpu reset": 1, "reset": 1, "node reboot": 2, "reboot": 2,
 		"drain p2p": 3, "drain and reset": 4,
 	}),

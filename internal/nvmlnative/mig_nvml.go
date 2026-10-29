@@ -20,6 +20,7 @@ const (
 	gpmMetricSMUtil        = 2
 	gpmMetricSMOccupancy   = 3
 	gpmMetricAnyTensorUtil = 5
+	gpmMetricDramBwUtil    = 10
 	gpmMetricPcieTxPerSec  = 20
 	gpmMetricPcieRxPerSec  = 21
 )
@@ -263,14 +264,114 @@ func (b *Backend) enumerateMIG(
 	return groups, true
 }
 
+// collectGPM samples whole-GPU GPM activity ratios on non-MIG GPUs that
+// support GPM. MIG-enabled GPUs report per-instance GPM under collectMIG
+// instead. Reports whether extras collection may continue.
+func (b *Backend) collectGPM(
+	dev device,
+	uuid string,
+	extras *collect.Extras,
+	seenGIs map[string]bool,
+) bool {
+	supported, ok := b.canSampleWholeGPUGPM(dev, uuid, seenGIs)
+	if !ok || !supported {
+		return ok
+	}
+
+	ids := []uint32{
+		gpmMetricGraphicsUtil, gpmMetricSMUtil, gpmMetricSMOccupancy,
+		gpmMetricAnyTensorUtil, gpmMetricDramBwUtil,
+	}
+
+	util, ok := b.gpmSample(
+		"gpm", "GPU", uuid, uuid,
+		func(sample nvml.GpmSample) nvml.Return {
+			return b.api.gpmSampleGet(dev.raw(), sample)
+		},
+		ids,
+	)
+	if !ok {
+		return false
+	}
+
+	if util != nil {
+		extras.GPM = append(extras.GPM, collect.GPUUtilization{
+			UUID:                          uuid,
+			GraphicsActivityRatio:         util.GraphicsActivityRatio,
+			SMActivityRatio:               util.SMActivityRatio,
+			SMOccupancyRatio:              util.SMOccupancyRatio,
+			TensorActivityRatio:           util.TensorActivityRatio,
+			DRAMBandwidthUtilizationRatio: util.DRAMBandwidthUtilizationRatio,
+		})
+	}
+
+	return true
+}
+
+func (b *Backend) canSampleWholeGPUGPM(
+	dev device,
+	uuid string,
+	seenGIs map[string]bool,
+) (bool, bool) {
+	mode, _, ret := dev.GetMigMode()
+
+	switch {
+	case ret == nvml.SUCCESS && mode == nvml.DEVICE_MIG_ENABLE:
+		return false, true
+	case ret != nvml.SUCCESS && ret != nvml.ERROR_NOT_SUPPORTED && ret != nvml.ERROR_FUNCTION_NOT_FOUND:
+		return false, b.extrasFailure("gpm", "cannot read the MIG mode", ret)
+	}
+
+	seenGIs[uuid] = true
+
+	if !b.wholeGPUGpmAvailable() {
+		return false, true
+	}
+
+	support, ret := dev.GpmQueryDeviceSupport()
+
+	switch {
+	case isLifecycleError(ret):
+		return false, b.extrasFailure("gpm", "cannot probe the GPU activity support", ret)
+	case ret != nvml.SUCCESS, support.IsSupportedDevice == 0:
+		return false, true
+	default:
+		return true, true
+	}
+}
+
 // gpmUtilization computes one GPU instance's utilization from the retained
 // previous sample and a fresh one, rotating the retention. A first sight (or
 // an invalidated retention) seeds the state and reports nil values. Reports
 // whether extras collection may continue.
+func (b *Backend) gpmUtilization(dev device, key string, group migGroup) (*collect.MIGUtilization, bool) {
+	ids := []uint32{
+		gpmMetricGraphicsUtil, gpmMetricSMUtil, gpmMetricSMOccupancy,
+		gpmMetricAnyTensorUtil, gpmMetricDramBwUtil,
+		gpmMetricPcieTxPerSec, gpmMetricPcieRxPerSec,
+	}
+
+	return b.gpmSample(
+		"mig-gpm", "GPU instance", key, strings.Join(group.members, ","),
+		func(sample nvml.GpmSample) nvml.Return {
+			return b.api.gpmMigSampleGet(dev.raw(), group.gi, sample)
+		},
+		ids,
+	)
+}
+
+// gpmSample runs the two-sample GPM retention state machine for either a whole
+// GPU or a MIG GPU instance.
 //
 //nolint:cyclop // the retention guards are a linear rule set
-func (b *Backend) gpmUtilization(dev device, key string, group migGroup) (*collect.MIGUtilization, bool) {
-	fingerprint := strings.Join(group.members, ",")
+func (b *Backend) gpmSample(
+	family string,
+	target string,
+	key string,
+	fingerprint string,
+	take func(nvml.GpmSample) nvml.Return,
+	ids []uint32,
+) (*collect.MIGUtilization, bool) {
 	now := b.now()
 
 	state := b.gpm[key]
@@ -293,13 +394,13 @@ func (b *Backend) gpmUtilization(dev device, key string, group migGroup) (*colle
 
 	sample, ret := b.api.gpmSampleAlloc()
 	if ret != nvml.SUCCESS {
-		return nil, b.extrasFailure("mig-gpm", "cannot allocate a GPM sample", ret)
+		return nil, b.extrasFailure(family, "cannot allocate a GPM sample", ret)
 	}
 
-	if ret := b.api.gpmMigSampleGet(dev.raw(), group.gi, sample); ret != nvml.SUCCESS {
+	if ret := take(sample); ret != nvml.SUCCESS {
 		_ = b.api.gpmSampleFree(sample)
 
-		return nil, b.extrasFailure("mig-gpm", "cannot sample the GPU instance activity", ret)
+		return nil, b.extrasFailure(family, "cannot sample the "+target+" activity", ret)
 	}
 
 	if state == nil {
@@ -312,7 +413,7 @@ func (b *Backend) gpmUtilization(dev device, key string, group migGroup) (*colle
 		return nil, true
 	}
 
-	util, ok := b.gpmMetrics(state.sample, sample)
+	util, ok := b.gpmMetrics(family, target, state.sample, sample, ids)
 	if !ok {
 		// a lifecycle-class failure: markLost already released the retained
 		// samples and emptied the map, so only the fresh local sample is
@@ -336,12 +437,12 @@ func (b *Backend) gpmUtilization(dev device, key string, group migGroup) (*colle
 // outer or per-metric, marks the backend lost and aborts.
 //
 //nolint:cyclop // one linear decode pass with per-metric classification
-func (b *Backend) gpmMetrics(prev, cur nvml.GpmSample) (*collect.MIGUtilization, bool) {
-	ids := []uint32{
-		gpmMetricGraphicsUtil, gpmMetricSMUtil, gpmMetricSMOccupancy,
-		gpmMetricAnyTensorUtil, gpmMetricPcieTxPerSec, gpmMetricPcieRxPerSec,
-	}
-
+func (b *Backend) gpmMetrics(
+	family string,
+	target string,
+	prev, cur nvml.GpmSample,
+	ids []uint32,
+) (*collect.MIGUtilization, bool) {
 	var metricsGet nvml.GpmMetricsGetType
 
 	metricsGet.NumMetrics = uint32(len(ids)) //nolint:gosec // G115: len(ids) is a small constant
@@ -353,7 +454,7 @@ func (b *Backend) gpmMetrics(prev, cur nvml.GpmSample) (*collect.MIGUtilization,
 	}
 
 	if ret := b.api.gpmMetricsGet(&metricsGet); ret != nvml.SUCCESS {
-		return nil, b.extrasFailure("mig-gpm", "cannot compute the GPU instance activity metrics", ret)
+		return nil, b.extrasFailure(family, "cannot compute the "+target+" activity metrics", ret)
 	}
 
 	util := &collect.MIGUtilization{}
@@ -364,7 +465,7 @@ func (b *Backend) gpmMetrics(prev, cur nvml.GpmSample) (*collect.MIGUtilization,
 		metricRet := nvml.Return(metric.NvmlReturn) //nolint:gosec // G115: the field carries an nvmlReturn_t
 		if metricRet != nvml.SUCCESS {
 			if isLifecycleError(metricRet) {
-				return nil, b.extrasFailure("mig-gpm", "GPU instance activity metric hit a lifecycle error", metricRet)
+				return nil, b.extrasFailure(family, target+" activity metric hit a lifecycle error", metricRet)
 			}
 
 			continue
@@ -383,6 +484,8 @@ func (b *Backend) gpmMetrics(prev, cur nvml.GpmSample) (*collect.MIGUtilization,
 			util.SMOccupancyRatio = new(metric.Value / 100)
 		case gpmMetricAnyTensorUtil:
 			util.TensorActivityRatio = new(metric.Value / 100)
+		case gpmMetricDramBwUtil:
+			util.DRAMBandwidthUtilizationRatio = new(metric.Value / 100)
 		case gpmMetricPcieTxPerSec:
 			util.PCIeTXBytesPerSecond = new(metric.Value * gpmMibMultiplier)
 		case gpmMetricPcieRxPerSec:
@@ -461,13 +564,24 @@ func migAppID(id uint32) string {
 }
 
 // gpmAvailable reports whether the driver exports every GPM entry point the
-// sampling path uses. They are probed as a set because the family allocates a
-// sample through one export and releases it through another.
+// MIG sampling path uses. They are probed as a set because the family allocates
+// a sample through one export and releases it through another.
 func (b *Backend) gpmAvailable() bool {
 	return b.avail.Load().hasAll(
 		"nvmlGpmSampleAlloc",
 		"nvmlGpmSampleFree",
 		"nvmlGpmMigSampleGet",
+		"nvmlGpmMetricsGet",
+	)
+}
+
+// wholeGPUGpmAvailable reports whether the driver exports every GPM entry
+// point the whole-GPU sampling path uses.
+func (b *Backend) wholeGPUGpmAvailable() bool {
+	return b.avail.Load().hasAll(
+		"nvmlGpmSampleAlloc",
+		"nvmlGpmSampleFree",
+		"nvmlGpmSampleGet",
 		"nvmlGpmMetricsGet",
 	)
 }

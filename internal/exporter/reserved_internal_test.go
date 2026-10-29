@@ -27,6 +27,7 @@ func TestReservedMetricNamesCoverAll(t *testing.T) {
 	features := Features{
 		ComputeApps: true, GraphicsApps: true, ComputeAppMIGLabels: true,
 		ComputeAppIdentityLabels: true, PCIeThroughput: true,
+		PCIeReplays: true, NVLink: true, GPM: true,
 		Energy: true, MIG: true, XIDEvents: true,
 	}
 
