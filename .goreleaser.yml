@@ -268,6 +268,16 @@ dockers_v2:
     flags:
       - "{{ if not .IsSnapshot }}--output=type=image,rewrite-timestamp=true,push=true{{ end }}"
       - "{{ if not .IsSnapshot }}--provenance=false{{ end }}"
+    labels: &oci_metadata
+      org.opencontainers.image.title: nvidia_gpu_exporter
+      org.opencontainers.image.description: Prometheus exporter for NVIDIA GPUs
+      org.opencontainers.image.source: https://github.com/utkuozdemir/nvidia_gpu_exporter
+      org.opencontainers.image.url: https://github.com/utkuozdemir/nvidia_gpu_exporter
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.licenses: MIT
+      org.opencontainers.image.created: "{{ .CommitDate }}"
+    annotations: *oci_metadata
 
   # The nvml flavor as a tag variant of the same image (postgres:16-alpine
   # style): carries the cgo binary and defaults to the nvml backend.
@@ -299,6 +309,8 @@ dockers_v2:
     flags:
       - "{{ if not .IsSnapshot }}--output=type=image,rewrite-timestamp=true,push=true{{ end }}"
       - "{{ if not .IsSnapshot }}--provenance=false{{ end }}"
+    labels: *oci_metadata
+    annotations: *oci_metadata
 
 scoops:
     # only the static build, like every other publisher; the cgo nvml flavor
