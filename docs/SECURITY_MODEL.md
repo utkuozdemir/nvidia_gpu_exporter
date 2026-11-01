@@ -3,6 +3,19 @@
 This page says what you can expect from the exporter security-wise, where the trust boundaries are, and how the project checks that it holds.
 For reporting a problem, see [SECURITY.md](../.github/SECURITY.md).
 
+## Compliance summary
+
+| Area | Posture |
+| --- | --- |
+| **FIPS 140-3** | Release binaries are built with `GOFIPS140=v1.0.0`: the Go Cryptographic Module `v1.0.0-c2097c7c` ([CMVP Certificate #5247](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/5247)), with FIPS mode on by default. Check a binary with `go version -m nvidia_gpu_exporter \| grep -i fips140`. It covers TLS on the metrics endpoint. Basic auth uses `bcrypt`, which is outside the module, so strict FIPS deployments authenticate scrapers with TLS client certificates. Negotiated algorithms and the override are in [CONFIGURE.md](CONFIGURE.md#tls-authentication-and-fips-140-3). |
+| **Build provenance (SLSA)** | SLSA v1.0 Build Level 2 provenance, made on GitHub-hosted runners, for every archive, package, container image and the Helm chart, kept in GitHub's attestation store. From `v1.17.0` on, GitHub releases are immutable once published. See [Build provenance](INSTALL.md#build-provenance). |
+| **SBOM** | Every binary embeds its Go module list (`go version -m nvidia_gpu_exporter`), which Trivy, Syft and Grype read directly. A CycloneDX SBOM of a binary can be generated from it with [`cyclonedx-gomod`](https://github.com/CycloneDX/cyclonedx-gomod): `cyclonedx-gomod bin -json -std -licenses nvidia_gpu_exporter`. For the container images, Syft or Trivy on the image also covers the packages of the distroless base. The NVIDIA driver libraries and `nvidia-smi` come from the host and are not part of the exporter. |
+| **Reproducible builds** | The release archives and packages are rebuilt on a second runner and compared byte for byte, on every change and every release. The container images are built reproducibly too, which is checked manually, and the Helm chart is packaged with the commit time as every file time. See [Reproducing a release](INSTALL.md#reproducing-a-release). |
+| **Artifact signing** | Keyless cosign signatures on the checksums, the images and the OCI chart, GPG provenance for the classic Helm repository, and signed release tags. See [What you can expect](#what-you-can-expect) below. |
+| **Network and telemetry** | The exporter makes no outbound connections and sends no telemetry. The only exception is a wrapper command the operator configures, such as `ssh`. |
+| **Container and Kubernetes hardening** | Non-root distroless image, and a default chart install is admitted under the `restricted` Pod Security Standard. See [What you can expect](#what-you-can-expect) below. Images can be pinned by digest with `image.tag: "X.Y.Z@sha256:..."`. |
+| **Dependency updates** | Renovate keeps Go dependencies, direct and indirect, and the base image digest up to date, with OSV vulnerability alerts on. |
+
 ## What the exporter does
 
 The exporter reads GPU metrics from the NVIDIA driver library (`libnvidia-ml` / `nvml.dll` in `nvml` mode) or by running `nvidia-smi` (`exec` mode), and serves the result as Prometheus metrics over HTTP.
