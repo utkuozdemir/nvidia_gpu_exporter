@@ -1,6 +1,6 @@
 apiVersion: v2
 name: nvidia-gpu-exporter
-description: Nvidia GPU exporter for prometheus, using nvidia-smi binary to gather metrics.
+description: Prometheus exporter for NVIDIA GPUs.
 type: application
 # version and appVersion are stamped from the release tag at publish time.
 # The chart major is the app major plus one.
@@ -12,6 +12,7 @@ keywords:
   - nvidia
   - gpu
   - exporter
+  - nvml
   - nvidia-smi
   - prometheus
 sources:

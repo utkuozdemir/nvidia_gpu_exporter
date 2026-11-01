@@ -3,7 +3,7 @@ image:
   repository: docker.io/utkuozdemir/nvidia_gpu_exporter
   # -- Image pull policy
   pullPolicy: IfNotPresent
-  # -- Image tag (if not specified, defaults to the chart's appVersion)
+  # -- Image tag (if not specified, defaults to the chart's appVersion). Set to a `-nvml` variant (for example `X.Y.Z-nvml`) for the recommended native NVML backend.
   tag: ""
 
 # -- Name of the RuntimeClass to run the pods with. GPU access is injected by
@@ -46,7 +46,7 @@ computeApps:
   # -- Also export per-process GPU metrics (`nvidia_smi_compute_app_*`). To
   # see processes of other pods and containers, the exporter must share the
   # host PID namespace: enable `hostPID` along with this. Note that the pid
-  # label churns with the processes, creating short-lived series.
+  # label changes as processes start and stop, creating short-lived series.
   enabled: false
 
 log:
@@ -56,8 +56,8 @@ log:
   format: logfmt
 
 # -- Liveness probe for the exporter container. The default checks that the
-# process serves HTTP at all; it deliberately does not depend on collection
-# success, so a failing nvidia-smi keeps the pod scrapeable and the failure
+# process serves HTTP at all. It deliberately does not depend on collection
+# success, so a failing collection keeps the pod scrapeable and the failure
 # visible in the metrics. Set to `null` to disable the probe.
 livenessProbe:
   httpGet:
@@ -175,20 +175,20 @@ prometheusRule:
     severity: warning
   collectionSlow:
     # -- Alert when collecting GPU metrics is slow for 10 minutes. Healthy
-    # nvidia-smi answers well under a second with the persistence daemon
-    # running; sustained slowness often precedes a wedged driver.
+    # collections finish well under a second with the persistence daemon
+    # running, and sustained slowness often precedes a hung driver.
     enabled: true
     # -- Collection duration in seconds above which the alert fires
     thresholdSeconds: 5
   recoveryAction:
     # -- Alert when the driver itself requests a GPU recovery action (reset,
-    # reboot, drain). The most direct health signal there is; needs a recent
+    # reboot, drain). The most direct health signal there is. Needs a recent
     # driver (570+), silently absent on older ones.
     enabled: true
   xidCritical:
     # -- Alert on Xid errors whose NVIDIA-recommended action is a GPU reset
-    # or node reboot. Needs the NVML backend; never fires on the default
-    # nvidia-smi backend.
+    # or node reboot. Needs the NVML backend and never fires on the `exec`
+    # backend.
     enabled: true
     # -- Xid codes treated as critical (reset/reboot class)
     codes: [48, 62, 64, 74, 79, 95, 119, 120]
@@ -201,7 +201,7 @@ prometheusRule:
     codes: [94]
   uncorrectableEcc:
     # -- Alert when a GPU reports uncorrectable ECC memory errors since its
-    # last reset. Data may have been corrupted; a GPU reset repairs the
+    # last reset. Data may have been corrupted, and a GPU reset repairs the
     # memory on Ampere and newer. Corrected (single-bit) errors never alert.
     enabled: true
   rowRemapFailure:
@@ -334,7 +334,7 @@ volumeMounts: []
 # Add a GPU node label to keep the DaemonSet off non-GPU nodes, e.g.
 # `nvidia.com/gpu.present: "true"` on clusters with GPU Feature Discovery
 # (see the README section on scheduling). Helm merges maps key by key, so
-# overriding with `{}` does not clear the default; set the whole value to
+# overriding with `{}` does not clear the default. Set the whole value to
 # `null` to remove it.
 nodeSelector:
   kubernetes.io/os: linux

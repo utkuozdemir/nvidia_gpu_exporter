@@ -209,8 +209,8 @@ Other things that are easy to trip over:
 ## Building, testing and linting
 
 `Taskfile.yml` is the entry point and mirrors what CI runs.
-`task lint` covers everything: Go, module tidiness, markdown, shell scripts, the dashboards, the release configuration and the GitHub Actions workflows.
-`task fmt` applies the formatters.
+`task lint` covers everything: Go, module tidiness, markdown, generated docs, shell scripts, the dashboards, the release configuration and the GitHub Actions workflows.
+`task fmt` applies the formatters and runs `hack/gen-docs`, and `task docs` additionally regenerates the chart README via `helm-docs`.
 The individual `task lint:*` targets are the ones to reach for while iterating, since the full set needs several external tools installed.
 
 The Go toolchain version is pinned in `go.mod` and CI reads it from there, so there is one place to change it.
