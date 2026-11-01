@@ -16,5 +16,12 @@ SyslogIdentifier=nvidia_gpu_exporter
 Restart=always
 RestartSec=1
 
+# Sandboxing that still lets sudo and ssh wrapper commands work. A stricter
+# drop-in for hosts without a wrapper is in docs/INSTALL.md.
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=read-only
+ProtectControlGroups=yes
+
 [Install]
 WantedBy=multi-user.target
