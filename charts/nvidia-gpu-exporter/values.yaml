@@ -312,8 +312,12 @@ podSecurityContext:
 
 # -- Security context for the exporter container. Unprivileged: GPU access
 # comes from the NVIDIA runtime, which needs no privileges or capabilities.
+# The exporter writes no files, so the root filesystem is read-only. A custom
+# image with a wrapper command that writes files (e.g., ssh's known_hosts)
+# needs `readOnlyRootFilesystem: false`.
 securityContext:
   allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
   capabilities:
     drop:
       - ALL

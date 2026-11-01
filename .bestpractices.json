@@ -230,7 +230,7 @@
   "input_validation_status": "Met",
   "input_validation_justification": "Flags are validated at startup and an impossible combination is an error, not a silent ignore. Unknown query fields fail loudly. Parser output is checked before use: unrecognized state values are skipped and logged, a derived metric name that is empty or collides is dropped. All of it fuzzed.",
   "hardening_status": "Met",
-  "hardening_justification": "Static binary with no cgo in the default build. Distroless image with no shell, running as a non-root uid. The packages run the service as a dedicated user under a sandboxed systemd unit. The chart drops all capabilities and disallows privilege escalation by default. Collection timeout and scrape concurrency limit bound resource use.",
+  "hardening_justification": "Static binary with no cgo in the default build. Distroless image with no shell, running as a non-root uid. The packages run the service as a dedicated user under a sandboxed systemd unit. The chart drops all capabilities, disallows privilege escalation and makes the root filesystem read-only by default. Collection timeout and scrape concurrency limit bound resource use.",
   "assurance_case_status": "Met",
   "assurance_case_justification": "https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/docs/SECURITY_MODEL.md: security requirements, trust boundaries, threats with their mitigations, and how each is checked.",
   "general_comments": "This entry is generated from the .bestpractices.json file in the repository. The file and this entry must be updated together."

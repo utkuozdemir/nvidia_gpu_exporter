@@ -400,7 +400,7 @@ grafanaDashboard:
 | resources | object | `{}` | Resources for the exporter container |
 | revisionHistoryLimit | string | `""` | How many old DaemonSet history revisions to retain for rollbacks. Empty means the Kubernetes default (10). |
 | runtimeClassName | string | `""` | Name of the RuntimeClass to run the pods with. GPU access is injected by the NVIDIA container runtime or by Dynamic Resource Allocation (DRA, via `resourceClaims`). Set this to the name of your NVIDIA RuntimeClass (usually `nvidia`), or leave it empty when the NVIDIA runtime is the default runtime of your nodes or when using DRA. If none of those holds, the exporter will come up but serve no GPU metrics, reporting `nvidia_smi_last_collect_success 0`. |
-| securityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}` | Security context for the exporter container. Unprivileged: GPU access comes from the NVIDIA runtime, which needs no privileges or capabilities. |
+| securityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true}` | Security context for the exporter container. Unprivileged: GPU access comes from the NVIDIA runtime, which needs no privileges or capabilities. The exporter writes no files, so the root filesystem is read-only. A custom image with a wrapper command that writes files (e.g., ssh's known_hosts) needs `readOnlyRootFilesystem: false`. |
 | service.annotations | object | `{}` | Annotations to add to the Service |
 | service.enabled | bool | `true` | Create a Service for the exporter |
 | service.nodePort | string | `""` | Node port to use for NodePort/LoadBalancer service types |
