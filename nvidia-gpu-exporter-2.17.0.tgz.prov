@@ -1,0 +1,56 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+annotations:
+  artifacthub.io/license: MIT
+  artifacthub.io/links: |
+    - name: Grafana dashboard
+      url: https://grafana.com/grafana/dashboards/14574
+    - name: Grafana dashboard (multi-GPU overview)
+      url: https://grafana.com/grafana/dashboards/25547
+  artifacthub.io/signKey: |
+    fingerprint: 93122B2C53431C2F60964EB7EAC49314A32B9205
+    url: https://utkuozdemir.github.io/nvidia_gpu_exporter/pubkey.asc
+apiVersion: v2
+appVersion: 1.17.0
+description: Prometheus exporter for NVIDIA GPUs.
+home: https://github.com/utkuozdemir/nvidia_gpu_exporter
+icon: https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/docs/img/nvidia.png
+keywords:
+- - nvidia
+- - gpu
+- - exporter
+- - nvml
+- - nvidia-smi
+- - prometheus
+maintainers:
+- - email: utkuozdemir@gmail.com
+  name: Utku Özdemir
+  url: https://utkuozdemir.org
+name: nvidia-gpu-exporter
+sources:
+- - https://github.com/utkuozdemir/nvidia_gpu_exporter
+type: application
+version: 2.17.0
+
+...
+files:
+  nvidia-gpu-exporter-2.17.0.tgz: sha256:78791275d4fba4a9303ebc49e25d923f4411954f15fbaefdda8a00aee3f62ff0
+
+-----BEGIN PGP SIGNATURE-----
+
+wsG5BAEBCgBtBYJq59DYCRDqxJMUoyuSBUUUAAAAAAAcACBzYWx0QG5vdGF0aW9u
+cy5vcGVucGdwanMub3Jneot+9rNTzVKGdpnCoWIUHGKsUKxOfJZtYZ8HAObVUzcW
+IQSTEissU0McL2CWTrfqxJMUoyuSBQAABeIQAJf4QPnKgLXnEvRKeA+SH0qsFnIA
+5/q/k3y7Qx5szhkSg38eFjZMx4fDTVNoBhcR9glVhpO5YhXHsCIsfpJpCzFlTn2R
+DIEZShWme07Sy9Wd+7Lu35qh4sjp3jEL407i7YtEEuE6SJvDxCXAE04+BdVabhLl
+IUae4e/GpGb27WyV33EwK21125jeK2GQL21hOfPcVrOtlxzKprV1MWTKK1aurZgh
+q8TDWfeItGI0GVUn1OI9ivUcf8PsWgJnIpgKkdrTfLGTPYCOI4gj1cRHVBSUO/Kh
+mYIewNLBhlO9HiYD6ke8LtPU2qsk5itf2/qTVlBf8C/czLj/cQlAMup/w4mPZJpV
+L3Vm2LHrpB39L2agJ95rQWBa6ekf3LI8+QLdejLEJIr+6qTHnjvhIHyt3wuPYuH6
+vDW2h6P2jLf8hIZXZC2k1u8i5h71fCJzruqfSsaxOr6eU4K9uQz7065OHDtI3UVg
+mcIesN2TIFHkvCkGkPgeLCaqil13v/9VxqtEewamacLM8j/gGdhwp/FwJ7MQFpGu
+frrJfOINU6Ql0FTlkenT04Mal7OqLH46PgYh8yYzcgxkE/yJ0bqXtQYiYvjfbYpS
+qYRsM3I86559mNi0Igje+yFFyGH4cuxdf2H1Muzre8f2lACFDvjH25Y8Hp0Jb/I5
+5OzHwqe6Vfky/drW
+-----END PGP SIGNATURE-----
