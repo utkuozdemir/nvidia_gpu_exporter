@@ -236,6 +236,10 @@ This is what made the first release with this setup reproduce only under the rel
 The mode is fixed too, because the checkout's file mode follows the builder's umask and would have been the next difference.
 Keep new build steps deterministic.
 A separate workflow builds the release artifacts twice on two runners and fails on any checksum difference, so a build that starts depending on the hostname or the time is caught before a release.
+Both flavors build with an explicit `GOFIPS140` version in `.goreleaser.yml`, not the moving `certified` alias.
+`docs/SECURITY_MODEL.md` cites the CMVP certificate of that exact module version, so a Go toolchain bump must not change it silently.
+`GOFIPS140` links a frozen snapshot of Go's cryptographic module and turns FIPS mode on by default (`DefaultGODEBUG=fips140=on`).
+With TLS enabled, this limits the handshake to Go's FIPS-approved algorithms, and `GODEBUG=fips140=off` turns it off at runtime.
 That workflow and the post-release rebuild run without the Go cache on purpose.
 The cache key is only the `go.sum` hash, so the rebuild would otherwise restore a cached build's compiled packages and compare only the packaging.
 Neither of them can catch a dependence on the user or the umask, because every runner builds as the same user.
