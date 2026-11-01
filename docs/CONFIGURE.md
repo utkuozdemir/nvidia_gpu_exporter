@@ -3,6 +3,7 @@
 The exporter is configured with command line flags only. This page lists them and explains the ones that need more than their help text.
 
 - [Command line reference](#command-line-reference)
+- [TLS, authentication and FIPS 140-3](#tls-authentication-and-fips-140-3)
 - [Native NVML backend](#native-nvml-backend)
 - [Per-process GPU metrics](#per-process-gpu-metrics)
 - [Background collection](#background-collection)
@@ -162,6 +163,21 @@ Flags:
                                  json]
       --[no-]version             Show application version.
 ```
+
+## TLS, authentication and FIPS 140-3
+
+`--web.config.file` enables HTTPS, client certificate authentication (mutual TLS) and HTTP basic authentication on the metrics and health endpoints. The file format is the [Prometheus exporter-toolkit web configuration](https://github.com/prometheus/exporter-toolkit/blob/master/docs/web-configuration.md).
+
+Release binaries run in Go's FIPS 140-3 mode by default. They are built with `GOFIPS140=v1.0.0`, which links the Go Cryptographic Module v1.0.0 ([CMVP certificate #5247](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/5247)) and sets `DefaultGODEBUG=fips140=on`. With TLS enabled, the server accepts only [Go's FIPS-approved algorithms](https://go.dev/doc/security/fips140):
+
+- TLS 1.2 and 1.3. TLS 1.2 also requires Extended Master Secret.
+- Key exchange with ECDHE on `P-256`, `P-384` or `P-521`, or ML-KEM hybrids such as `X25519MLKEM768`. Plain `X25519` is refused.
+- `AES-GCM` ciphers. `ChaCha20-Poly1305` is refused.
+- RSA certificate keys of at least 2048 bits.
+
+If a client needs one of the refused options, set `GODEBUG=fips140=off` in the exporter's environment.
+
+Basic auth passwords are hashed with `bcrypt`, which is outside the FIPS module. Where strict FIPS compliance is required, authenticate scrapers with client certificates (`client_auth_type: RequireAndVerifyClientCert`) instead.
 
 ## Native NVML backend
 
