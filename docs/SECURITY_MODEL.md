@@ -5,12 +5,11 @@ For reporting a problem, see [SECURITY.md](../.github/SECURITY.md).
 
 ## What the exporter does
 
-The exporter runs `nvidia-smi`, parses the output and serves the result as Prometheus metrics over HTTP.
-With the NVML backend it reads the driver library instead.
+The exporter reads GPU metrics from the NVIDIA driver library (`libnvidia-ml` / `nvml.dll` in `nvml` mode) or by running `nvidia-smi` (`exec` mode), and serves the result as Prometheus metrics over HTTP.
 
 - It only reads. It never changes GPU settings, and it never writes to disk.
-- With the default configuration it makes no outbound connections, the only network activity is answering scrapes. A custom `--nvidia-smi-command` changes that: the documented remote scraping setup runs `ssh`, for example.
-- It runs the configured command directly, without a shell. The exporter splits the command line itself, so the flag value cannot smuggle a second command past the configured one. Whoever sets the flag can of course point it at any executable, including a shell or `sudo`. That person controls the configuration, so this is not a boundary.
+- With the default configuration it makes no outbound connections, and the only network activity is answering scrapes. A custom `--nvidia-smi-command` in `exec` mode can change that, such as running `ssh` for remote scraping.
+- In `exec` mode it runs the configured command directly, without a shell. The exporter splits the command line itself, so the flag value cannot smuggle a second command past the configured one. Whoever sets the flag can point it at any executable, including a shell or `sudo`. That person controls the configuration, so this is not a boundary.
 - When a collection fails, it serves no GPU data instead of stale data. The failure is visible in its own health metrics.
 
 ## What you can expect
@@ -56,4 +55,4 @@ With the NVML backend it reads the driver library instead.
 - The end-to-end behavior: the integration suite runs the real exporter against recorded `nvidia-smi` output from every GPU in the corpus and compares the result byte for byte.
 - The code: golangci-lint (including gosec) on every pull request and push to the main branch, plus the race detector in the tests. GitHub CodeQL scans through the repository's default setup, on pull requests and weekly.
 - The supply chain: OpenSSF Scorecard scores the repository weekly, from the outside. The README badge links the current score.
-- The releases: the verification commands in the install guide are run by hand after a release. Nothing automates that yet.
+- The releases: the verification commands in the install guide are run manually after a release. Nothing automates that yet.

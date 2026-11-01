@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net"
@@ -75,6 +76,9 @@ type Options struct {
 	// the binary wants, but would kill the whole test process for in-process
 	// callers that pass such flags through.
 	Terminate func(int)
+	// UsageWriter, when set, receives the output of --help and --version
+	// instead of os.Stderr.
+	UsageWriter io.Writer
 }
 
 // Run wires up the exporter from the given command-line arguments and serves
@@ -83,10 +87,6 @@ type Options struct {
 //nolint:funlen,cyclop
 func Run(ctx context.Context, args []string, opts Options) error {
 	app := kingpin.New(appName, "")
-
-	if opts.Terminate != nil {
-		app.Terminate(opts.Terminate)
-	}
 
 	var (
 		webConfig = webflag.AddFlags(app, ":9835")
@@ -137,12 +137,12 @@ func Run(ctx context.Context, args []string, opts Options) error {
 				"or unsupported on a given setup.").
 			Default("").String()
 		collectBackend = app.Flag("collect.backend",
-			"How to collect GPU metrics. `exec` runs nvidia-smi (the default), `nvml` reads "+
-				"the driver library (libnvidia-ml on Linux, nvml.dll on Windows) directly "+
-				"without nvidia-smi. On Windows it is included in the standard build. On "+
-				"Linux it requires a build with the backend compiled in (the `-nvml` release "+
-				"artifact). It exposes the same core metrics as the exec backend, plus "+
-				"NVML-only extras (see the docs). `demo` serves synthetic data mimicking the "+
+			"How to collect GPU metrics. `nvml` (recommended) reads the driver library "+
+				"(libnvidia-ml on Linux, nvml.dll on Windows) directly without nvidia-smi, "+
+				"exposing the core metrics plus NVML-only extras (see the docs). On Windows "+
+				"it is included in the standard build. On Linux it ships in the `-nvml` "+
+				"release artifact, where it is the default. `exec` runs nvidia-smi (the "+
+				"default in the standard build). `demo` serves synthetic data mimicking the "+
 				"nvml surface, with no GPU or driver needed, on any platform.").
 			Default(DefaultBackend).Enum("exec", "nvml", "demo")
 		collectInterval = app.Flag("collect.interval",
@@ -169,7 +169,7 @@ func Run(ctx context.Context, args []string, opts Options) error {
 			Default("false").Bool()
 		demoConfig = app.Flag("demo-config",
 			"Path to the demo backend's config file (the fake-nvidia-smi YAML plus an "+
-				"extras block; see the docs). Only with --collect.backend=demo; the "+
+				"extras block, see the docs). Only with --collect.backend=demo, the "+
 				"built-in demo setup is used when unset.").
 			Default("").String()
 		collectComputeAppsMIG = app.Flag("collect.compute-apps-mig",
@@ -185,16 +185,16 @@ func Run(ctx context.Context, args []string, opts Options) error {
 				"it changes the label set of the per-process series.").
 			Default("false").Bool()
 		collectPcieThroughput = app.Flag("collect.pcie-throughput",
-			"Also export the PCIe TX/RX throughput per GPU (requires --collect.backend=nvml; "+
+			"Also export the PCIe TX/RX throughput per GPU (requires --collect.backend=nvml, "+
 				"the demo backend serves the family regardless). "+
 				"Each direction is sampled over a separate 20ms driver counter window, adding "+
-				"roughly 40ms per GPU to every collection cycle (~320ms on an 8-GPU node); "+
-				"pairing it with --collect.interval keeps scrapes unaffected.").
+				"roughly 40ms per GPU to every collection cycle (~320ms on an 8-GPU node). "+
+				"Pairing it with --collect.interval keeps scrapes unaffected.").
 			Default("false").Bool()
 		shutdownOnErr = app.Flag("shutdown-on-error",
 			"Shut down the exporter if there is a fatal collection error "+
 				"(a failing nvidia-smi run, or a lost GPU/driver in nvml mode). "+
-				"When false, exporter will simply log this error and export it as a metric, but will not crash.").
+				"When false, the exporter logs the error and exports it as a metric without crashing.").
 			Default("false").Bool()
 		enablePprof = app.Flag("web.enable-pprof",
 			"Enable pprof endpoints for profiling under /debug/pprof/. "+
@@ -208,8 +208,9 @@ func Run(ctx context.Context, args []string, opts Options) error {
 	app.Version(version.Print(appName))
 	app.HelpFlag.Short('h')
 
-	if _, err := app.Parse(args); err != nil {
-		return fmt.Errorf("failed to parse the command line: %w", err)
+	terminated, err := parseApp(app, args, opts)
+	if err != nil || terminated {
+		return err
 	}
 
 	logger := buildLogger(promSlogConfig, opts.ExtraLogHandler)
@@ -421,6 +422,30 @@ func validateBackendFlags(flags backendFlagSet) error {
 	}
 
 	return nil
+}
+
+// parseApp applies the test/doc hooks to the kingpin application, parses args,
+// and reports whether a termination hook fired (such as --help or --version).
+func parseApp(app *kingpin.Application, args []string, opts Options) (bool, error) {
+	terminated := false
+
+	if opts.Terminate != nil {
+		app.Terminate(func(code int) {
+			terminated = true
+
+			opts.Terminate(code)
+		})
+	}
+
+	if opts.UsageWriter != nil {
+		app.UsageWriter(opts.UsageWriter)
+	}
+
+	if _, err := app.Parse(args); err != nil {
+		return false, fmt.Errorf("failed to parse the command line: %w", err)
+	}
+
+	return terminated, nil
 }
 
 // validateCollectFlags rejects the flag values kingpin's types cannot.

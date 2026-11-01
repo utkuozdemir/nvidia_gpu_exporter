@@ -8,3 +8,6 @@ internal/integration/testdata/*.metrics text eol=lf
 # The fuzz seed corpora encode their values as Go string literals, so a CRLF
 # conversion would silently change the input each entry replays.
 internal/*/testdata/fuzz/**  text eol=lf
+
+# hack/gen-docs matches multi-line LF markers in docs/CONFIGURE.md.
+docs/CONFIGURE.md text eol=lf

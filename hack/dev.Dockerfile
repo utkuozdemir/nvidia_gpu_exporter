@@ -78,6 +78,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build,id=nvidia_gpu_exporter/go-bu
 FROM deps AS base
 COPY cmd ./cmd
 COPY internal ./internal
+COPY hack/gen-docs ./hack/gen-docs
 
 FROM base AS lint-golangci-lint
 COPY .golangci.yml ./
@@ -115,6 +116,12 @@ FROM base AS lint-gpu-tagged-test
 RUN --mount=type=cache,target=/root/.cache/go-build,id=nvidia_gpu_exporter/go-build \
     --mount=type=cache,target=/go/pkg,id=nvidia_gpu_exporter/go-pkg \
     go test -run '^$' -tags gpu ./internal/integration/
+
+FROM base AS lint-docs
+COPY docs/CONFIGURE.md ./docs/CONFIGURE.md
+RUN --mount=type=cache,target=/root/.cache/go-build,id=nvidia_gpu_exporter/go-build \
+    --mount=type=cache,target=/go/pkg,id=nvidia_gpu_exporter/go-pkg \
+    go run ./hack/gen-docs -check
 
 FROM node:${NODE_VERSION}-alpine AS lint-markdown
 ARG MARKDOWNLINT_VERSION

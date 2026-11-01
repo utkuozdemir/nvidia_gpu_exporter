@@ -1,6 +1,6 @@
 # nvidia-gpu-exporter
 
-Nvidia GPU exporter for prometheus, using nvidia-smi binary to gather metrics.
+Prometheus exporter for NVIDIA GPUs.
 
 The exporter runs as a DaemonSet. GPU access is injected by the NVIDIA
 container runtime: the nodes need the NVIDIA driver and the
@@ -12,11 +12,15 @@ and make sure that RuntimeClass exists. On clusters that use
 of an `nvidia` `RuntimeClass`, leave `runtimeClassName` empty and pass
 `resourceClaims` and `resources.claims`.
 
-To use the NVML backend, which reads the driver library directly instead of
-running `nvidia-smi`, set the image tag to a `-nvml` variant (for example
-`X.Y.Z-nvml`). It exports the same core metrics as the default backend, plus
-NVML-only extras like the GPU energy counter, per-MIG-instance metrics, XID
-error counters and opt-in PCIe throughput.
+We recommend the native NVML image variant (`X.Y.Z-nvml`), which reads
+`libnvidia-ml.so.1` in-process instead of spawning `nvidia-smi` on every
+scrape. It exports the same core metrics as the default image, plus NVML-only
+families: the GPU energy counter, per-MIG-instance metrics, hardware GPM
+activity, XID error counters, PCIe replay counters, NVLink byte counters,
+per-process SM/memory/codec utilization, and opt-in PCIe throughput (see the
+[metrics reference](https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/docs/METRICS.md#nvml-only-metrics)).
+When `image.tag` is left empty, the chart defaults to the `exec`
+(`nvidia-smi`) image for 1.x compatibility.
 
 The exporter deliberately requests no `nvidia.com/gpu` resource. The device
 plugin allocates whole GPUs exclusively, so a monitoring pod that requested
@@ -39,6 +43,11 @@ helm install nvidia-gpu-exporter nvidia-gpu-exporter/nvidia-gpu-exporter \
   --set runtimeClassName=nvidia
 ```
 
+To run the recommended native NVML backend, set `image.tag` to the release's
+`-nvml` tag (`--set image.tag=X.Y.Z-nvml`). Because setting `image.tag`
+overrides the chart's default `appVersion`, update `image.tag` when upgrading
+the chart.
+
 ### Verifying the chart signature
 
 Releases from the classic repository are signed with GPG provenance files
@@ -53,8 +62,7 @@ helm install nvidia-gpu-exporter nvidia-gpu-exporter/nvidia-gpu-exporter \
 ```
 
 Helm's provenance check only covers classic-repository installs. The OCI
-artifact on GHCR is signed separately with cosign (keyless), so verify an OCI
-install like this (replace `CHART_VERSION` with the version you are pulling):
+artifact on GHCR is signed separately with cosign (keyless):
 
 ```bash
 cosign verify \
@@ -67,9 +75,8 @@ cosign verify \
 
 Enable `computeApps.enabled` to also export per-process GPU metrics
 (`nvidia_smi_compute_app_*`). Process visibility follows the PID namespace:
-without `hostPID` the exporter only sees GPU processes visible inside its own
-container, so it normally will not report processes from other pods or
-containers. Enable `hostPID` along with it. Note that `hostPID` lets the
+without `hostPID` the exporter only sees GPU processes inside its own
+container, so enable `hostPID` along with it. Note that `hostPID` lets the
 exporter pod see all host process names, which some security policies forbid.
 
 ```bash
@@ -79,12 +86,12 @@ helm upgrade nvidia-gpu-exporter oci://ghcr.io/utkuozdemir/charts/nvidia-gpu-exp
   --set hostPID=true
 ```
 
-On MIG-enabled GPUs the requirements are steeper: on top of `hostPID`, the
-exporter container needs the `NVIDIA_MIG_MONITOR_DEVICES=all` environment
-variable and privileged mode, otherwise the GPU-level memory fields read
-`[Insufficient Permissions]`. Root is not needed: the driver's MIG monitor
-device is world-readable by default, so the exporter keeps running as uid
-65534 (verified on an H200, including per-process MIG attribution).
+On MIG-enabled GPUs, the exporter container also needs the
+`NVIDIA_MIG_MONITOR_DEVICES=all` environment variable and privileged mode,
+otherwise the GPU-level memory fields read `[Insufficient Permissions]`. Root
+is not needed: the driver's MIG monitor device is world-readable by default,
+so the exporter keeps running as uid 65534 (checked on an H200, including
+per-process MIG attribution).
 
 Use the whole block below. Your values merge onto the chart defaults key by
 key, so setting `privileged` on its own conflicts with the default
@@ -102,11 +109,12 @@ securityContext:
 ```
 
 Without privileged mode (just the environment variable), the per-MIG-instance
-inventory, memory and activity metrics still work, only the GPU-level memory
-fields go absent.
+inventory, memory and activity metrics still work, and only the GPU-level
+memory fields go absent.
 
 By default processes are attributed to the parent GPU's UUID, not to individual
-MIG instances; on the `-nvml` image the attribution labels can be added with
+MIG instances. On the `-nvml` image, per-instance attribution labels can be
+added with:
 
 ```yaml
 extraArgs:
@@ -115,25 +123,25 @@ extraArgs:
 
 ## Scheduling on GPU nodes
 
-By default the DaemonSet runs on every Linux node, including nodes without a
-GPU, where the pods come up but report `nvidia_smi_last_collect_success 0`.
-On mixed clusters, restrict it to GPU nodes via `nodeSelector`. There is no
-universal GPU node label, so use whatever your cluster has:
+By default the DaemonSet runs on every Linux node. On nodes without a GPU, the
+default `exec` image comes up and reports `nvidia_smi_last_collect_success 0`,
+while the `-nvml` image exits at startup because `libnvidia-ml.so.1` is not
+injected. On mixed clusters, restrict the DaemonSet to GPU nodes via
+`nodeSelector` using whatever GPU label your cluster has:
 
 - `nvidia.com/gpu.present: "true"` with GPU Feature Discovery (installed by
-  the NVIDIA GPU Operator, among others),
+  the NVIDIA GPU Operator, among others)
 - `feature.node.kubernetes.io/pci-0302_10de.present: "true"` with plain Node
-  Feature Discovery (the class segment varies by GPU model: `0302` for
-  datacenter 3D controllers, `0300` for display-class cards, so check your
-  node labels),
-- a cloud or in-house label of your own, e.g. `cloud.google.com/gke-accelerator`
-  on GKE (any value, so use `affinity` with an `Exists` match for that one).
+  Feature Discovery (`0302` for datacenter 3D controllers, `0300` for
+  display-class cards)
+- a cloud or in-house label of your own, such as
+  `cloud.google.com/gke-accelerator` on GKE (use `affinity` with an `Exists`
+  match when the label value varies)
 
 GPU node pools are also commonly tainted (for example
-`nvidia.com/gpu=present:NoSchedule`) so that only GPU workloads land on them.
-The exporter deliberately requests no `nvidia.com/gpu` resource, so it does
-not tolerate such taints by itself and will silently skip those nodes. Add a
-matching toleration:
+`nvidia.com/gpu=present:NoSchedule`). Because the exporter requests no
+`nvidia.com/gpu` resource, it does not tolerate such taints automatically.
+Add a matching toleration:
 
 ```yaml
 nodeSelector:
@@ -147,14 +155,13 @@ tolerations:
 ## Running next to the NVIDIA GPU Operator
 
 The GPU Operator and this chart coexist without conflicts. The Operator's
-own dcgm-exporter listens on a different port (9400 vs 9835) and exports a
-different metric namespace (`DCGM_FI_*` vs `nvidia_smi_*`), so nothing
-clashes; running both just means the GPUs are polled twice. The Operator
-also installs the pieces this chart needs anyway: the NVIDIA Container
-Toolkit, a `nvidia` RuntimeClass to set `runtimeClassName` to, and GPU
-Feature Discovery labels for the `nodeSelector` shown above.
+`dcgm-exporter` listens on port 9400 and exports `DCGM_FI_*` metrics, while
+this exporter listens on port 9835 and exports `nvidia_smi_*` metrics. Running
+both just polls the GPUs twice. The Operator also installs the NVIDIA Container
+Toolkit, an `nvidia` RuntimeClass, and the GPU Feature Discovery labels shown
+above.
 
-To replace dcgm-exporter instead of running both, disable it with
+To replace `dcgm-exporter` instead of running both, set
 `dcgmExporter.enabled=false` in the GPU Operator chart.
 
 ## Dynamic Resource Allocation (DRA)
@@ -162,9 +169,8 @@ To replace dcgm-exporter instead of running both, disable it with
 On clusters running Kubernetes 1.34 or newer that manage GPUs with the
 [NVIDIA DRA driver](https://github.com/kubernetes-sigs/dra-driver-nvidia-gpu)
 (`dra-driver-nvidia-gpu`) and do not configure an `nvidia` `RuntimeClass`,
-leave `runtimeClassName` empty (the chart default). The DRA kubelet plugin
-injects `nvidia-smi`, the driver libraries and the GPU device nodes into the
-container through CDI under the default container runtime.
+leave `runtimeClassName` empty. The DRA kubelet plugin injects `nvidia-smi`,
+the driver libraries and the GPU device nodes into the container through CDI.
 
 Label the exporter's namespace with `resource.kubernetes.io/admin-access: "true"`
 and create a `ResourceClaimTemplate` in that namespace requesting all GPUs with
@@ -188,12 +194,9 @@ spec:
             adminAccess: true
 ```
 
-Unlike the `runtimeClassName` setup (where pods on non-GPU nodes start and
-report `nvidia_smi_last_collect_success 0`), `allocationMode: All` requires at
-least one matching GPU on the node for the claim to allocate. On clusters that
-have CPU-only nodes, restrict `nodeSelector` to GPU nodes (see
-[Scheduling on GPU nodes](#scheduling-on-gpu-nodes)) so pods are not left
-`Pending` on nodes without GPUs:
+Because `allocationMode: All` requires at least one matching GPU on the node
+for the claim to allocate, restrict `nodeSelector` to GPU nodes on mixed
+clusters so pods are not left `Pending` on CPU-only nodes:
 
 ```yaml
 nodeSelector:
@@ -225,106 +228,81 @@ securityContext:
       - ALL
 ```
 
-None of it takes anything away from the exporter: it writes no files, it
-listens above port 1024, and GPU access comes from the NVIDIA runtime, which
-needs no privileges.
+`hostNetwork`, `hostPort` and `hostPID` (which `computeApps` needs) are
+rejected in `restricted` and `baseline` namespaces. A policy engine that
+requires an explicit numeric uid rather than `runAsNonRoot` needs
+`securityContext.runAsUser: 65534`, except on OpenShift, where leaving
+`runAsUser` unset lets the `restricted-v2` SCC assign one.
 
-Two limits remain. `hostNetwork`, `hostPort` and `hostPID` (which
-`computeApps` needs) are rejected in such namespaces whatever the security
-context, since the `baseline` level already forbids them. And a policy engine
-that wants an explicit uid rather than `runAsNonRoot` needs
-`securityContext.runAsUser: 65534`, except on OpenShift: there, leave
-`runAsUser` unset and let the namespace SCC assign one, the default
-`restricted-v2` SCC fits this workload.
+## Upgrading
 
-## Upgrading to the non-root images
+### Non-root images (1.15.0+)
 
-Starting with app version 1.15.0 the container images run as uid 65534
+Starting with app version 1.15.0, the container images run as uid 65534
 instead of root, and the chart ships the security context defaults shown
-above. For an upgrade this means:
+above:
 
-- A plain `helm upgrade` works unchanged for the common setups. An upgrade
-  with `--reuse-values` keeps your old (empty) security contexts, so nothing
-  hardens behind your back.
-- An `image.tag` pinned to a release older than 1.15.0 fails to start under
-  the new defaults. The kubelet reports `CreateContainerConfigError` with
-  "container has runAsNonRoot and image will run as root". Unpin the tag, or
-  set `securityContext.runAsUser: 65534`, or drop the check with
-  `podSecurityContext.runAsNonRoot: null`.
-- `securityContext.privileged: true` on its own, the old MIG guidance,
-  conflicts with the new defaults. The chart fails the render and points at
-  the full block in the [per-process section](#per-process-gpu-metrics).
-- Overriding these values is a merge, not a replacement, so
-  `securityContext: {}` changes nothing. Set a sub-key to `null` to drop one
-  setting, or the whole key to `null` to drop the block.
-- Two host-side details can surface after the uid change. A host that
-  restricts `/dev/nvidia*` (the `NVreg_DeviceFileMode` module parameter, a
-  udev rule) makes collections fail with `nvidia_smi_last_collect_success 0`:
-  relax the device mode, add the owning group via
-  `podSecurityContext.supplementalGroups`, or go back to root with
-  `securityContext.runAsUser: 0` plus `podSecurityContext.runAsNonRoot: null`.
-  And TLS material for `--web.config.file` mounted root-owned with
-  `defaultMode: 0400` is unreadable to uid 65534: use `0444` or an `fsGroup`.
+- A plain `helm upgrade` works unchanged for standard setups, and
+  `--reuse-values` keeps your old security contexts.
+- An `image.tag` pinned to a release older than 1.15.0 fails to start with
+  `container has runAsNonRoot and image will run as root`. Unpin the tag or
+  set `podSecurityContext.runAsNonRoot: null`.
+- Setting `securityContext.privileged: true` on its own conflicts with the new
+  defaults. Use the full block in [Per-process GPU metrics](#per-process-gpu-metrics).
+- Overriding `securityContext` or `podSecurityContext` merges key by key, so
+  `{}` changes nothing. Set a sub-key to `null` to drop one setting, or the
+  whole key to `null` to drop the block.
+- On hosts that restrict `/dev/nvidia*` permissions (`NVreg_DeviceFileMode` or
+  a udev rule), relax the device mode, add the owning group via
+  `podSecurityContext.supplementalGroups`, or run as root with
+  `securityContext.runAsUser: 0` and `podSecurityContext.runAsNonRoot: null`.
+- TLS material for `--web.config.file` mounted root-owned with
+  `defaultMode: 0400` is unreadable to uid 65534, so use `0444` or an
+  `fsGroup`.
 
-## Upgrading from chart 1.x
+### From chart 1.x
 
-Chart 1.x lived in a [separate repository](https://github.com/utkuozdemir/helm-charts)
-and mounted GPU device files, the `nvidia-smi` binary, and driver libraries
-from the host into the pod, running privileged. That approach broke on driver
-upgrades and non-x86 nodes. Starting with chart 2.x, GPU access comes from
-the NVIDIA container runtime and the pod runs unprivileged.
+Chart 1.x lived in a [separate repository](https://github.com/utkuozdemir/helm-charts),
+mounted host device files and driver libraries directly, and ran privileged.
+Starting with chart 2.x, GPU access comes from the NVIDIA container runtime
+and the pod runs unprivileged:
 
-What to do when upgrading:
-
-- Make sure the nodes have the NVIDIA Container Toolkit and set
-  `runtimeClassName` as described above.
-- Drop any custom `volumes`, `volumeMounts`, or `securityContext` values you
-  carried for the old hand-mounted setup.
-- The `ingress` values were removed. Use your own Ingress resource if you
-  need one, though for an internal metrics endpoint you usually do not.
-- The chart version scheme changed: the chart major is the app major plus
-  one, so chart `2.8.x` ships app `1.8.x`.
+- Install the NVIDIA Container Toolkit on the nodes and set `runtimeClassName`.
+- Drop any custom `volumes`, `volumeMounts`, or `securityContext` values from
+  chart 1.x, as well as `ingress` values.
+- The chart major is the app major plus one (chart `2.8.x` ships app `1.8.x`).
 
 ## Monitoring extras
 
-All optional resources are off by default. `serviceMonitor` and `podMonitor`
-require the Prometheus Operator CRDs (enable one of them, not both).
-`prometheusRule` adds alerts on the exporter's collection health and on GPU
-health: driver-requested recovery actions, critical Xid errors, uncorrectable
-ECC errors, memory row-remap and page-retirement state, hardware thermal
-slowdown and power braking. Every alert's description says what to do about
-it. The defaults are deliberately conservative for consumer and homelab
-hardware; rules that depend on fleet knowledge (absolute temperature, GPU
-count) or that are normal on thermally-limited systems (software thermal
-slowdown) ship disabled, and each rule can be toggled individually. Some
-rules need the NVML backend (Xid) or specific query fields (ECC, remapped
-rows); where the metric is absent the rule simply never fires. When
-upgrading a release that already had `prometheusRule.enabled: true`, the new
-GPU health rules arrive enabled: review the list below and disable any you
-do not want. One real
-hardware fault can raise several of these alerts at once (for example an
-uncorrectable ECC error also produces an Xid and a recovery action); that
-overlap is deliberate, because no single signal exists on every backend,
-driver and GPU generation combination. Group them in your Alertmanager route
-by `instance` if you prefer one notification per node.
+All optional resources are off by default:
 
-If the exporter also runs on nodes without GPUs, restrict the DaemonSet to
-GPU nodes via `nodeSelector` or `affinity` before enabling `prometheusRule`,
-otherwise the collection alerts fire for nodes that cannot collect GPU
-metrics by design. The alert expressions select all `nvidia_smi_*` series, so
-when installing multiple releases of this chart, enable the rules in only one
-of them.
-`grafanaDashboard` ships the [Grafana dashboard](https://grafana.com/grafana/dashboards/14574)
-and its [multi-GPU overview companion](https://grafana.com/grafana/dashboards/25547)
-as a ConfigMap labeled for the Grafana sidecar.
+- `serviceMonitor` and `podMonitor` require the Prometheus Operator CRDs
+  (enable one of them, not both).
+- `prometheusRule` adds alerts on collection health and GPU health:
+  driver-requested recovery actions, critical XID errors, uncorrectable ECC
+  errors, memory row-remap and page-retirement state, hardware thermal
+  slowdown and power braking. Rules that depend on fleet-specific thresholds
+  (absolute temperature, GPU count) or that are normal on thermally-limited
+  systems (software thermal slowdown) ship disabled, and each rule can be
+  toggled individually. Some rules need the NVML backend (`xidCritical`,
+  `xidWarning`, `pcieReplayRollovers`) or specific query fields (ECC, remapped
+  rows), and stay inactive when the metric is absent. When upgrading a release
+  that already had `prometheusRule.enabled: true`, newly added default-on
+  rules arrive enabled, so review the list below and disable any you do not
+  want.
+- `grafanaDashboard` ships the [Grafana dashboard](https://grafana.com/grafana/dashboards/14574)
+  and its [multi-GPU overview companion](https://grafana.com/grafana/dashboards/25547)
+  as a ConfigMap labeled for the Grafana sidecar.
+
+Restrict the DaemonSet to GPU nodes via `nodeSelector` or `affinity` before
+enabling `prometheusRule`, otherwise the collection alerts fire on CPU-only
+nodes. When installing multiple releases of this chart, enable `prometheusRule`
+in only one of them.
 
 With [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack),
-enabling a monitor is usually not enough: by default its Prometheus only
-selects monitors carrying the stack's release label. Two more things bite in
-practice: the default `instance` label is the pod IP, which changes on every
-restart and splits the per-GPU series, so relabel it to the node name. And
-the Grafana sidecar only reads dashboard ConfigMaps from other namespaces
-when it runs with `sidecar.dashboards.searchNamespace=ALL`.
+match the stack's release selector label, relabel `instance` from the pod IP
+to the node name so pod restarts do not split per-GPU series, and ensure the
+Grafana sidecar watches all namespaces (`sidecar.dashboards.searchNamespace=ALL`):
 
 ```yaml
 serviceMonitor:
@@ -348,7 +326,7 @@ grafanaDashboard:
 |-----|------|---------|-------------|
 | affinity | object | `{}` | Affinity for the pods |
 | automountServiceAccountToken | bool | `false` | Mount the service account token into the pods. The exporter never talks to the Kubernetes API, so it is off by default. Enable it only if something injected into the pods (e.g. a service mesh sidecar) needs the token. |
-| computeApps.enabled | bool | `false` | Also export per-process GPU metrics (`nvidia_smi_compute_app_*`). To see processes of other pods and containers, the exporter must share the host PID namespace: enable `hostPID` along with this. Note that the pid label churns with the processes, creating short-lived series. |
+| computeApps.enabled | bool | `false` | Also export per-process GPU metrics (`nvidia_smi_compute_app_*`). To see processes of other pods and containers, the exporter must share the host PID namespace: enable `hostPID` along with this. Note that the pid label changes as processes start and stop, creating short-lived series. |
 | extraArgs | list | `[]` | Extra command line arguments for the exporter, e.g. `--collect.interval=30s` |
 | extraEnv | list | `[]` | Extra environment variables for the exporter container |
 | fullnameOverride | string | `""` | Override the fully qualified app name |
@@ -362,13 +340,13 @@ grafanaDashboard:
 | hostPort.port | int | `9835` | The host port to expose the metrics on |
 | image.pullPolicy | string | `"IfNotPresent"` | Image pull policy |
 | image.repository | string | `"docker.io/utkuozdemir/nvidia_gpu_exporter"` | Image repository |
-| image.tag | string | `""` | Image tag (if not specified, defaults to the chart's appVersion) |
+| image.tag | string | `""` | Image tag (if not specified, defaults to the chart's appVersion). Set to a `-nvml` variant (for example `X.Y.Z-nvml`) for the recommended native NVML backend. |
 | imagePullSecrets | list | `[]` | Image pull secrets, used by both the exporter and the `helm test` pods |
-| livenessProbe | object | `{"httpGet":{"path":"/-/healthy","port":"http"}}` | Liveness probe for the exporter container. The default checks that the process serves HTTP at all; it deliberately does not depend on collection success, so a failing nvidia-smi keeps the pod scrapeable and the failure visible in the metrics. Set to `null` to disable the probe. |
+| livenessProbe | object | `{"httpGet":{"path":"/-/healthy","port":"http"}}` | Liveness probe for the exporter container. The default checks that the process serves HTTP at all. It deliberately does not depend on collection success, so a failing collection keeps the pod scrapeable and the failure visible in the metrics. Set to `null` to disable the probe. |
 | log.format | string | `"logfmt"` | Log format: logfmt, json |
 | log.level | string | `"info"` | Log level: debug, info, warn, error |
 | nameOverride | string | `""` | Override the chart name |
-| nodeSelector | object | `{"kubernetes.io/os":"linux"}` | Node selector for the pods. The images are Linux-only, hence the default. Add a GPU node label to keep the DaemonSet off non-GPU nodes, e.g. `nvidia.com/gpu.present: "true"` on clusters with GPU Feature Discovery (see the README section on scheduling). Helm merges maps key by key, so overriding with `{}` does not clear the default; set the whole value to `null` to remove it. |
+| nodeSelector | object | `{"kubernetes.io/os":"linux"}` | Node selector for the pods. The images are Linux-only, hence the default. Add a GPU node label to keep the DaemonSet off non-GPU nodes, e.g. `nvidia.com/gpu.present: "true"` on clusters with GPU Feature Discovery (see the README section on scheduling). Helm merges maps key by key, so overriding with `{}` does not clear the default. Set the whole value to `null` to remove it. |
 | nvidiaDriverCapabilities | string | `"utility"` | NVIDIA driver capability tier to request. `utility` is the nvidia-smi/NVML tier, which is all the exporter needs. |
 | nvidiaSmiCommand | string | `"nvidia-smi"` | The command to run to get `nvidia-smi` compatible output. Can be a custom path and/or args. Note the official image contains only the exporter binary (no shell or ssh), so a wrapper command needs a custom image. |
 | nvidiaVisibleDevices | string | `"all"` | Which GPUs to make visible to the exporter. `all` monitors every GPU on the node. |
@@ -387,7 +365,7 @@ grafanaDashboard:
 | prometheusRule.collectionFailing.enabled | bool | `true` | Alert when the most recent collection failed for some time |
 | prometheusRule.collectionFailing.for | string | `"10m"` | How long collection must be failing before the alert fires |
 | prometheusRule.collectionFailing.severity | string | `"warning"` | Severity label of the alert |
-| prometheusRule.collectionSlow.enabled | bool | `true` | Alert when collecting GPU metrics is slow for 10 minutes. Healthy nvidia-smi answers well under a second with the persistence daemon running; sustained slowness often precedes a wedged driver. |
+| prometheusRule.collectionSlow.enabled | bool | `true` | Alert when collecting GPU metrics is slow for 10 minutes. Healthy collections finish well under a second with the persistence daemon running, and sustained slowness often precedes a hung driver. |
 | prometheusRule.collectionSlow.thresholdSeconds | int | `5` | Collection duration in seconds above which the alert fires |
 | prometheusRule.collectionStale.enabled | bool | `true` | Alert when the last successful collection is too far in the past |
 | prometheusRule.collectionStale.severity | string | `"warning"` | Severity label of the alert |
@@ -400,7 +378,7 @@ grafanaDashboard:
 | prometheusRule.pcieLinkWidthDegraded.enabled | bool | `false` | Alert when a GPU negotiates fewer PCIe lanes than its maximum width while above 50% compute utilization for 10 minutes. Off by default: cards intentionally installed in narrower PCIe slots report a lower current width permanently. |
 | prometheusRule.pcieReplayRollovers.enabled | bool | `false` | Alert when a GPU records PCIe link replay rollovers in the last hour. Off by default: requires the NVML backend. |
 | prometheusRule.powerBrake.enabled | bool | `true` | Alert when an external hardware power brake throttles a GPU for 5 minutes: a power delivery problem (PSU, cables, rack power). The configured software power limit never raises this. |
-| prometheusRule.recoveryAction.enabled | bool | `true` | Alert when the driver itself requests a GPU recovery action (reset, reboot, drain). The most direct health signal there is; needs a recent driver (570+), silently absent on older ones. |
+| prometheusRule.recoveryAction.enabled | bool | `true` | Alert when the driver itself requests a GPU recovery action (reset, reboot, drain). The most direct health signal there is. Needs a recent driver (570+), silently absent on older ones. |
 | prometheusRule.retiredPagesPending.enabled | bool | `true` | Alert when a GPU memory page retirement waits for a reboot to take effect (pre-Ampere GPUs) |
 | prometheusRule.rowRemapFailure.enabled | bool | `true` | Alert when GPU memory row remapping failed, which is NVIDIA's stated RMA criterion |
 | prometheusRule.rowRemapPending.enabled | bool | `true` | Alert when a GPU memory row remap waits for a GPU reset to take effect |
@@ -410,9 +388,9 @@ grafanaDashboard:
 | prometheusRule.temperatureTlimitLow.enabled | bool | `true` | Alert when a GPU has less than the threshold of thermal headroom remaining before slowdown (`temperature.gpu.tlimit`) for 10 minutes. Uses the GPU's own per-SKU target temperature, and is silently absent on older GPUs and drivers that do not report `temperature.gpu.tlimit`. |
 | prometheusRule.temperatureTlimitLow.thresholdCelsius | int | `5` | Remaining thermal headroom in Celsius below which the alert fires |
 | prometheusRule.thermalSlowdown.enabled | bool | `true` | Alert when hardware thermal protection throttles a GPU for 5 minutes: cooling is failing at the hardware trip point. The driver applies the right per-model threshold, so this works across GPU generations. Disable if it fires routinely on thermally-limited mobile/small-form-factor systems. |
-| prometheusRule.uncorrectableEcc.enabled | bool | `true` | Alert when a GPU reports uncorrectable ECC memory errors since its last reset. Data may have been corrupted; a GPU reset repairs the memory on Ampere and newer. Corrected (single-bit) errors never alert. |
+| prometheusRule.uncorrectableEcc.enabled | bool | `true` | Alert when a GPU reports uncorrectable ECC memory errors since its last reset. Data may have been corrupted, and a GPU reset repairs the memory on Ampere and newer. Corrected (single-bit) errors never alert. |
 | prometheusRule.xidCritical.codes | list | `[48,62,64,74,79,95,119,120]` | Xid codes treated as critical (reset/reboot class) |
-| prometheusRule.xidCritical.enabled | bool | `true` | Alert on Xid errors whose NVIDIA-recommended action is a GPU reset or node reboot. Needs the NVML backend; never fires on the default nvidia-smi backend. |
+| prometheusRule.xidCritical.enabled | bool | `true` | Alert on Xid errors whose NVIDIA-recommended action is a GPU reset or node reboot. Needs the NVML backend and never fires on the `exec` backend. |
 | prometheusRule.xidWarning.codes | list | `[94]` | Xid codes treated as warning (restart-app class) |
 | prometheusRule.xidWarning.enabled | bool | `true` | Alert on Xid errors whose recommended action is an application restart. Explicit allowlist: application-caused Xids (13, 31, 43, ...) and informational ones (63, 92) deliberately never alert. |
 | queryFieldNames | list | `["AUTO"]` | `nvidia-smi` fields to be queried by the exporter. `AUTO` auto-detects them. |

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"io/fs"
 	"net/http"
@@ -15,6 +16,23 @@ import (
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/collect"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvidiasmi"
 )
+
+func TestRunHelpUsageWriter(t *testing.T) {
+	t.Parallel()
+
+	var (
+		buf      bytes.Buffer
+		exitCode = -1
+	)
+
+	err := Run(t.Context(), []string{"--help"}, Options{
+		UsageWriter: &buf,
+		Terminate:   func(code int) { exitCode = code },
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, exitCode)
+	assert.Contains(t, buf.String(), "usage: nvidia_gpu_exporter")
+}
 
 func TestValidateMetricsPath(t *testing.T) {
 	t.Parallel()

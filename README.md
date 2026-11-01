@@ -14,7 +14,7 @@
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/nvidia-gpu-exporter&style=flat-square)](https://artifacthub.io/packages/helm/nvidia-gpu-exporter/nvidia-gpu-exporter)
 [![winget](https://img.shields.io/winget/v/utkuozdemir.nvidia_gpu_exporter?style=flat-square)](docs/INSTALL.md#winget)
 
-Nvidia GPU exporter for Prometheus, using the `nvidia-smi` binary to gather metrics.
+Prometheus exporter for NVIDIA GPUs, reading metrics directly from the NVIDIA driver library (NVML) or through `nvidia-smi`.
 Runs on Linux, Windows and macOS, on bare metal, in Docker or on Kubernetes.
 
 ---
@@ -24,116 +24,58 @@ Runs on Linux, Windows and macOS, on bare metal, in Docker or on Kubernetes.
 
 ---
 
-## Introduction
+## Overview
 
-This is a simple exporter that uses the `nvidia-smi(.exe)` binary to collect,
-parse and export metrics. Since it only needs `nvidia-smi`, it also works on
-Windows - no Docker or Linux required.
+The exporter collects utilization, memory, power, thermals, clocks, throttling reasons, ECC errors, encoder/decoder stats and per-process GPU usage, and exposes them as `nvidia_smi_*` Prometheus metrics.
 
-It can also skip `nvidia-smi` entirely and read the metrics straight from
-the driver library. See [the NVML backend](#try-the-native-nvml-backend)
-below.
+It supports two collection backends that emit identical metric names, labels and values for every shared field (see [CONFIGURE.md](docs/CONFIGURE.md#native-nvml-backend)):
+
+- **Native NVML (`nvml`, recommended)**: reads `libnvidia-ml.so.1` on Linux and `nvml.dll` on Windows in-process without spawning `nvidia-smi`. In addition to the shared metrics, it exports families only the driver library provides: XID error counters, total energy consumed, per-MIG-instance metrics, whole-GPU GPM activity ratios, PCIe throughput and replay counters, NVLink byte counters, graphics processes and per-process engine utilization. On Linux it ships in the `-nvml` container images (`:X.Y.Z-nvml`) and `nvidia_gpu_exporter-nvml_*` archives with `nvml` enabled by default. On Windows it is included in `nvidia_gpu_exporter.exe` and enabled with `--collect.backend=nvml`.
+- **`nvidia-smi` subprocess (`exec`)**: runs `nvidia-smi` and parses its CSV output. It remains the compiled default in the plain (non-`-nvml`) images, archives, `deb`/`rpm` packages, and Windows binary for 1.x compatibility, works as a static binary with zero C bindings on any platform where `nvidia-smi` exists, isolates the exporter from stuck driver calls, auto-discovers brand-new driver fields, and supports custom wrapper commands (`ssh`, `sudo`).
 
 ## Quick start
 
-On a Linux machine with the NVIDIA driver and the NVIDIA Container Toolkit:
+On a Linux machine with the NVIDIA driver and the NVIDIA Container Toolkit (using the `-nvml` image flavor):
 
 ```bash
 docker run -d --name nvidia_gpu_exporter --restart unless-stopped \
   --gpus all -e NVIDIA_DRIVER_CAPABILITIES=utility -p 9835:9835 \
-  utkuozdemir/nvidia_gpu_exporter:latest
+  utkuozdemir/nvidia_gpu_exporter:latest-nvml
 curl http://localhost:9835/metrics
 ```
 
-No GPU at hand? `nvidia_gpu_exporter --collect.backend demo` serves realistic
-synthetic metrics on any machine. For Windows, macOS, packages, Kubernetes and
-running without Docker, see [INSTALL.md](docs/INSTALL.md).
+Use `utkuozdemir/nvidia_gpu_exporter:latest` instead if you prefer the static `nvidia-smi` subprocess backend.
+
+No GPU at hand? `nvidia_gpu_exporter --collect.backend demo` serves realistic synthetic metrics on any machine. For Windows, macOS, packages, Kubernetes and running without Docker, see [INSTALL.md](docs/INSTALL.md).
 
 ## Use cases
 
-- Consumer and prosumer GPUs (GeForce/RTX), where the datacenter tooling
-  exposes little and `nvidia-smi` is often the only uniform source of
-  utilization, memory, power and temperature
-- Small Kubernetes clusters, edge boxes and homelabs that want GPU metrics
-  without installing the NVIDIA GPU Operator stack
-- Virtualized or restricted setups (vGPU guests, MIG slices, locked-down containers)
-  where the deeper GPU counters are not exposed but `nvidia-smi` still answers
-- Mixed fleets of old and new cards that need one exporter that behaves the
-  same everywhere
-- Gaming rigs, for watching your GPU stats on a dashboard while you play
+- Consumer and prosumer GPUs (GeForce/RTX), workstations and gaming rigs, where datacenter fleet tooling exposes little or does not run
+- Small Kubernetes clusters, edge boxes and homelabs that want GPU metrics, alerts and dashboards without installing the NVIDIA GPU Operator stack
+- Virtualized or restricted setups (vGPU guests, MIG slices, locked-down containers, WSL2)
+- Mixed fleets of old and new cards across Linux and Windows that need one exporter with a uniform metric schema
+- Remote monitoring of another host over an `ssh` wrapper command (`exec` backend)
 
-If you run datacenter cards on Kubernetes with the GPU Operator already
-installed, [DCGM-exporter](https://github.com/NVIDIA/dcgm-exporter) is
-probably the better fit. This exporter aims at the cases above.
+If you run a large datacenter fleet on Kubernetes with the GPU Operator already installed, [DCGM-exporter](https://github.com/NVIDIA/dcgm-exporter) is probably the better fit.
 
-## Highlights
+## Demo mode
 
-- Will work on any system that has `nvidia-smi(.exe)?` binary - Windows, Linux, MacOS... No C bindings required
-- Doesn't even need to run on the monitored machine: can be configured to execute `nvidia-smi` command remotely
-- Auto-discovery of the metric fields `nvidia-smi` can expose (future-compatible)
-- Optional per-process GPU metrics: see which process uses how much GPU memory
-- Optional background collection: run `nvidia-smi` on a timer instead of on every scrape
-- Comes with its own Grafana dashboards: a [per-GPU detail](https://grafana.com/grafana/dashboards/14574) one and a [multi-GPU overview](https://grafana.com/grafana/dashboards/25547)
-
-## Try the native NVML backend
-
-On Linux and Windows, the exporter can skip `nvidia-smi` and read the metrics
-directly from the NVIDIA driver library (NVML). Every metric the default
-backend serves stays identical in name, labels and value, so existing
-dashboards and alerts keep working.
-
-On top of that it adds families `nvidia-smi` cannot provide: per-MIG-instance
-metrics, XID error counters, a total energy counter and PCIe throughput. The
-official Grafana dashboards have panels for all of these. They sit empty on
-the default backend and fill up on this one.
-
-On Windows, the regular binary includes this backend out of the box, enabled
-with `--collect.backend=nvml`. On Linux, it ships as its own release flavor
-that already defaults to this backend: grab a `-nvml` archive from the
-[releases page](https://github.com/utkuozdemir/nvidia_gpu_exporter/releases),
-or use a `-nvml` image tag:
-
-```bash
-docker run -d \
-  --name nvidia_gpu_exporter \
-  --restart unless-stopped \
-  --gpus all \
-  -e NVIDIA_DRIVER_CAPABILITIES=utility \
-  -p 9835:9835 \
-  utkuozdemir/nvidia_gpu_exporter:latest-nvml
-```
-
-See [CONFIGURE.md](docs/CONFIGURE.md#native-nvml-backend) for the full
-backend comparison and the limits.
-
-## Try it without a GPU
-
-Demo mode serves realistic synthetic metrics, including the NVML-only
-families, with no GPU, driver or even Linux required:
+Demo mode serves realistic synthetic metrics covering the full NVML surface, with no GPU, driver or Linux required:
 
 ```bash
 nvidia_gpu_exporter --collect.backend demo
 ```
 
-By default it simulates two H200 GPUs with fluctuating values, a MIG topology
-and an XID error history. The simulated setup is configurable, see
-[CONFIGURE.md](docs/CONFIGURE.md#demo-mode).
+By default it simulates two H200 GPUs with fluctuating values, a MIG topology and an XID error history. The simulated setup is configurable, see [CONFIGURE.md](docs/CONFIGURE.md#demo-mode).
 
 ## Visualization
 
 There are two official Grafana dashboards, and they link to each other in Grafana:
 
-- [Nvidia GPU Metrics](https://grafana.com/grafana/dashboards/14574) (ID `14574`),
-  the per-GPU detail view.
-- [Nvidia GPU Overview](https://grafana.com/grafana/dashboards/25547) (ID `25547`),
-  which compares all GPUs of a node side by side and drills down into the
-  detail dashboard.
+- [Nvidia GPU Metrics](https://grafana.com/grafana/dashboards/14574) (ID `14574`), the per-GPU detail view.
+- [Nvidia GPU Overview](https://grafana.com/grafana/dashboards/25547) (ID `25547`), which compares all GPUs of a node side by side and drills down into the detail dashboard.
 
-Import either by ID in Grafana (*Dashboards* - *New* - *Import*), or enable
-`grafanaDashboard` in the Helm chart to get both provisioned automatically.
-The JSON is also in this repository under [docs/grafana](docs/grafana).
-
-Here's how they look:
+Import either by ID in Grafana (*Dashboards* - *New* - *Import*), or enable `grafanaDashboard` in the Helm chart to get both provisioned automatically. The JSON files also live under [docs/grafana](docs/grafana).
 
 ![Nvidia GPU Metrics](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/docs/grafana/dashboard.png)
 
@@ -141,73 +83,34 @@ Here's how they look:
 
 ## Installation
 
-[INSTALL.md](docs/INSTALL.md) has the steps for every platform: Linux
-(deb/rpm packages or a plain binary, with a systemd unit), Docker, Kubernetes
-(the [Helm chart](charts/nvidia-gpu-exporter)), Windows (winget, Scoop, a
-native Windows service, or an all-in-one script that also sets up Prometheus
-and Grafana) and macOS.
+[INSTALL.md](docs/INSTALL.md) covers every platform:
 
-The container images are on
-[Docker Hub](https://hub.docker.com/r/utkuozdemir/nvidia_gpu_exporter) and
-[GHCR](https://github.com/utkuozdemir/nvidia_gpu_exporter/pkgs/container/nvidia_gpu_exporter),
-the Helm chart is on
-[Artifact Hub](https://artifacthub.io/packages/helm/nvidia-gpu-exporter/nvidia-gpu-exporter),
-and the binaries and packages are on the
-[releases page](https://github.com/utkuozdemir/nvidia_gpu_exporter/releases).
+- **Linux**: `deb`/`rpm` packages, static or `-nvml` binaries, and a systemd unit
+- **Docker**: `:X.Y.Z-nvml` and `:X.Y.Z` container images on [Docker Hub](https://hub.docker.com/r/utkuozdemir/nvidia_gpu_exporter) and [GHCR](https://github.com/utkuozdemir/nvidia_gpu_exporter/pkgs/container/nvidia_gpu_exporter)
+- **Kubernetes**: the [Helm chart](charts/nvidia-gpu-exporter) on [Artifact Hub](https://artifacthub.io/packages/helm/nvidia-gpu-exporter/nvidia-gpu-exporter) (including Prometheus alert rules and Grafana dashboards) or a plain DaemonSet
+- **Windows**: `winget`, Scoop, a native Windows service, or an all-in-one PowerShell script that also sets up Prometheus and Grafana
+- **macOS**: binary archive for remote scraping over SSH
 
-## Verifying releases
+Release artifacts, container images, and Helm charts are signed and carry GitHub build provenance attestations. See [INSTALL.md](docs/INSTALL.md#verifying-what-you-downloaded) for verification commands and [SECURITY_MODEL.md](docs/SECURITY_MODEL.md) for the security model.
 
-Release artifacts are signed so you can check they came from this project's
-release pipeline:
+## Configuration and metrics
 
-- The `checksums.txt` file attached to a release carries a keyless
-  [cosign](https://github.com/sigstore/cosign) signature bundle
-  (`checksums.txt.sigstore.json`), which covers every binary, archive and
-  package. Releases without that file have a GPG signature instead, see the
-  install guide.
-- The container images and the Helm chart are signed keyless with cosign too,
-  tied to the release workflow's identity. The chart's classic repository
-  additionally carries GPG provenance files, since Helm verifies only those.
-
-See [INSTALL.md](docs/INSTALL.md) for the exact verification commands, and the
-[chart README](charts/nvidia-gpu-exporter/README.md) for the chart.
-
-[SECURITY_MODEL.md](docs/SECURITY_MODEL.md) describes what you can expect from
-the exporter security-wise and where the trust boundaries are.
-[SECURITY.md](.github/SECURITY.md) says how to report a problem.
-
-## Configuration
-
-See [CONFIGURE.md](docs/CONFIGURE.md) for details.
-
-## Metrics
-
-See [METRICS.md](docs/METRICS.md) for details.
+- [CONFIGURE.md](docs/CONFIGURE.md): flags, collection backends, per-process metrics, background collection, timeouts and `/-/gpu-healthy`.
+- [METRICS.md](docs/METRICS.md): metric families, labels, enum mappings, MIG and XID semantics, and Kubernetes / `vLLM` PromQL joins.
 
 ## Contributing
 
-See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for the process and the
-development setup, [ROADMAP.md](docs/ROADMAP.md) for what is planned and what
-is not, and [GOVERNANCE.md](.github/GOVERNANCE.md) for how decisions are made.
+See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for the development setup, [ROADMAP.md](docs/ROADMAP.md) for what is planned, and [GOVERNANCE.md](.github/GOVERNANCE.md) for how decisions are made.
 
 ### Contribute a GPU capture
 
-The exporter parses `nvidia-smi` output, which differs across GPU models,
-driver versions and operating systems. The test corpus already covers a good
-range of hardware. A capture from a setup it has not seen yet, e.g., a new
-GPU model or a brand-new driver, is still a welcome contribution, and it
-takes one command:
+The test suite replays recorded `nvidia-smi` output and NVML symbol lists from real hardware across GPU models, driver versions and operating systems. Recording a capture from a GPU or driver version not yet in the corpus takes one command:
 
 ```bash
 ./internal/captures/collect.sh          # add --load for an under-load sample too
 ```
 
-It needs only `nvidia-smi`, `bash` and the standard core utilities (`awk`,
-`sed`, ...). It runs read-only and masks identifiers (GPU UUID, serial,
-hostname) by default.
-
-It writes one `.txt` file. Commit it and open a PR, or attach it to an issue.
-See [internal/captures/README.md](internal/captures/README.md).
+It runs read-only, masks identifiers (GPU UUID, serial, hostname) by default, and writes one `.txt` file. Commit it and open a PR, or attach it to an issue. See [internal/captures/README.md](internal/captures/README.md).
 
 ## Star History
 

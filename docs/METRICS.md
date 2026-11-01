@@ -2,34 +2,15 @@
 
 This page describes the exported metrics and what they mean.
 
-Which metrics appear depends on your GPU, driver and operating system. The
-query fields are auto-discovered by default (`AUTO`), so the exporter picks
-up new fields and exposes them on a best-effort basis.
+Which metrics appear depends on your GPU, driver, operating system and collection backend (`nvml` or `exec`). For every query field both backends serve, the exported series is identical in name, labels and value. The one exception is the collection status metric: `nvml` reports `nvidia_smi_nvml_return_code` in place of `nvidia_smi_command_exit_code`.
 
-For a complete, real example of what a scrape looks like, see the expected
-outputs the integration tests compare against, under
-[internal/integration/testdata](../internal/integration/testdata). There is
-one file per captured GPU, driver and load state. Each is the exact
-`nvidia_smi_*` output the exporter produces for it, so they stay current by
-construction.
+On top of that shared core, the `nvml` backend serves the driver-only metric families described below. The `demo` backend synthesizes the full `nvml` surface, see [CONFIGURE.md](CONFIGURE.md#demo-mode).
 
-The exporter additionally exposes the standard Go runtime, process and
-`promhttp` metric families, which are not shown there.
-
-For every query field the NVML backend and the default backend both serve,
-the metric is identical. The one exception is the collection status metric:
-the NVML backend reports `nvidia_smi_nvml_return_code` in place of
-`nvidia_smi_command_exit_code`.
-
-On top of that shared core, the NVML backend serves the NVML-only families
-described in the next section. The demo backend approximates the NVML
-backend's surface with synthetic data, see
-[CONFIGURE.md](CONFIGURE.md#demo-mode).
+For complete real scrape outputs across captured GPUs and drivers, see [internal/integration/testdata](../internal/integration/testdata). The exporter also exposes the standard Go runtime, process and `promhttp` metric families.
 
 ## NVML-only metrics
 
-Some readings exist in the driver library but not in the `nvidia-smi` query
-interface, so only the NVML backend can export them.
+These families come from the NVIDIA driver library (`libnvidia-ml` / `nvml.dll`) and are exported by the `nvml` and `demo` backends.
 
 ### Energy, PCIe and NVLink
 
@@ -124,14 +105,7 @@ attributing each process to its MIG instance (empty for processes on non-MIG
 GPUs). It is opt-in because it changes the label set of the per-process
 series.
 
-Container note: full function, the per-process metrics under MIG included,
-needs a privileged container with `NVIDIA_MIG_MONITOR_DEVICES=all` and the
-host PID namespace. Root is not needed, the exporter stays on its non-root
-uid (verified on an H200). Unprivileged, with just the environment variable,
-the per-MIG inventory, memory and activity metrics still work and only the
-GPU-level memory fields go absent. On Kubernetes, privileged has to be
-requested together with the rest of the security context; see the
-[chart README](../charts/nvidia-gpu-exporter/README.md).
+Container note: full visibility under MIG, including per-process metrics, requires a privileged container with `NVIDIA_MIG_MONITOR_DEVICES=all` and the host PID namespace. Root is not needed, the exporter runs as its non-root uid (checked on an H200). Unprivileged, with only the environment variable, the per-MIG inventory, memory and activity metrics still work while the GPU-level memory fields are omitted. On Kubernetes, privileged mode must be configured together with the rest of the security context, see the [chart README](../charts/nvidia-gpu-exporter/README.md).
 
 ### XID errors
 
