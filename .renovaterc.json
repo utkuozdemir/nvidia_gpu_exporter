@@ -7,6 +7,7 @@
     ":automergeDigest",
     ":semanticCommitTypeAll(chore)"
   ],
+  "osvVulnerabilityAlerts": true,
   "postUpdateOptions": [
     "gomodTidy"
   ],
@@ -16,6 +17,27 @@
         "go"
       ],
       "groupName": "go packages"
+    },
+    {
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchDepTypes": [
+        "indirect"
+      ],
+      "enabled": true
+    },
+    {
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchDepTypes": [
+        "indirect"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "enabled": false
     },
     {
       "matchDatasources": [
