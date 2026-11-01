@@ -13,7 +13,7 @@ For reporting a problem, see [SECURITY.md](../.github/SECURITY.md).
 | **Reproducible builds** | The release archives and packages are rebuilt on a second runner and compared byte for byte, on every change and every release. The container images are built reproducibly too, which is checked manually, and the Helm chart is packaged with the commit time as every file time. See [Reproducing a release](INSTALL.md#reproducing-a-release). |
 | **Artifact signing** | Keyless cosign signatures on the checksums, the images and the OCI chart, GPG provenance for the classic Helm repository, and signed release tags. See [What you can expect](#what-you-can-expect) below. |
 | **Network and telemetry** | The exporter makes no outbound connections and sends no telemetry. The only exception is a wrapper command the operator configures, such as `ssh`. |
-| **Container and Kubernetes hardening** | Non-root distroless image, and a default chart install is admitted under the `restricted` Pod Security Standard. See [What you can expect](#what-you-can-expect) below. Images can be pinned by digest with `image.tag: "X.Y.Z@sha256:..."`. |
+| **Container and Kubernetes hardening** | Non-root distroless image. The chart runs it with a read-only root filesystem by default, and a default install is admitted under the `restricted` Pod Security Standard. See [What you can expect](#what-you-can-expect) below. Images can be pinned by digest with `image.tag: "X.Y.Z@sha256:..."`. |
 | **Dependency updates** | Renovate keeps Go dependencies, direct and indirect, and the base image digest up to date, with OSV vulnerability alerts on. |
 
 ## What the exporter does
