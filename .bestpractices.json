@@ -1,6 +1,6 @@
 {
   "name": "nvidia_gpu_exporter",
-  "description": "Prometheus exporter for NVIDIA GPUs. It runs `nvidia-smi` and parses its output, so it works wherever `nvidia-smi` works: Linux, Windows, macOS, containers, VMs. On Linux it also has a backend that reads the driver library (NVML) directly.",
+  "description": "Prometheus exporter for NVIDIA GPUs. It collects metrics natively from the NVIDIA driver library (NVML, `libnvidia-ml.so.1` on Linux and `nvml.dll` on Windows) or by running `nvidia-smi` wherever that binary or a wrapper command runs.",
   "license": "MIT",
   "implementation_languages": "Go, Shell, PowerShell",
   "description_good_status": "Met",
@@ -120,7 +120,7 @@
   "vulnerabilities_critical_fixed_status": "Met",
   "vulnerabilities_critical_fixed_justification": "No vulnerability so far. The policy for when one comes: prioritized by severity, fix ships in a release, then an advisory: https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/.github/SECURITY.md",
   "no_leaked_credentials_status": "Met",
-  "no_leaked_credentials_justification": "No credentials in the repo. CI uses GitHub secrets and short-lived OIDC tokens for signing.",
+  "no_leaked_credentials_justification": "No credentials in the repo. GitHub secret scanning and push protection are enabled on the repository. CI uses GitHub secrets and short-lived OIDC tokens for signing.",
   "static_analysis_status": "Met",
   "static_analysis_justification": "golangci-lint (including gosec, staticcheck and govet) runs in CI on every pull request and push to the main branch: https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/.golangci.yml. GitHub CodeQL scans the repository through the default setup, on pull requests and weekly: https://github.com/utkuozdemir/nvidia_gpu_exporter/security/code-scanning. zizmor audits the GitHub Actions workflows as part of the lint target, locally and in CI: https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/.github/zizmor.yml",
   "static_analysis_common_vulnerabilities_status": "Met",

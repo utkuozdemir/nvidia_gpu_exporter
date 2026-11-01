@@ -227,8 +227,19 @@ Releases are cut by pushing a version tag, which triggers the release workflow; 
 The tag is signed, and the workflow's first step refuses a tag that GitHub does not report as verified, so an unsigned tag fails before anything is built or published.
 A tag ruleset makes release tags immutable (no update, no deletion), so a signature cannot be reused by re-pointing a tag. The ruleset does not check the tag signature itself, GitHub's signature rule looks at commits, not tag objects, so the workflow check is the enforcement.
 The release task only tags the tip of the main branch, and the workflow refuses a tagged commit that is not on the main branch.
+GitHub's immutable releases setting is on, so the assets of a release cannot be changed once goreleaser publishes it.
+goreleaser uploads everything to a draft and publishes it last.
+Every later job writes to registries, `gh-pages` or the attestation store, never to the release, and a new job must keep it that way.
+This is why the release-files provenance is not attached as a `.intoto.jsonl` asset, even though OpenSSF Scorecard looks for one: it can only be created after publishing.
+The release job cannot be re-run after goreleaser publishes, and a deleted release blocks its tag name permanently.
+So a failure in the release job after publishing (e.g., an expired package manager token) is recovered by fixing the cause and cutting the next patch release.
+The jobs after it do not write to the release, so they can still be re-run on their own.
 
 The pipeline builds two binary flavors from the same source: the fully static default build, and the cgo nvml flavor.
+Both flavors build with an explicit `GOFIPS140` version in `.goreleaser.yml`, not the moving `certified` alias.
+`docs/SECURITY_MODEL.md` cites the CMVP certificate of that exact module version, so a Go toolchain bump must not change it silently.
+`GOFIPS140` links a frozen snapshot of Go's cryptographic module and turns FIPS mode on by default (`DefaultGODEBUG=fips140=on`).
+With TLS enabled, this limits the handshake to Go's FIPS-approved algorithms, and `GODEBUG=fips140=off` turns it off at runtime.
 The release builds are reproducible on purpose: no build paths in the binaries, the commit time as every timestamp, and a fixed owner and mode on every archive entry.
 The same commit yields the same bytes for every static artifact on any machine, and for the cgo flavor on a builder with the same C toolchain.
 The owner matters because an archive entry records the builder's uid, gid and user name.
@@ -236,10 +247,6 @@ This is what made the first release with this setup reproduce only under the rel
 The mode is fixed too, because the checkout's file mode follows the builder's umask and would have been the next difference.
 Keep new build steps deterministic.
 A separate workflow builds the release artifacts twice on two runners and fails on any checksum difference, so a build that starts depending on the hostname or the time is caught before a release.
-Both flavors build with an explicit `GOFIPS140` version in `.goreleaser.yml`, not the moving `certified` alias.
-`docs/SECURITY_MODEL.md` cites the CMVP certificate of that exact module version, so a Go toolchain bump must not change it silently.
-`GOFIPS140` links a frozen snapshot of Go's cryptographic module and turns FIPS mode on by default (`DefaultGODEBUG=fips140=on`).
-With TLS enabled, this limits the handshake to Go's FIPS-approved algorithms, and `GODEBUG=fips140=off` turns it off at runtime.
 That workflow and the post-release rebuild run without the Go cache on purpose.
 The cache key is only the `go.sum` hash, so the rebuild would otherwise restore a cached build's compiled packages and compare only the packaging.
 Neither of them can catch a dependence on the user or the umask, because every runner builds as the same user.

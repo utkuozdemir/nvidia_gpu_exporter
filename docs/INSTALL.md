@@ -355,9 +355,16 @@ gh attestation verify oci://docker.io/utkuozdemir/nvidia_gpu_exporter:X.Y.Z \
   --source-ref refs/tags/vX.Y.Z
 ```
 
+From `v1.17.0` on, GitHub releases are immutable: once a release is published, its assets and its tag cannot be changed. GitHub also attests each release, and a downloaded file can be checked against that attestation:
+
+```bash
+gh release verify-asset vX.Y.Z nvidia_gpu_exporter_X.Y.Z_linux_x86_64.tar.gz \
+  --repo utkuozdemir/nvidia_gpu_exporter
+```
+
 ### Reproducing a release
 
-From `v1.15.1` on, static release artifacts are reproducible across machines from the tagged commit. The `-nvml` cgo archive reproduces on builders with the same C toolchain (Ubuntu 24.04 default GCC).
+From `v1.15.1` on, static release artifacts are reproducible across machines from the tagged commit. The `-nvml` cgo archive reproduces on builders with the same C toolchain (the default GCC on the Ubuntu runner image in `.github/workflows/release.yml` for that tag).
 
 To rebuild locally and compare against the published `checksums.txt`, check out the release tag and build with the Go version in `go.mod` and the `GORELEASER_VERSION` pinned in `hack/dev.Dockerfile`:
 
