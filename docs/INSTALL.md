@@ -81,6 +81,36 @@ To run the downloaded binary (such as the `-nvml` build) as a `systemd` service:
    sudo systemctl enable --now nvidia_gpu_exporter
    ```
 
+### Systemd unit hardening
+
+The [systemd unit](../install/systemd/nvidia_gpu_exporter.service) runs the exporter with this sandboxing, which still lets `sudo` and `ssh` wrapper commands work:
+
+- `PrivateTmp=yes`
+- `ProtectSystem=full`
+- `ProtectHome=read-only`
+- `ProtectControlGroups=yes`
+
+A wrapper that writes to the home directory (e.g., `~/.ssh/known_hosts`) or uses an agent socket in `/tmp` needs `ProtectHome=no` or `PrivateTmp=no`. Override them with `sudo systemctl edit nvidia_gpu_exporter`.
+
+Hosts that match all of the following can use stricter sandboxing:
+
+- The exporter collects without a `sudo` or `ssh` wrapper command.
+- No configuration is stored under `/home`, `/root` or `/run/user`.
+- The `/dev/nvidia*` device nodes are created at boot (by `nvidia-persistenced` or `udev` rules), not on demand by `nvidia-modprobe`.
+
+Add it with `sudo systemctl edit nvidia_gpu_exporter`:
+
+```ini
+[Service]
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+```
+
 ## Docker
 
 The container image does not bundle NVIDIA driver files. Instead, the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) injects the host's GPU device nodes, driver libraries and `nvidia-smi` when the container starts.
