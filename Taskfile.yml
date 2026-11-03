@@ -194,7 +194,7 @@ tasks:
         # the marker has to sit immediately above the version it pins, so it
         # goes last rather than at the top of this comment block
         # renovate: depName=caarlos0/svu datasource=docker
-        sh: docker run --rm -v "$PWD":/src -w /src caarlos0/svu:3.4.1 next
+        sh: docker run --rm -v "$PWD":/src -w /src caarlos0/svu:3.4.4 next
     cmds:
       # releases are cut from the tip of main, with a clean tree. Tags are
       # fetched too, so the next version is computed against all of them.
