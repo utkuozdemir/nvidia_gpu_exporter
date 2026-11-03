@@ -28,7 +28,7 @@ ARG GOLANGCI_LINT_VERSION=2.15.0
 # renovate: depName=mvdan/sh datasource=github-releases
 ARG SHFMT_VERSION=3.14.1
 # renovate: depName=grafana/dashboard-linter datasource=github-releases
-ARG DASHBOARD_LINTER_VERSION=0.4.0
+ARG DASHBOARD_LINTER_VERSION=0.5.0
 # renovate: depName=markdownlint-cli datasource=npm
 ARG MARKDOWNLINT_VERSION=0.50.0
 # renovate: depName=node datasource=docker
