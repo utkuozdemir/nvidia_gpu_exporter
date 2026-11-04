@@ -133,6 +133,6 @@ jobs:
           docker run --rm -v "$(pwd):/helm-docs" -u "$(id -u)" jnorwood/helm-docs:v1.14.2
           git diff --exit-code charts/
       - name: Create kind cluster
-        uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
+        uses: helm/kind-action@ea822c7bf1874f08e5a491df991c228edffc3376 # v1.15.2
       - name: Install chart
         run: ct install --config .ct.yaml --all
