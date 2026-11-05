@@ -260,6 +260,12 @@
         "additionalLabels": {
           "type": "object"
         },
+        "additionalRuleLabels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
         "collectionFailing": {
           "type": "object",
           "properties": {
