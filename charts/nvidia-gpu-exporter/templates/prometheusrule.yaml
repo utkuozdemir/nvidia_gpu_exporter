@@ -27,6 +27,7 @@ The two original rules keep their full knobs for compatibility.
   "computeAppsInvisible" (dig "computeAppsInvisible" "enabled" true $pr)
   "gpuMissing" (dig "gpuMissing" "enabled" false $pr)
 }}
+{{- $ruleLabels := omit ((dig "additionalRuleLabels" dict $pr) | default dict) "severity" }}
 {{- $any := false }}
 {{- range $k, $v := $on }}{{- if $v }}{{- $any = true }}{{- end }}{{- end }}
 {{- /* the two tiers carry contradictory instructions, so one code must never be in both */}}
@@ -59,6 +60,9 @@ spec:
           for: {{ dig "collectionFailing" "for" "10m" $pr }}
           labels:
             severity: {{ dig "collectionFailing" "severity" "warning" $pr }}
+            {{- with $ruleLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           annotations:
             summary: GPU metric collection is failing on {{ printf "{{ $labels.instance }}" }}
             description: >-
@@ -74,6 +78,9 @@ spec:
             > {{ dig "collectionStale" "thresholdSeconds" 300 $pr }}
           labels:
             severity: {{ dig "collectionStale" "severity" "warning" $pr }}
+            {{- with $ruleLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           annotations:
             summary: GPU metrics are stale on {{ printf "{{ $labels.instance }}" }}
             description: >-
@@ -88,6 +95,9 @@ spec:
           for: 10m
           labels:
             severity: warning
+            {{- with $ruleLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           annotations:
             summary: GPU metric collection is slow on {{ printf "{{ $labels.instance }}" }}
             description: >-
@@ -103,6 +113,9 @@ spec:
           expr: nvidia_smi_gpu_recovery_action > 0
           labels:
             severity: critical
+            {{- with $ruleLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           annotations:
             summary: A GPU on {{ printf "{{ $labels.instance }}" }} needs a recovery action
             description: >-
@@ -118,6 +131,9 @@ spec:
             < 600
           labels:
             severity: critical
+            {{- with $ruleLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           annotations:
             summary: Critical GPU Xid error on {{ printf "{{ $labels.instance }}" }}
             description: >-
@@ -136,6 +152,9 @@ spec:
             < 600
           labels:
             severity: warning
+            {{- with $ruleLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           annotations:
             summary: GPU Xid error on {{ printf "{{ $labels.instance }}" }}
             description: >-
@@ -149,6 +168,9 @@ spec:
           expr: nvidia_smi_ecc_errors_uncorrected_volatile_total > 0
           labels:
             severity: critical
+            {{- with $ruleLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           annotations:
             summary: Uncorrectable GPU memory errors on {{ printf "{{ $labels.instance }}" }}
             description: >-
@@ -162,6 +184,9 @@ spec:
           expr: nvidia_smi_remapped_rows_failure == 1
           labels:
             severity: critical
+            {{- with $ruleLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           annotations:
             summary: GPU memory row remapping failed on {{ printf "{{ $labels.instance }}" }}
             description: >-
@@ -174,6 +199,9 @@ spec:
           expr: nvidia_smi_remapped_rows_pending == 1
           labels:
             severity: warning
+            {{- with $ruleLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           annotations:
             summary: GPU memory row remap pending on {{ printf "{{ $labels.instance }}" }}
             description: >-
@@ -186,6 +214,9 @@ spec:
           expr: nvidia_smi_retired_pages_pending == 1
           labels:
             severity: warning
+            {{- with $ruleLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           annotations:
             summary: GPU memory page retirement pending on {{ printf "{{ $labels.instance }}" }}
             description: >-
@@ -200,6 +231,9 @@ spec:
           for: 5m
           labels:
             severity: warning
+            {{- with $ruleLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           annotations:
             summary: A GPU on {{ printf "{{ $labels.instance }}" }} is in hardware thermal slowdown
             description: >-
@@ -217,6 +251,9 @@ spec:
           for: 30m
           labels:
             severity: warning
+            {{- with $ruleLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           annotations:
             summary: A GPU on {{ printf "{{ $labels.instance }}" }} is thermally throttled
             description: >-
@@ -232,6 +269,9 @@ spec:
           for: 5m
           labels:
             severity: warning
+            {{- with $ruleLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           annotations:
             summary: A GPU on {{ printf "{{ $labels.instance }}" }} is power-brake throttled
             description: >-
@@ -246,6 +286,9 @@ spec:
           for: 10m
           labels:
             severity: warning
+            {{- with $ruleLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           annotations:
             summary: A GPU on {{ printf "{{ $labels.instance }}" }} runs hot
             description: >-
@@ -260,6 +303,9 @@ spec:
           for: 10m
           labels:
             severity: warning
+            {{- with $ruleLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           annotations:
             summary: A GPU on {{ printf "{{ $labels.instance }}" }} is close to its thermal slowdown limit
             description: >-
@@ -278,6 +324,9 @@ spec:
           for: 10m
           labels:
             severity: warning
+            {{- with $ruleLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           annotations:
             summary: PCIe link generation is degraded under load on {{ printf "{{ $labels.instance }}" }}
             description: >-
@@ -296,6 +345,9 @@ spec:
           for: 10m
           labels:
             severity: warning
+            {{- with $ruleLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           annotations:
             summary: PCIe link width is degraded under load on {{ printf "{{ $labels.instance }}" }}
             description: >-
@@ -311,6 +363,9 @@ spec:
           expr: increase(nvidia_smi_pcie_replay_rollovers_total[1h]) > 0
           labels:
             severity: warning
+            {{- with $ruleLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           annotations:
             summary: PCIe link replay rollovers on {{ printf "{{ $labels.instance }}" }}
             description: >-
@@ -328,6 +383,9 @@ spec:
           for: 15m
           labels:
             severity: info
+            {{- with $ruleLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           annotations:
             summary: A GPU on {{ printf "{{ $labels.instance }}" }} is holding VRAM while idle
             description: >-
@@ -344,6 +402,9 @@ spec:
           for: 30m
           labels:
             severity: warning
+            {{- with $ruleLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           annotations:
             summary: GPU memory is in use with zero visible compute processes on {{ printf "{{ $labels.instance }}" }}
             description: >-
@@ -367,6 +428,9 @@ spec:
           for: 10m
           labels:
             severity: warning
+            {{- with $ruleLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           annotations:
             summary: A GPU disappeared on {{ printf "{{ $labels.instance }}" }}
             description: >-

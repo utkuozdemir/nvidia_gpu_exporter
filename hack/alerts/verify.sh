@@ -87,6 +87,36 @@ if [ "$kinds" != "0" ]; then
 fi
 echo "all-rules-disabled suppresses the resource"
 
+# 3. additionalRuleLabels reach every rule, and a severity key in it must not
+# override (or duplicate) the per-rule severity
+labeled="$(docker run --rm -v "$chart:/chart:ro" "$HELM_IMAGE" \
+  template ci /chart \
+  --show-only templates/prometheusrule.yaml \
+  --set prometheusRule.enabled=true \
+  "${enable_flags[@]}" \
+  --set prometheusRule.additionalRuleLabels.team=gpu \
+  --set prometheusRule.additionalRuleLabels.severity=page |
+  docker run --rm -i "$YQ_IMAGE" eval \
+    '[.spec.groups[].rules[] | select(.labels.team != "gpu")] | length' -)"
+if [ "$labeled" != "0" ]; then
+  echo "FAIL: $labeled rule(s) missing additionalRuleLabels" >&2
+  exit 1
+fi
+severities() { docker run --rm -i "$YQ_IMAGE" eval '.groups[].rules[].labels.severity' -; }
+want="$(severities < "$out/rules.yml")"
+got="$(docker run --rm -v "$chart:/chart:ro" "$HELM_IMAGE" \
+  template ci /chart \
+  --show-only templates/prometheusrule.yaml \
+  --set prometheusRule.enabled=true \
+  "${enable_flags[@]}" \
+  --set prometheusRule.additionalRuleLabels.severity=page |
+  docker run --rm -i "$YQ_IMAGE" eval '{"groups": .spec.groups}' - | severities)"
+if [ "$got" != "$want" ]; then
+  echo "FAIL: additionalRuleLabels.severity changed a rule's severity" >&2
+  exit 1
+fi
+echo "additionalRuleLabels reach every rule without touching severity"
+
 echo "--- promtool check rules"
 docker run --rm -v "$here:/w" --entrypoint /bin/promtool "$PROM_IMAGE" \
   check rules /w/rendered/rules.yml

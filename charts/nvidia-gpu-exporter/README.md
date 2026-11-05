@@ -362,6 +362,7 @@ grafanaDashboard:
 | port | int | `9835` | Port to listen on |
 | priorityClassName | string | `""` | Priority class name for the pods |
 | prometheusRule.additionalLabels | object | `{}` | Additional labels for the PrometheusRule, e.g. to match your Prometheus instance's rule selector |
+| prometheusRule.additionalRuleLabels | object | `{}` | Labels added to every alert rule, e.g. to route the alerts in Alertmanager. A `severity` key here is ignored, since each rule sets its own severity. |
 | prometheusRule.collectionFailing.enabled | bool | `true` | Alert when the most recent collection failed for some time |
 | prometheusRule.collectionFailing.for | string | `"10m"` | How long collection must be failing before the alert fires |
 | prometheusRule.collectionFailing.severity | string | `"warning"` | Severity label of the alert |

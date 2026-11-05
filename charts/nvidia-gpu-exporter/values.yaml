@@ -159,6 +159,10 @@ prometheusRule:
   enabled: false
   # -- Additional labels for the PrometheusRule, e.g. to match your Prometheus instance's rule selector
   additionalLabels: {}
+  # -- Labels added to every alert rule, e.g. to route the alerts in
+  # Alertmanager. A `severity` key here is ignored, since each rule sets its
+  # own severity.
+  additionalRuleLabels: {}
   collectionFailing:
     # -- Alert when the most recent collection failed for some time
     enabled: true
