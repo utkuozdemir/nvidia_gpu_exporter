@@ -6,18 +6,16 @@
 // nvidia-smi byte-for-byte; they were verified against a live H100 (driver
 // 590.48.01) via the diff harness in _work/nvml-experiment.
 //
-// Fields nvidia-smi knows but this catalog does not (vGPU capabilities,
-// Blackwell power smoothing, GB200 module power, kmd_version...) are simply
-// absent from the backend's vocabulary, the same way an older nvidia-smi
-// does not know newer fields. On hardware where they exist they read [N/A]
-// in exec mode anyway, so the exported metric surface stays the same.
+// Fields nvidia-smi knows that have no verified NVML mapping yet (vGPU
+// capabilities, Blackwell power smoothing, GB200 module power, kmd_version,
+// pcie.link.gen.hostmax, gpu_uptime) are recorded in deferredFields and
+// omitted from this backend's vocabulary until a mapping is added.
 package nvmlnative
 
 import (
 	"fmt"
 	"log/slog"
 	"maps"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -492,92 +490,12 @@ func Resolve(
 	return resolved, nil
 }
 
-// deprecatedFields are the fields nvidia-smi answers with its deprecation
-// token regardless of what NVML returns (H100/590 verified; the collector
-// prints the token for these without calling the getter). The corpus drift
-// test checks this list against every capture's data row, so a driver
-// un-deprecating or newly deprecating a field fails loudly.
-//
-//nolint:gochecknoglobals // shared between the collector and the drift test
-var deprecatedFields = []nvidiasmi.QField{
-	"display_mode",
-	"power.management",
-	"clocks.applications.graphics",
-	"clocks.applications.memory",
-	"clocks.default_applications.graphics",
-	"clocks.default_applications.memory",
-}
-
-// deprecatedFieldsMinDriverMajor is the driver generation the hardcoded
-// deprecation list was verified against; the drift test enforces the list on
-// every capture from this generation on.
-const deprecatedFieldsMinDriverMajor = 590
-
-// IsExecOnlyDeprecatedField reports whether qField is one the exec backend
-// still serves while the nvml backend reports it deprecated on the given
-// driver. It is true for a field in the deprecated family on a driver older
-// than the generation that deprecated it (see deprecatedFieldsMinDriverMajor):
-// nvidia-smi has not deprecated it there yet, so exec returns a value, while
-// the nvml backend reports the deprecation token unconditionally. The two
-// backends declining or serving a field differently is normally a bug, but
-// this split is expected and the GPU parity test exempts it. The field family
-// is on its way out: once nvidia-smi drops it on the older drivers too, both
-// backends decline it everywhere and this exemption stops mattering, so it is
-// not worth teaching the nvml backend to serve these.
-func IsExecOnlyDeprecatedField(qField nvidiasmi.QField, driverVersion string) bool {
-	major := driverMajor(driverVersion)
-	if major == 0 || major >= deprecatedFieldsMinDriverMajor {
-		return false
-	}
-
-	return slices.Contains(deprecatedFields, qField)
-}
-
-// TokenDeprecated is the raw value the nvml backend reports for a deprecated
-// field, exposed so the parity test can require it exactly rather than accept
-// any absent value in the exec-only-deprecated exemption.
-const TokenDeprecated = tokenDeprecated
-
-// ExecOnlyDeprecatedRFields returns the returned (header) names of the fields
-// the exec backend still serves while the nvml backend reports them deprecated
-// on the given driver, empty when there are none. The metric-family parity
-// test turns these into family names (via the exporter's own name builder) to
-// exempt the same split IsExecOnlyDeprecatedField covers at field granularity.
-func ExecOnlyDeprecatedRFields(driverVersion string) []nvidiasmi.RField {
-	if major := driverMajor(driverVersion); major == 0 || major >= deprecatedFieldsMinDriverMajor {
-		return nil
-	}
-
-	rFields := make([]nvidiasmi.RField, 0, len(deprecatedFields))
-	for _, field := range deprecatedFields {
-		if rField, ok := catalogRFields[field]; ok {
-			rFields = append(rFields, rField)
-		}
-	}
-
-	return rFields
-}
-
-// driverMajor parses the leading integer of a driver version like "580.173.02".
-// It returns 0 when the version is empty or unparseable.
-func driverMajor(driverVersion string) int {
-	major, _, _ := strings.Cut(driverVersion, ".")
-
-	n, err := strconv.Atoi(major)
-	if err != nil {
-		return 0
-	}
-
-	return n
-}
-
 // deferredFields are query fields nvidia-smi advertises that this backend
-// consciously does not serve yet: no verified NVML mapping exists, or the
-// family needs hardware nobody has captured. On the hardware captured so far
-// they all read as absent, so both backends export nothing for them. The
-// corpus drift test fails when a NEW unknown field shows a real value in the
-// newest capture and it is not listed here; adding a field here is the
-// explicit "defer" decision, adding it to the catalog is the fix.
+// consciously does not serve yet because no verified NVML mapping exists or
+// the family needs hardware nobody has captured. The corpus drift test fails
+// when a NEW unknown field shows a real value in the newest capture and it is
+// not listed here. Adding a field here is the explicit "defer" decision, and
+// adding it to the catalog is the fix.
 var deferredFields = map[nvidiasmi.QField]bool{
 	"kmd_version":           true,
 	"pcie.link.gen.hostmax": true,

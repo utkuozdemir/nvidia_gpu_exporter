@@ -6,24 +6,24 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestMib pins the H100-verified ceiling behavior: nvidia-smi ceils MiB
-// cells (reserved bytes 501481472 = 478.25 MiB prints as "479 MiB").
+// TestMib verifies that mib formats byte counts without rounding so the
+// exporter reproduces the exact native byte count.
 func TestMib(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, "479 MiB", mib(501481472))
-	assert.Equal(t, "81559 MiB", mib(85520809984)) // exact multiple stays exact
+	assert.Equal(t, "478.25 MiB", mib(501481472))
+	assert.Equal(t, "81559 MiB", mib(85520809984))
 	assert.Equal(t, "0 MiB", mib(0))
-	assert.Equal(t, "1 MiB", mib(1))
-	assert.Equal(t, "81081 MiB", mib(85019328512)) // 81080.75 rounds up
+	assert.Equal(t, "15.9921875 MiB", mib(16769024))
+	assert.Equal(t, "81080.75 MiB", mib(85019328512))
 }
 
 func TestMilliwatts(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, "654.54 W", milliwatts(654543))
+	assert.Equal(t, "654.543 W", milliwatts(654543))
 	assert.Equal(t, "69.77 W", milliwatts(69770))
-	assert.Equal(t, "0.00 W", milliwatts(0))
+	assert.Equal(t, "0 W", milliwatts(0))
 }
 
 func TestEnumSpellings(t *testing.T) {
@@ -46,6 +46,8 @@ func TestEnumSpellings(t *testing.T) {
 	assert.Equal(t, "Completed", fabricStateStr(3))
 	assert.Equal(t, "N/A", fabricStateStr(0))
 	assert.Equal(t, "None", recoveryActionStr(0))
+	assert.Equal(t, "Direct Connected", peerTypeStr(0))
+	assert.Equal(t, "Switch Connected", peerTypeStr(1))
 	assert.Equal(t, "Active", activeNotActive(0x5, 0x1))
 	assert.Equal(t, "Not Active", activeNotActive(0x4, 0x1))
 }

@@ -185,7 +185,7 @@ const (
 	deviceUUIDV2BufferSize         = 96
 	deviceVbiosVersionBufferSize   = 32
 	systemDriverVersionBufferSize  = 80
-	systemProcessNameBufferSize    = 256
+	systemProcessNameBufferSize    = 2048
 
 	gpmMetricsGetVersion = 1
 	gpmSupportVersion    = 1
@@ -478,6 +478,7 @@ type Device interface {
 	GetAccountingBufferSize() (int, Return)
 	GetAccountingMode() (EnableState, Return)
 	GetAddressingMode() (DeviceAddressingMode, Return)
+	GetApplicationsClock(clockType ClockType) (uint32, Return)
 	GetC2cModeInfoV() C2cModeInfoHandler
 	GetClockInfo(clockType ClockType) (uint32, Return)
 	GetComputeInstanceId() (int, Return)
@@ -490,6 +491,7 @@ type Device interface {
 	GetCurrPcieLinkGeneration() (int, Return)
 	GetCurrPcieLinkWidth() (int, Return)
 	GetDecoderUtilization() (uint32, uint32, Return)
+	GetDefaultApplicationsClock(clockType ClockType) (uint32, Return)
 	GetDisplayActive() (EnableState, Return)
 	GetDisplayMode() (EnableState, Return)
 	GetDramEncryptionMode() (DramEncryptionInfo, DramEncryptionInfo, Return)
@@ -536,6 +538,7 @@ type Device interface {
 	GetPowerManagementDefaultLimit() (uint32, Return)
 	GetPowerManagementLimit() (uint32, Return)
 	GetPowerManagementLimitConstraints() (uint32, uint32, Return)
+	GetPowerManagementMode() (EnableState, Return)
 	GetPowerUsage() (uint32, Return)
 	GetProcessUtilization(lastSeenTimestamp uint64) ([]ProcessUtilizationSample, Return)
 	GetRemappedRows() (int, int, bool, bool, Return)
@@ -690,7 +693,11 @@ func SystemGetProcessName(pid int) (string, Return) {
 	}
 
 	buf := make([]byte, systemProcessNameBufferSize)
-	r1, _, _ := proc.Call(uintptr(pid), uintptr(unsafe.Pointer(&buf[0])), systemProcessNameBufferSize)
+	r1, _, _ := proc.Call(
+		uintptr(pid),
+		uintptr(unsafe.Pointer(&buf[0])),
+		uintptr(systemProcessNameBufferSize),
+	)
 
 	return cString(buf), toReturn(r1)
 }
@@ -909,6 +916,19 @@ func (d winDevice) GetAddressingMode() (DeviceAddressingMode, Return) {
 	return mode, toReturn(r1)
 }
 
+func (d winDevice) GetApplicationsClock(clockType ClockType) (uint32, Return) {
+	proc, ok := findProc("nvmlDeviceGetApplicationsClock")
+	if !ok {
+		return 0, ERROR_FUNCTION_NOT_FOUND
+	}
+
+	var clock uint32
+
+	r1, _, _ := proc.Call(d.handle, uintptr(uint32(clockType)), uintptr(unsafe.Pointer(&clock))) //nolint:gosec // enum
+
+	return clock, toReturn(r1)
+}
+
 func (d winDevice) GetC2cModeInfoV() C2cModeInfoHandler {
 	return C2cModeInfoHandler{device: d}
 }
@@ -994,6 +1014,19 @@ func (d winDevice) GetCurrPcieLinkWidth() (int, Return) {
 
 func (d winDevice) GetDecoderUtilization() (uint32, uint32, Return) {
 	return d.getTwoUint32("nvmlDeviceGetDecoderUtilization")
+}
+
+func (d winDevice) GetDefaultApplicationsClock(clockType ClockType) (uint32, Return) {
+	proc, ok := findProc("nvmlDeviceGetDefaultApplicationsClock")
+	if !ok {
+		return 0, ERROR_FUNCTION_NOT_FOUND
+	}
+
+	var clock uint32
+
+	r1, _, _ := proc.Call(d.handle, uintptr(uint32(clockType)), uintptr(unsafe.Pointer(&clock))) //nolint:gosec // enum
+
+	return clock, toReturn(r1)
 }
 
 func (d winDevice) GetDisplayActive() (EnableState, Return) {
@@ -1372,6 +1405,12 @@ func (d winDevice) GetPowerManagementLimit() (uint32, Return) {
 
 func (d winDevice) GetPowerManagementLimitConstraints() (uint32, uint32, Return) {
 	return d.getTwoUint32("nvmlDeviceGetPowerManagementLimitConstraints")
+}
+
+func (d winDevice) GetPowerManagementMode() (EnableState, Return) {
+	val, ret := d.getUint32("nvmlDeviceGetPowerManagementMode")
+
+	return toEnableState(val), ret
 }
 
 func (d winDevice) GetPowerUsage() (uint32, Return) {

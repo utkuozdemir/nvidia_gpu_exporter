@@ -221,8 +221,8 @@ func TestUnknownFieldValueTypeDoesNotPanic(t *testing.T) {
 func TestClocksEventReasonCountersConvertNanosecondsToMicroseconds(t *testing.T) {
 	t.Parallel()
 
-	// the raw value NVML serves is in nanoseconds; nvidia-smi prints the same
-	// counter in microseconds, and the two backends must emit identical values.
+	// NVML serves the counter in nanoseconds while the catalog header unit is
+	// [us], and fractional microseconds preserve full nanosecond precision.
 	// 109042687680 ns is a real reading from an RTX 2080 SUPER on driver 610.57.04.
 	dev := identityDevice()
 	dev.GetFieldValuesFunc = func(values []nvml.FieldValue) nvml.Return {
@@ -245,7 +245,7 @@ func TestClocksEventReasonCountersConvertNanosecondsToMicroseconds(t *testing.T)
 	require.NoError(t, err)
 	assert.Equal(
 		t,
-		"109042687 us",
+		"109042687.68 us",
 		cellValue(t, reading.Table, "clocks_event_reasons_counters.sw_power_cap"),
 	)
 }
@@ -289,7 +289,8 @@ func TestComputeAppsHappyPath(t *testing.T) {
 	dev.GetComputeRunningProcessesFunc = func() ([]nvml.ProcessInfo, nvml.Return) {
 		return []nvml.ProcessInfo{
 			{Pid: 4242, UsedGpuMemory: 2 * 1024 * 1024 * 1024},
-			{Pid: 4243, UsedGpuMemory: 512 * 1024 * 1024},
+			// 16769024 bytes = 15.9921875 MiB, preserved without rounding.
+			{Pid: 4243, UsedGpuMemory: 16769024},
 		}, nvml.SUCCESS
 	}
 	dev.GetProcessUtilizationFunc = func(uint64) ([]nvml.ProcessUtilizationSample, nvml.Return) {
@@ -315,6 +316,7 @@ func TestComputeAppsHappyPath(t *testing.T) {
 	assert.Zero(t, reading.Apps[0].Utilization.EncoderRatio)
 	assert.Zero(t, reading.Apps[0].Utilization.DecoderRatio)
 
+	assert.Equal(t, "15.9921875 MiB", reading.Apps[1].UsedMemory)
 	require.NotNil(t, reading.Apps[1].Utilization, "an active process absent from the sample list must report 0")
 	assert.Zero(t, reading.Apps[1].Utilization.SMRatio)
 	assert.Zero(t, reading.Apps[1].Utilization.MemoryRatio)
@@ -1214,4 +1216,95 @@ func fillNVLinkFieldValues(
 			binary.LittleEndian.PutUint64(values[idx].Value[:], 200)
 		}
 	}
+}
+
+func TestDisplayPowerAndApplicationClockCollectors(t *testing.T) {
+	t.Parallel()
+
+	dev := identityDevice()
+	dev.GetDisplayModeFunc = func() (nvml.EnableState, nvml.Return) {
+		return nvml.FEATURE_ENABLED, nvml.SUCCESS
+	}
+	dev.GetPowerManagementModeFunc = func() (nvml.EnableState, nvml.Return) {
+		return nvml.FEATURE_ENABLED, nvml.SUCCESS
+	}
+	dev.GetApplicationsClockFunc = func(clockType nvml.ClockType) (uint32, nvml.Return) {
+		if clockType == nvml.CLOCK_GRAPHICS {
+			return 1980, nvml.SUCCESS
+		}
+
+		return 3201, nvml.SUCCESS
+	}
+	dev.GetDefaultApplicationsClockFunc = func(nvml.ClockType) (uint32, nvml.Return) {
+		return 0, nvml.ERROR_DEPRECATED
+	}
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
+
+	reading, _, err := backend.QueryFunc(
+		resolveFields(
+			t,
+			"display_mode,power.management,"+
+				"clocks.applications.graphics,clocks.applications.memory,"+
+				"clocks.default_applications.graphics,clocks.default_applications.memory",
+		),
+		CollectOptions{},
+	)(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "Enabled", cellValue(t, reading.Table, "display_mode"))
+	assert.Equal(t, "Enabled", cellValue(t, reading.Table, "power.management"))
+	assert.Equal(t, "1980 MHz", cellValue(t, reading.Table, "clocks.applications.graphics"))
+	assert.Equal(t, "3201 MHz", cellValue(t, reading.Table, "clocks.applications.memory"))
+	assert.Equal(
+		t,
+		"[Requested functionality has been deprecated]",
+		cellValue(t, reading.Table, "clocks.default_applications.graphics"),
+	)
+	assert.Equal(
+		t,
+		"[Requested functionality has been deprecated]",
+		cellValue(t, reading.Table, "clocks.default_applications.memory"),
+	)
+}
+
+type fabricTestDevice struct {
+	device
+
+	info nvml.GpuFabricInfo_v2
+	ret  nvml.Return
+}
+
+func (d fabricTestDevice) GetGpuFabricInfoV2() (nvml.GpuFabricInfo_v2, nvml.Return) {
+	return d.info, d.ret
+}
+
+func TestFabricStatusRequiresCompletedState(t *testing.T) {
+	t.Parallel()
+
+	reqs := newPlan(resolveFields(t, "fabric.state,fabric.status"))
+
+	coll := &devCollector{values: make(map[nvidiasmi.QField]string)}
+	collectFabric(fabricTestDevice{
+		info: nvml.GpuFabricInfo_v2{State: 2, Status: uint32(nvml.SUCCESS)},
+		ret:  nvml.SUCCESS,
+	}, coll, reqs)
+	assert.Equal(t, "In Progress", coll.values["fabric.state"])
+	assert.Equal(t, "N/A", coll.values["fabric.status"])
+
+	coll = &devCollector{values: make(map[nvidiasmi.QField]string)}
+	collectFabric(fabricTestDevice{
+		info: nvml.GpuFabricInfo_v2{State: 3, Status: uint32(nvml.SUCCESS)},
+		ret:  nvml.SUCCESS,
+	}, coll, reqs)
+	assert.Equal(t, "Completed", coll.values["fabric.state"])
+	assert.Equal(t, "Success", coll.values["fabric.status"])
+
+	coll = &devCollector{values: make(map[nvidiasmi.QField]string)}
+	collectFabric(fabricTestDevice{
+		info: nvml.GpuFabricInfo_v2{State: 3, Status: uint32(nvml.ERROR_NOT_READY)},
+		ret:  nvml.SUCCESS,
+	}, coll, reqs)
+	assert.Equal(t, "Completed", coll.values["fabric.state"])
+	assert.Equal(t, "27", coll.values["fabric.status"])
 }

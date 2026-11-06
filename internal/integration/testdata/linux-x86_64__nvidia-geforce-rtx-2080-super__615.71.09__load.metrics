@@ -4,6 +4,9 @@ nvidia_smi_accounting_buffer_size{uuid="00000000-0000-0000-0000-000000000000"} 4
 # HELP nvidia_smi_accounting_mode accounting.mode
 # TYPE nvidia_smi_accounting_mode gauge
 nvidia_smi_accounting_mode{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_addressing_mode addressing_mode
+# TYPE nvidia_smi_addressing_mode gauge
+nvidia_smi_addressing_mode{uuid="00000000-0000-0000-0000-000000000000"} 1
 # HELP nvidia_smi_clocks_current_graphics_clock_hz clocks.current.graphics [MHz]
 # TYPE nvidia_smi_clocks_current_graphics_clock_hz gauge
 nvidia_smi_clocks_current_graphics_clock_hz{uuid="00000000-0000-0000-0000-000000000000"} 2.07e+09
@@ -33,7 +36,7 @@ nvidia_smi_clocks_event_reasons_counters_hw_power_brake_slowdown_seconds{uuid="0
 nvidia_smi_clocks_event_reasons_counters_hw_thermal_slowdown_seconds{uuid="00000000-0000-0000-0000-000000000000"} 0
 # HELP nvidia_smi_clocks_event_reasons_counters_sw_power_cap_seconds clocks_event_reasons_counters.sw_power_cap [us]
 # TYPE nvidia_smi_clocks_event_reasons_counters_sw_power_cap_seconds gauge
-nvidia_smi_clocks_event_reasons_counters_sw_power_cap_seconds{uuid="00000000-0000-0000-0000-000000000000"} 424.191348
+nvidia_smi_clocks_event_reasons_counters_sw_power_cap_seconds{uuid="00000000-0000-0000-0000-000000000000"} 264.621488
 # HELP nvidia_smi_clocks_event_reasons_counters_sw_thermal_slowdown_seconds clocks_event_reasons_counters.sw_thermal_slowdown [us]
 # TYPE nvidia_smi_clocks_event_reasons_counters_sw_thermal_slowdown_seconds gauge
 nvidia_smi_clocks_event_reasons_counters_sw_thermal_slowdown_seconds{uuid="00000000-0000-0000-0000-000000000000"} 0
@@ -81,15 +84,17 @@ nvidia_smi_clocks_max_sm_clock_hz{uuid="00000000-0000-0000-0000-000000000000"} 2
 nvidia_smi_command_exit_code 0
 # HELP nvidia_smi_compute_app_info A metric with a constant '1' value labeled by the identity of a process with a compute context on a GPU.
 # TYPE nvidia_smi_compute_app_info gauge
-nvidia_smi_compute_app_info{pid="13011",process_name="ffmpeg",uuid="00000000-0000-0000-0000-000000000000"} 1
-nvidia_smi_compute_app_info{pid="13012",process_name="ffmpeg",uuid="00000000-0000-0000-0000-000000000000"} 1
+nvidia_smi_compute_app_info{pid="2590",process_name="/usr/bin/kwin_wayland",uuid="00000000-0000-0000-0000-000000000000"} 1
+nvidia_smi_compute_app_info{pid="4901",process_name="ffmpeg",uuid="00000000-0000-0000-0000-000000000000"} 1
+nvidia_smi_compute_app_info{pid="4902",process_name="ffmpeg",uuid="00000000-0000-0000-0000-000000000000"} 1
 # HELP nvidia_smi_compute_app_used_memory_bytes GPU memory used by the process. Absent when the driver cannot report it (e.g. Windows WDDM).
 # TYPE nvidia_smi_compute_app_used_memory_bytes gauge
-nvidia_smi_compute_app_used_memory_bytes{pid="13011",process_name="ffmpeg",uuid="00000000-0000-0000-0000-000000000000"} 2.4117248e+08
-nvidia_smi_compute_app_used_memory_bytes{pid="13012",process_name="ffmpeg",uuid="00000000-0000-0000-0000-000000000000"} 3.8797312e+08
+nvidia_smi_compute_app_used_memory_bytes{pid="2590",process_name="/usr/bin/kwin_wayland",uuid="00000000-0000-0000-0000-000000000000"} 1.572864e+07
+nvidia_smi_compute_app_used_memory_bytes{pid="4901",process_name="ffmpeg",uuid="00000000-0000-0000-0000-000000000000"} 2.4117248e+08
+nvidia_smi_compute_app_used_memory_bytes{pid="4902",process_name="ffmpeg",uuid="00000000-0000-0000-0000-000000000000"} 3.8797312e+08
 # HELP nvidia_smi_compute_apps Number of processes with a compute context on the GPU.
 # TYPE nvidia_smi_compute_apps gauge
-nvidia_smi_compute_apps{uuid="00000000-0000-0000-0000-000000000000"} 2
+nvidia_smi_compute_apps{uuid="00000000-0000-0000-0000-000000000000"} 3
 # HELP nvidia_smi_compute_apps_last_collect_success Whether the most recent per-process collection succeeded (1) or not (0)
 # TYPE nvidia_smi_compute_apps_last_collect_success gauge
 nvidia_smi_compute_apps_last_collect_success 1
@@ -104,16 +109,16 @@ nvidia_smi_compute_mode{uuid="00000000-0000-0000-0000-000000000000"} 0
 nvidia_smi_count{uuid="00000000-0000-0000-0000-000000000000"} 1
 # HELP nvidia_smi_display_active display_active
 # TYPE nvidia_smi_display_active gauge
-nvidia_smi_display_active{uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_display_active{uuid="00000000-0000-0000-0000-000000000000"} 1
 # HELP nvidia_smi_display_attached display_attached
 # TYPE nvidia_smi_display_attached gauge
 nvidia_smi_display_attached{uuid="00000000-0000-0000-0000-000000000000"} 1
 # HELP nvidia_smi_encoder_stats_average_fps encoder.stats.averageFps
 # TYPE nvidia_smi_encoder_stats_average_fps gauge
-nvidia_smi_encoder_stats_average_fps{uuid="00000000-0000-0000-0000-000000000000"} 107
+nvidia_smi_encoder_stats_average_fps{uuid="00000000-0000-0000-0000-000000000000"} 100
 # HELP nvidia_smi_encoder_stats_average_latency encoder.stats.averageLatency
 # TYPE nvidia_smi_encoder_stats_average_latency gauge
-nvidia_smi_encoder_stats_average_latency{uuid="00000000-0000-0000-0000-000000000000"} 96970
+nvidia_smi_encoder_stats_average_latency{uuid="00000000-0000-0000-0000-000000000000"} 104337
 # HELP nvidia_smi_encoder_stats_session_count encoder.stats.sessionCount
 # TYPE nvidia_smi_encoder_stats_session_count gauge
 nvidia_smi_encoder_stats_session_count{uuid="00000000-0000-0000-0000-000000000000"} 2
@@ -149,7 +154,7 @@ nvidia_smi_inforom_oem{uuid="00000000-0000-0000-0000-000000000000"} 1.1
 nvidia_smi_last_collect_success 1
 # HELP nvidia_smi_memory_free_bytes memory.free [MiB]
 # TYPE nvidia_smi_memory_free_bytes gauge
-nvidia_smi_memory_free_bytes{uuid="00000000-0000-0000-0000-000000000000"} 7.320109056e+09
+nvidia_smi_memory_free_bytes{uuid="00000000-0000-0000-0000-000000000000"} 6.428819456e+09
 # HELP nvidia_smi_memory_reserved_bytes memory.reserved [MiB]
 # TYPE nvidia_smi_memory_reserved_bytes gauge
 nvidia_smi_memory_reserved_bytes{uuid="00000000-0000-0000-0000-000000000000"} 4.1418752e+08
@@ -158,7 +163,7 @@ nvidia_smi_memory_reserved_bytes{uuid="00000000-0000-0000-0000-000000000000"} 4.
 nvidia_smi_memory_total_bytes{uuid="00000000-0000-0000-0000-000000000000"} 8.589934592e+09
 # HELP nvidia_smi_memory_used_bytes memory.used [MiB]
 # TYPE nvidia_smi_memory_used_bytes gauge
-nvidia_smi_memory_used_bytes{uuid="00000000-0000-0000-0000-000000000000"} 8.57735168e+08
+nvidia_smi_memory_used_bytes{uuid="00000000-0000-0000-0000-000000000000"} 1.749024768e+09
 # HELP nvidia_smi_name name
 # TYPE nvidia_smi_name gauge
 nvidia_smi_name{uuid="00000000-0000-0000-0000-000000000000"} 2080
@@ -216,6 +221,9 @@ nvidia_smi_platform_host_id{uuid="00000000-0000-0000-0000-000000000000"} 1
 # HELP nvidia_smi_platform_module_id platform.module_id
 # TYPE nvidia_smi_platform_module_id gauge
 nvidia_smi_platform_module_id{uuid="00000000-0000-0000-0000-000000000000"} 1
+# HELP nvidia_smi_platform_peer_type platform.peer_type
+# TYPE nvidia_smi_platform_peer_type gauge
+nvidia_smi_platform_peer_type{uuid="00000000-0000-0000-0000-000000000000"} 0
 # HELP nvidia_smi_platform_slot_number platform.slot_number
 # TYPE nvidia_smi_platform_slot_number gauge
 nvidia_smi_platform_slot_number{uuid="00000000-0000-0000-0000-000000000000"} 0
@@ -227,10 +235,10 @@ nvidia_smi_platform_tray_index{uuid="00000000-0000-0000-0000-000000000000"} 0
 nvidia_smi_power_default_limit_watts{uuid="00000000-0000-0000-0000-000000000000"} 250
 # HELP nvidia_smi_power_draw_instant_watts power.draw.instant [W]
 # TYPE nvidia_smi_power_draw_instant_watts gauge
-nvidia_smi_power_draw_instant_watts{uuid="00000000-0000-0000-0000-000000000000"} 98.29
+nvidia_smi_power_draw_instant_watts{uuid="00000000-0000-0000-0000-000000000000"} 98.73
 # HELP nvidia_smi_power_draw_watts power.draw [W]
 # TYPE nvidia_smi_power_draw_watts gauge
-nvidia_smi_power_draw_watts{uuid="00000000-0000-0000-0000-000000000000"} 98.29
+nvidia_smi_power_draw_watts{uuid="00000000-0000-0000-0000-000000000000"} 98.64
 # HELP nvidia_smi_power_limit_watts power.limit [W]
 # TYPE nvidia_smi_power_limit_watts gauge
 nvidia_smi_power_limit_watts{uuid="00000000-0000-0000-0000-000000000000"} 250
@@ -254,7 +262,7 @@ nvidia_smi_protected_memory_used_bytes{uuid="00000000-0000-0000-0000-00000000000
 nvidia_smi_pstate{uuid="00000000-0000-0000-0000-000000000000"} 2
 # HELP nvidia_smi_temperature_gpu temperature.gpu
 # TYPE nvidia_smi_temperature_gpu gauge
-nvidia_smi_temperature_gpu{uuid="00000000-0000-0000-0000-000000000000"} 36
+nvidia_smi_temperature_gpu{uuid="00000000-0000-0000-0000-000000000000"} 30
 # HELP nvidia_smi_utilization_decoder_ratio utilization.decoder [%]
 # TYPE nvidia_smi_utilization_decoder_ratio gauge
 nvidia_smi_utilization_decoder_ratio{uuid="00000000-0000-0000-0000-000000000000"} 0

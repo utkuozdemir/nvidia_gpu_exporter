@@ -19,11 +19,10 @@ import (
 // TestCatalogDriftAgainstCaptures checks the catalog against every embedded
 // Linux and Windows capture, so a newly contributed capture immediately
 // reveals driver drift. The newest capture on each OS (by driver version)
-// carries the hard assertions: a rename, removal, header change, deprecation
-// change, or a new field with real values fails the build with a message
-// saying what to fix. Older captures only verify the headers they share with
-// the catalog and report the rest, since old drivers legitimately lack newer
-// fields.
+// carries the hard assertions: a rename, removal, header change, or a new
+// field with real values fails the build with a message saying what to fix.
+// Older captures only verify the headers they share with the catalog and
+// report the rest, since old drivers legitimately lack newer fields.
 func TestCatalogDriftAgainstCaptures(t *testing.T) {
 	t.Parallel()
 
@@ -101,36 +100,15 @@ func checkCaptureDrift(t *testing.T, name string, isNewest bool) {
 				"  fix: internal/nvmlnative/catalog.go (catalogRFields), and the formatter if the unit changed",
 				name, qField, query.headers[cellIdx], wantHeader)
 		}
-
-		// rule 2: deprecation-list drift, both directions, on every capture
-		// of the verified driver generation (the hardcoded list is pinned to
-		// >= 590; older drivers may legitimately still serve these fields)
-		deprecationChecked := versionComponents(t, query.driverVersion)[0] >= deprecatedFieldsMinDriverMajor
-		deprecated := strings.EqualFold(strings.TrimSpace(query.values[cellIdx]), tokenDeprecated)
-		hardcoded := isHardcodedDeprecated(qField)
-
-		if deprecated && !hardcoded && deprecationChecked {
-			t.Errorf("field newly deprecated by nvidia-smi\n"+
-				"  capture: %s\n  field:   %s\n  value:   %q\n"+
-				"  fix: add it to deprecatedFields in internal/nvmlnative/catalog.go",
-				name, qField, query.values[cellIdx])
-		}
-
-		if !deprecated && hardcoded && deprecationChecked {
-			t.Errorf("field no longer deprecated by nvidia-smi\n"+
-				"  capture: %s\n  field:   %s\n  value:   %q\n"+
-				"  fix: remove it from deprecatedFields in internal/nvmlnative/catalog.go and collect it",
-				name, qField, query.values[cellIdx])
-		}
 	}
 
-	// rule 3: on the newest capture, every catalog field must still exist in
+	// rule 2: on the newest capture, every catalog field must still exist in
 	// the driver's vocabulary; a silent disappearance is a rename or removal
 	if isNewest {
 		checkCatalogFieldsPresent(t, name, vocabulary, query.qFields)
 	}
 
-	// rule 4: unknown fields. On the newest capture a field with a real
+	// rule 3: unknown fields. On the newest capture a field with a real
 	// value fails: the exec backend would export it and this backend cannot.
 	// Absent or consciously deferred fields are reported for visibility.
 	var unknownAbsent, unknownReal, unknownDeferred []string
@@ -211,10 +189,10 @@ func checkCatalogFieldsPresent(
 		}
 
 		if !advertised[catalogField] {
-			t.Errorf("catalog field missing from the newest driver (rename or removal?)\n"+
+			t.Errorf("catalog field missing from the newest driver (rename or CLI removal?)\n"+
 				"  capture: %s\n  field:   %s\n"+
 				"  fix: if renamed, add an alias in internal/nvmlnative/catalog.go (throttleAliases pattern), "+
-				"or if removed, drop it from the catalog",
+				"or if only the CLI dropped it while NVML still serves it, exempt it in isWindowsNVMLOnlyField",
 				name, catalogField)
 		}
 	}
@@ -226,16 +204,6 @@ func isWindowsNVMLOnlyField(captureName string, field nvidiasmi.QField) bool {
 	// nvmlDeviceGetPciInfoExt.
 	return strings.HasPrefix(captureName, "windows-") &&
 		(field == "pci.baseClass" || field == "pci.subClass")
-}
-
-func isHardcodedDeprecated(q nvidiasmi.QField) bool {
-	for _, d := range deprecatedFields {
-		if canonicalQField(q) == d || q == d {
-			return true
-		}
-	}
-
-	return false
 }
 
 // isAbsentCell reports whether a captured cell value is one of the absent
@@ -422,9 +390,6 @@ func TestDriftRulesSelfCheck(t *testing.T) {
 	assert.True(t, isAbsentCell("[Function Not Found]"))
 	assert.False(t, isAbsentCell("100.00 %"))
 	assert.False(t, isAbsentCell("0"))
-
-	assert.True(t, isHardcodedDeprecated("display_mode"))
-	assert.False(t, isHardcodedDeprecated("power.draw"))
 
 	assert.True(t, isDeferredField("power_smoothing.enabled"))
 	assert.True(t, isDeferredField("kmd_version"))

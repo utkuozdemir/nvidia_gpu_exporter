@@ -1,11 +1,13 @@
 package nvmlnative
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+)
 
-// The formatters below replicate nvidia-smi's cell formatting exactly, so
-// the shared transform/render pipeline sees the same raw strings in both
-// backends. Every rule was byte-verified against a live H100 (driver
-// 590.48.01) by the diff harness; quirks are called out inline.
+// The formatters below render NVML readings for the shared transform/render
+// pipeline, keeping unit suffixes and enum spellings compatible with
+// nvidia-smi while preserving NVML's native numeric precision.
 
 // Absence and error tokens, mapped from NVML return codes the way nvidia-smi
 // prints them.
@@ -39,7 +41,9 @@ func yesNo(b bool) string {
 	return "No"
 }
 
-func milliwatts(mw uint32) string { return fmt.Sprintf("%.2f W", float64(mw)/1000.0) }
+func milliwatts(mw uint32) string {
+	return strconv.FormatFloat(float64(mw)/1000.0, 'f', -1, 64) + " W"
+}
 
 // cudaVersionStr renders the encoded integer from
 // nvmlSystemGetCudaDriverVersion (major*1000 + minor*10) the way nvidia-smi
@@ -50,17 +54,10 @@ func cudaVersionStr(version int) string {
 
 func mhz(v uint32) string { return fmt.Sprintf("%d MHz", v) }
 
-// mib formats a byte count the way nvidia-smi prints MiB values: CEILED, not
-// floored or rounded (H100-verified: reserved bytes 501481472 = 478.25 MiB
-// prints as "479 MiB"; the printed total/reserved/used/free of one reading
-// do not sum, because each cell is ceiled independently).
+// mib formats a byte count in MiB without rounding, so multiplying by
+// 1048576 in the exporter reproduces the exact byte count.
 func mib(bytes uint64) string {
-	quotient := bytes / mibDivisor
-	if bytes%mibDivisor != 0 {
-		quotient++
-	}
-
-	return fmt.Sprintf("%d MiB", quotient)
+	return strconv.FormatFloat(float64(bytes)/float64(mibDivisor), 'f', -1, 64) + " MiB"
 }
 
 func pct(v uint32) string { return fmt.Sprintf("%d %%", v) }
@@ -76,7 +73,7 @@ func computeModeStr(mode int32) string {
 	case 3:
 		return "Exclusive_Process"
 	default:
-		return fmt.Sprintf("Unknown(%d)", mode)
+		return strconv.Itoa(int(mode))
 	}
 }
 
@@ -102,7 +99,7 @@ func gomStr(mode int32) string {
 	case 2:
 		return "Low Double Precision"
 	default:
-		return fmt.Sprintf("Unknown(%d)", mode)
+		return strconv.Itoa(int(mode))
 	}
 }
 
@@ -117,7 +114,7 @@ func addressingModeStr(mode uint32) string {
 	case 2:
 		return "ATS"
 	default:
-		return fmt.Sprintf("Unknown(%d)", mode)
+		return strconv.FormatUint(uint64(mode), 10)
 	}
 }
 
@@ -125,6 +122,8 @@ func addressingModeStr(mode uint32) string {
 // prints the bare N/A token, brackets deliberately absent (capture-verified).
 func fabricStateStr(state uint8) string {
 	switch state {
+	case 0:
+		return tokenBareNotAvailable
 	case 1:
 		return "Not Started"
 	case 2:
@@ -132,7 +131,7 @@ func fabricStateStr(state uint8) string {
 	case 3:
 		return "Completed"
 	default:
-		return tokenBareNotAvailable
+		return strconv.FormatUint(uint64(state), 10)
 	}
 }
 
@@ -152,7 +151,18 @@ func recoveryActionStr(action uint64) string {
 	case 4:
 		return "Drain and Reset"
 	default:
-		return fmt.Sprintf("Unknown(%d)", action)
+		return strconv.FormatUint(action, 10)
+	}
+}
+
+func peerTypeStr(peerType uint8) string {
+	switch peerType {
+	case 0:
+		return "Direct Connected"
+	case 1:
+		return "Switch Connected"
+	default:
+		return strconv.FormatUint(uint64(peerType), 10)
 	}
 }
 

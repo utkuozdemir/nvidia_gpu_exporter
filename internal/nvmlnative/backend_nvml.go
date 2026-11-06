@@ -759,16 +759,9 @@ func (b *Backend) collectDevice(
 		coll.set("pcie.link.width.max", ret, func() string { return strconv.Itoa(maxWidth) })
 	}
 
-	// the deprecation-listed fields (see deprecatedFields) get the token
-	// regardless of what NVML would answer, matching nvidia-smi, which does
-	// not even call the getters for them. Pinned to the verified driver
-	// generation; the corpus drift test guards the list.
-	for _, field := range deprecatedFields {
-		coll.values[field] = tokenDeprecated
-	}
-
-	if reqs.want("display_attached") {
+	if reqs.want("display_mode", "display_attached") {
 		dispMode, ret := dev.GetDisplayMode()
+		coll.set("display_mode", ret, func() string { return onOff(dispMode == nvml.FEATURE_ENABLED) })
 		coll.set("display_attached", ret, func() string { return yesNo(dispMode == nvml.FEATURE_ENABLED) })
 	}
 
@@ -1092,6 +1085,11 @@ func (b *Backend) collectDevice(
 		return nil, fmt.Errorf("device collection interrupted: %w", err)
 	}
 
+	if reqs.want("power.management") {
+		pmMode, ret := dev.GetPowerManagementMode()
+		coll.set("power.management", ret, func() string { return onOff(pmMode == nvml.FEATURE_ENABLED) })
+	}
+
 	if reqs.want("power.draw") {
 		powerUsage, ret := dev.GetPowerUsage()
 		coll.set("power.draw", ret, func() string { return milliwatts(powerUsage) })
@@ -1129,6 +1127,30 @@ func (b *Backend) collectDevice(
 		}
 
 		clock, cret := dev.GetClockInfo(clockType)
+		coll.set(field, cret, func() string { return mhz(clock) })
+	}
+
+	for field, clockType := range map[nvidiasmi.QField]nvml.ClockType{
+		"clocks.applications.graphics": nvml.CLOCK_GRAPHICS,
+		"clocks.applications.memory":   nvml.CLOCK_MEM,
+	} {
+		if !reqs.want(field) {
+			continue
+		}
+
+		clock, cret := dev.GetApplicationsClock(clockType)
+		coll.set(field, cret, func() string { return mhz(clock) })
+	}
+
+	for field, clockType := range map[nvidiasmi.QField]nvml.ClockType{
+		"clocks.default_applications.graphics": nvml.CLOCK_GRAPHICS,
+		"clocks.default_applications.memory":   nvml.CLOCK_MEM,
+	} {
+		if !reqs.want(field) {
+			continue
+		}
+
+		clock, cret := dev.GetDefaultApplicationsClock(clockType)
 		coll.set(field, cret, func() string { return mhz(clock) })
 	}
 
@@ -1212,10 +1234,11 @@ func (b *Backend) collectDevice(
 //
 //nolint:cyclop,funlen // one linear pass over the batched entries and their outcomes
 func (b *Backend) collectFieldValues(dev device, coll *devCollector, reqs plan) {
-	// NVML serves the clocks-event-reason counters in nanoseconds, while
-	// nvidia-smi prints them in microseconds. Convert, so both backends emit
-	// identical values (verified against nvidia-smi on real hardware).
-	nsToUs := func(v float64) string { return fmt.Sprintf("%d us", int64(v)/1000) }
+	// NVML serves the clocks-event-reason counters in nanoseconds, while the
+	// catalog header unit is [us]. Preserve the nanosecond remainder as
+	// fractional microseconds so the exporter's _seconds conversion retains
+	// full nanosecond precision.
+	nsToUs := func(v float64) string { return strconv.FormatFloat(v/1000.0, 'f', -1, 64) + " us" }
 
 	entries := []struct {
 		field  nvidiasmi.QField
@@ -1225,15 +1248,15 @@ func (b *Backend) collectFieldValues(dev device, coll *devCollector, reqs plan) 
 	}{
 		{
 			"power.draw.average", nvml.FI_DEV_POWER_AVERAGE, false,
-			func(v float64) string { return fmt.Sprintf("%.2f W", v/1000.0) },
+			func(v float64) string { return strconv.FormatFloat(v/1000.0, 'f', -1, 64) + " W" },
 		},
 		{
 			"power.draw.instant", nvml.FI_DEV_POWER_INSTANT, false,
-			func(v float64) string { return fmt.Sprintf("%.2f W", v/1000.0) },
+			func(v float64) string { return strconv.FormatFloat(v/1000.0, 'f', -1, 64) + " W" },
 		},
 		{
 			"temperature.memory", nvml.FI_DEV_MEMORY_TEMP, true,
-			func(v float64) string { return strconv.FormatInt(int64(v), 10) },
+			func(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) },
 		},
 		{
 			"clocks_event_reasons_counters.sw_power_cap", nvml.FI_DEV_CLOCKS_EVENT_REASON_SW_POWER_CAP, false,
@@ -1266,7 +1289,7 @@ func (b *Backend) collectFieldValues(dev device, coll *devCollector, reqs plan) 
 		},
 		{
 			"edpp_multiplier", edppMultiplierFieldID, false,
-			func(v float64) string { return fmt.Sprintf("%.2f %%", v) },
+			func(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) + " %" },
 		},
 	}
 
@@ -1439,14 +1462,19 @@ func collectFabric(dev device, coll *devCollector, reqs plan) {
 
 	coll.values["fabric.state"] = fabricStateStr(info.State)
 
-	status := "Success"
+	// Per nvml.h, info.Status is valid only when info.State is
+	// NVML_GPU_FABRIC_STATE_COMPLETED (3).
+	status := tokenBareNotAvailable
+	if info.State == 3 {
+		status = "Success"
 
-	fabricStatus := nvml.Return(info.Status) //nolint:gosec // G115: the field carries an nvmlReturn_t
-	if fabricStatus != nvml.SUCCESS {
-		// a completed probe can still carry a lifecycle-class status
-		coll.classify("fabric.status", fabricStatus)
+		fabricStatus := nvml.Return(info.Status) //nolint:gosec // G115: the field carries an nvmlReturn_t
+		if fabricStatus != nvml.SUCCESS {
+			// a completed probe can still carry a lifecycle-class status
+			coll.classify("fabric.status", fabricStatus)
 
-		status = fabricStatus.String()
+			status = strconv.FormatUint(uint64(info.Status), 10)
+		}
 	}
 
 	coll.values["fabric.status"] = status
@@ -1466,13 +1494,7 @@ func collectPlatform(dev device, coll *devCollector, reqs plan) {
 	coll.set("platform.slot_number", ret, func() string { return strconv.FormatUint(uint64(info.SlotNumber), 10) })
 	coll.set("platform.tray_index", ret, func() string { return strconv.FormatUint(uint64(info.TrayIndex), 10) })
 	coll.set("platform.host_id", ret, func() string { return strconv.FormatUint(uint64(info.HostId), 10) })
-	coll.set("platform.peer_type", ret, func() string {
-		if info.PeerType == 0 {
-			return "Direct Connected"
-		}
-
-		return fmt.Sprintf("Unknown(%d)", info.PeerType)
-	})
+	coll.set("platform.peer_type", ret, func() string { return peerTypeStr(info.PeerType) })
 	coll.set("platform.module_id", ret, func() string { return strconv.FormatUint(uint64(info.ModuleId), 10) })
 	coll.set("platform.gpu_fabric_guid", ret, func() string {
 		return fmt.Sprintf("0x%016X", binary.BigEndian.Uint64(info.IbGuid[:8]))
