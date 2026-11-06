@@ -31,11 +31,15 @@ const (
 	pciSubDeviceIDQField     QField = "pci.sub_device_id"
 	indexQField              QField = "index"
 
-	// GPURecoveryActionQField and fabricStateQField are enum-valued fields whose
-	// string values are mapped to their native NVML enum integers (see
-	// fieldValueMappers in transform.go).
+	// GPURecoveryActionQField and the fields below are enum-valued query fields
+	// whose string values map to native NVML enum integers in transform.go.
 	GPURecoveryActionQField QField = "gpu_recovery_action"
 	fabricStateQField       QField = "fabric.state"
+	fabricStatusQField      QField = "fabric.status"
+	addressingModeQField    QField = "addressing_mode"
+	gomCurrentQField        QField = "gom.current"
+	gomPendingQField        QField = "gom.pending"
+	platformPeerTypeQField  QField = "platform.peer_type"
 
 	qFieldsAuto   = "AUTO"
 	DefaultQField = qFieldsAuto

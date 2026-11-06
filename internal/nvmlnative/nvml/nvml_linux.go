@@ -4,7 +4,19 @@
 // go-nvml) and Windows (via nvml.dll).
 package nvml
 
-import gonvml "github.com/NVIDIA/go-nvml/pkg/nvml"
+/*
+#cgo linux LDFLAGS: -Wl,--export-dynamic -Wl,--unresolved-symbols=ignore-in-object-files
+extern int nvmlSystemGetProcessName(unsigned int pid, char *name, unsigned int length);
+// Declared directly so the caller controls the buffer length.
+*/
+import "C"
+
+import (
+	"bytes"
+	"unsafe"
+
+	gonvml "github.com/NVIDIA/go-nvml/pkg/nvml"
+)
 
 type (
 	C2cModeInfo_v1             = gonvml.C2cModeInfo_v1
@@ -152,5 +164,26 @@ var (
 	Shutdown                   = gonvml.Shutdown
 	SystemGetCudaDriverVersion = gonvml.SystemGetCudaDriverVersion
 	SystemGetDriverVersion     = gonvml.SystemGetDriverVersion
-	SystemGetProcessName       = gonvml.SystemGetProcessName
 )
+
+// systemProcessNameBufferSize is the buffer size passed to
+// nvmlSystemGetProcessName. go-nvml's SYSTEM_PROCESS_NAME_BUFFER_SIZE (256)
+// truncates long command lines, whereas 2048 bytes stays within Grafana
+// Mimir's default 2048-character Prometheus label value limit.
+const systemProcessNameBufferSize = 2048
+
+// SystemGetProcessName returns the process name for the given PID.
+func SystemGetProcessName(pid int) (string, Return) {
+	buf := make([]byte, systemProcessNameBufferSize)
+	ret := Return(C.nvmlSystemGetProcessName(
+		C.uint(pid),
+		(*C.char)(unsafe.Pointer(&buf[0])),
+		C.uint(systemProcessNameBufferSize),
+	))
+
+	if end := bytes.IndexByte(buf, 0); end >= 0 {
+		buf = buf[:end]
+	}
+
+	return string(buf), ret
+}

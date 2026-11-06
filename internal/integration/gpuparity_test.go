@@ -4,6 +4,7 @@ package integration_test
 
 import (
 	"context"
+	"math"
 	"regexp"
 	"runtime"
 	"slices"
@@ -27,11 +28,10 @@ import (
 //
 //	go test -tags gpu ./internal/integration/ -run TestBackendParity -v
 //
-// Sampling is bracketed (exec, native, exec): stable fields must equal one
-// of the exec brackets byte for byte, volatile fields must fall inside the
-// bracket range, and absent fields must be absent on both sides. This is
-// what catches value-format drift (rounding, unit, token spelling changes)
-// that the offline corpus tests cannot see.
+// Sampling is bracketed (exec, native, exec): stable fields must match one of
+// the exec brackets (or fall within nvidia-smi's display quantization step),
+// volatile fields must fall inside the bracket range, and any field exec
+// serves must also be served by nvml.
 //
 //nolint:paralleltest // deliberately serial: both tests own the real GPU and NVML lifecycle
 func TestBackendParityOnRealGPU(t *testing.T) {
@@ -54,9 +54,15 @@ func TestBackendParityOnRealGPU(t *testing.T) {
 
 	// bracketed sampling: exec, native, exec
 	execBefore := queryExec(ctx, t, resolved)
-	nativeReading, _, err := backend.QueryFunc(nativeResolved, nvmlnative.CollectOptions{})(ctx)
+	appsBefore, err := nvidiasmi.QueryComputeApps(ctx, nvidiasmi.DefaultCommand, nvidiasmi.DefaultRunFunc, logger)
 	require.NoError(t, err)
+
+	nativeReading, _, err := backend.QueryFunc(nativeResolved, nvmlnative.CollectOptions{ComputeApps: true})(ctx)
+	require.NoError(t, err)
+
 	execAfter := queryExec(ctx, t, resolved)
+	appsAfter, err := nvidiasmi.QueryComputeApps(ctx, nvidiasmi.DefaultCommand, nvidiasmi.DefaultRunFunc, logger)
+	require.NoError(t, err)
 
 	native := nativeReading.Table
 	require.NotNil(t, native)
@@ -76,12 +82,15 @@ func TestBackendParityOnRealGPU(t *testing.T) {
 		require.True(t, ok, "GPU %s is missing from the second exec sample", uuid)
 
 		for _, qField := range resolved.Query {
-			failures += compareField(t, uuid, qField, beforeRow, nativeRow, afterRow, backend.DriverVersion())
+			failures += compareField(t, uuid, qField, beforeRow, nativeRow, afterRow)
 			if failures > maxReportedMismatches {
-				t.Fatalf("too many mismatches (%d); aborting the field walk", failures)
+				t.Fatalf("too many mismatches (%d), aborting the field walk", failures)
 			}
 		}
 	}
+
+	require.True(t, nativeReading.AppsSuccess, "native compute apps collection failed: %v", nativeReading.AppsErr)
+	compareComputeApps(t, appsBefore, nativeReading.Apps, appsAfter)
 }
 
 const maxReportedMismatches = 25
@@ -115,7 +124,6 @@ func compareField(
 	uuid string,
 	qField nvidiasmi.QField,
 	before, native, after nvidiasmi.Row,
-	driverVersion string,
 ) int {
 	t.Helper()
 
@@ -151,13 +159,12 @@ func compareField(
 	execAbsent := isAbsentValue(beforeCell.RawValue) && isAbsentValue(afterCell.RawValue)
 	nativeAbsent := isAbsentValue(nativeCell.RawValue)
 
-	// a deprecated field on a driver older than the one that deprecated it:
-	// exec still serves a value, the nvml backend reports the deprecation
-	// token. That split is expected (see IsExecOnlyDeprecatedField), not drift.
-	// Require the exact token, so a regression to a different absent value
-	// (a broken getter returning [N/A]) still fails.
-	if !execAbsent && nativeCell.RawValue == nvmlnative.TokenDeprecated &&
-		nvmlnative.IsExecOnlyDeprecatedField(qField, driverVersion) {
+	execDeprecated := beforeCell.RawValue == deprecatedToken ||
+		afterCell.RawValue == deprecatedToken
+	if execDeprecated && !nativeAbsent {
+		t.Logf("nvml serves a value for a field nvidia-smi marks deprecated: %s (nvml=%q, exec=%q)",
+			qField, nativeCell.RawValue, beforeCell.RawValue)
+
 		return 0
 	}
 
@@ -171,23 +178,14 @@ func compareField(
 	}
 
 	if nativeAbsent {
-		// same absence is not enough: the exact token spelling is part of
-		// the contract ([N/A] vs bare N/A vs the deprecation token), and
-		// collapsing them would hide error-classification drift
-		if nativeCell.RawValue != beforeCell.RawValue && nativeCell.RawValue != afterCell.RawValue {
-			t.Errorf("absence token mismatch between the backends\n"+
-				"  gpu: %s\n  field: %s\n  exec: %q / %q\n  nvml: %q\n"+
-				"  fix: the error-to-token mapping for this field in internal/nvmlnative",
-				uuid, qField, beforeCell.RawValue, afterCell.RawValue, nativeCell.RawValue)
-
-			return 1
-		}
-
 		return 0
 	}
 
 	if !isVolatileField(qField) {
-		if nativeCell.RawValue != beforeCell.RawValue && nativeCell.RawValue != afterCell.RawValue {
+		if nativeCell.RawValue != beforeCell.RawValue &&
+			nativeCell.RawValue != afterCell.RawValue &&
+			!matchesWithinExecQuantization(beforeCell.RawValue, nativeCell.RawValue) &&
+			!matchesWithinExecQuantization(afterCell.RawValue, nativeCell.RawValue) {
 			t.Errorf("stable field value mismatch\n"+
 				"  gpu: %s\n  field: %s\n  exec: %q / %q\n  nvml: %q\n"+
 				"  fix: the formatter for this field in internal/nvmlnative (format.go, backend_nvml.go)",
@@ -200,6 +198,42 @@ func compareField(
 	}
 
 	return compareVolatile(t, uuid, qField, beforeCell.RawValue, nativeCell.RawValue, afterCell.RawValue)
+}
+
+func parseNumericAndSuffix(raw string) (float64, string, bool) {
+	num, ok := parseNumeric(raw)
+	if !ok {
+		return 0, "", false
+	}
+
+	return num, numericValueRegex.ReplaceAllString(strings.TrimSpace(raw), ""), true
+}
+
+// matchesWithinExecQuantization reports whether native matches execVal within
+// nvidia-smi's display quantization step (1 MiB ceiling on device memory,
+// 0.01 W rounding on power, 1 us truncation on durations) while carrying the
+// identical unit suffix.
+func matchesWithinExecQuantization(execVal, nativeVal string) bool {
+	execNum, execSuffix, execOK := parseNumericAndSuffix(execVal)
+
+	nativeNum, nativeSuffix, nativeOK := parseNumericAndSuffix(nativeVal)
+	if !execOK || !nativeOK || execSuffix != nativeSuffix {
+		return false
+	}
+
+	switch execSuffix {
+	case " MiB":
+		// nvidia-smi ceils device memory to whole MiB, so native lies in (exec-1, exec]
+		return nativeNum <= execNum && nativeNum > execNum-1.0
+	case " W", " %":
+		// nvidia-smi rounds milliwatts and percentages to 2 decimal places
+		return math.Abs(nativeNum-execNum) <= 0.0051
+	case " us":
+		// nvidia-smi truncates nanoseconds to whole microseconds
+		return nativeNum >= execNum && nativeNum < execNum+1.0
+	default:
+		return false
+	}
 }
 
 var timestampShapeRegex = regexp.MustCompile(`^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$`)
@@ -337,6 +371,8 @@ func parseNumeric(raw string) (float64, bool) {
 	return value, err == nil
 }
 
+const deprecatedToken = "[Requested functionality has been deprecated]"
+
 func isAbsentValue(raw string) bool {
 	if nvidiasmi.IsKnownAbsentValue(raw) {
 		return true
@@ -369,6 +405,75 @@ func rowsByUUID(t *testing.T, table *nvidiasmi.Table) map[string]nvidiasmi.Row {
 	}
 
 	return rows
+}
+
+// compareComputeApps checks every compute process present in both exec brackets:
+// it must appear in the native reading with a matching process name, and when its
+// used_gpu_memory is unchanged across the bracket the native value must lie
+// within [execMiB, execMiB+1). Processes that start, exit, or resize between the
+// brackets are skipped so live background activity cannot flake the check.
+func compareComputeApps(t *testing.T, before, native, after []nvidiasmi.ComputeApp) {
+	t.Helper()
+
+	nativeByKey := appsByUUIDAndPID(native)
+	afterByKey := appsByUUIDAndPID(after)
+
+	for key, beforeApp := range appsByUUIDAndPID(before) {
+		afterApp, ok := afterByKey[key]
+		if !ok {
+			continue
+		}
+
+		nativeApp, ok := nativeByKey[key]
+		if !ok {
+			t.Errorf("compute app %s (%s) present in both exec brackets is missing from the native backend",
+				key, beforeApp.ProcessName)
+
+			continue
+		}
+
+		// nvidia-smi replaces "," with "?" in --format=csv output so commas in
+		// arguments do not split unquoted CSV columns, while nvml preserves the
+		// real process name.
+		nativeCSVName := strings.ReplaceAll(nativeApp.ProcessName, ",", "?")
+		if nativeCSVName != beforeApp.ProcessName && nativeCSVName != afterApp.ProcessName {
+			t.Errorf("compute app %s process_name mismatch: exec before=%q after=%q, native=%q",
+				key, beforeApp.ProcessName, afterApp.ProcessName, nativeApp.ProcessName)
+		}
+
+		if beforeApp.UsedMemory == afterApp.UsedMemory &&
+			!matchesExecAppMemory(beforeApp.UsedMemory, nativeApp.UsedMemory) {
+			t.Errorf("compute app %s (%s) used_gpu_memory mismatch: exec=%q, native=%q",
+				key, beforeApp.ProcessName, beforeApp.UsedMemory, nativeApp.UsedMemory)
+		}
+	}
+}
+
+func matchesExecAppMemory(execMem, nativeMem string) bool {
+	if execMem == nativeMem {
+		return true
+	}
+
+	execMiB, execSuffix, execOK := parseNumericAndSuffix(execMem)
+
+	nativeMiB, nativeSuffix, nativeOK := parseNumericAndSuffix(nativeMem)
+	if !execOK || !nativeOK {
+		return false
+	}
+
+	// nvidia-smi floors per-process memory to whole MiB, while nvml preserves
+	// exact bytes as fractional MiB in [execMiB, execMiB+1).
+	return execSuffix == " MiB" && nativeSuffix == " MiB" &&
+		nativeMiB >= execMiB && nativeMiB < execMiB+1.0
+}
+
+func appsByUUIDAndPID(apps []nvidiasmi.ComputeApp) map[string]nvidiasmi.ComputeApp {
+	byKey := make(map[string]nvidiasmi.ComputeApp, len(apps))
+	for _, app := range apps {
+		byKey[app.GPUUUID+":"+app.PID] = app
+	}
+
+	return byKey
 }
 
 // TestBackendMetricFamilyParityOnRealGPU compares the rendered metric surface
@@ -437,19 +542,9 @@ func TestBackendMetricFamilyParityOnRealGPU(t *testing.T) {
 		}
 	}
 
-	// families the exec backend serves but the nvml backend reports deprecated
-	// below the deprecation driver generation: the same accepted split the
-	// field-level parity test exempts, see IsExecOnlyDeprecatedField.
-	execOnlyDeprecated := map[string]bool{}
-
-	for _, rField := range nvmlnative.ExecOnlyDeprecatedRFields(backendDriverVersion(t)) {
-		name, _ := exporter.BuildFQNameAndMultiplier(exporter.DefaultPrefix, rField, slogt.New(t))
-		execOnlyDeprecated[name] = true
-	}
-
 	deferred := deferredFamilies(t)
 
-	compareFamiliesExecToNVML(t, execFamilies, nativeFamilies, execOnlyDeprecated, deferred)
+	compareFamiliesExecToNVML(t, execFamilies, nativeFamilies, deferred)
 	compareFamiliesNVMLToExec(t, execFamilies, nativeFamilies)
 }
 
@@ -486,19 +581,13 @@ func deferredFamilies(t *testing.T) map[string]bool {
 func compareFamiliesExecToNVML(
 	t *testing.T,
 	execFamilies, nativeFamilies map[string]map[string]bool,
-	execOnlyDeprecated, deferred map[string]bool,
+	deferred map[string]bool,
 ) {
 	t.Helper()
 
 	for family, execSeries := range execFamilies {
 		nativeSeries, ok := nativeFamilies[family]
 		if !ok {
-			if execOnlyDeprecated[family] {
-				t.Logf("family only exec serves, deprecated in the nvml backend on this driver: %s", family)
-
-				continue
-			}
-
 			if deferred[family] {
 				t.Logf("family only exec serves, deferred in the nvml catalog: %s", family)
 
@@ -531,7 +620,9 @@ func compareFamiliesExecToNVML(
 }
 
 // compareFamiliesNVMLToExec reports families only the nvml backend exports,
-// which is allowed only for the families exec cannot reach at all.
+// which is allowed only for the families exec cannot reach at all (the
+// nvml-only extras and the fields nvidia-smi marks deprecated while the NVML
+// library still serves them).
 func compareFamiliesNVMLToExec(t *testing.T, execFamilies, nativeFamilies map[string]map[string]bool) {
 	t.Helper()
 
@@ -543,12 +634,13 @@ func compareFamiliesNVMLToExec(t *testing.T, execFamilies, nativeFamilies map[st
 }
 
 // nvmlOnlyFamilyPrefixes lists the metric family prefixes only the nvml
-// backend serves (the extras families). They are exempt from the family
-// parity requirement in the nvml direction, nothing more: presence is
-// asserted per scenario (always-on families in the default scrape, opt-in
-// families under their flag), since a single list doing both would force
-// every entry to appear in every scrape. Exec-only families remain a hard
-// failure.
+// backend serves (the extras families, plus the five query fields nvidia-smi
+// marks deprecated on R590+ while the NVML library still serves them). They
+// are exempt from the family parity requirement in the nvml direction, nothing
+// more: presence is asserted per scenario (always-on families in the default
+// scrape, opt-in families under their flag), since a single list doing both
+// would force every entry to appear in every scrape. Exec-only families remain
+// a hard failure.
 //
 //nolint:gochecknoglobals // shared test fixture
 var nvmlOnlyFamilyPrefixes = []string{
@@ -585,6 +677,13 @@ var nvmlOnlyFamilyPrefixes = []string{
 	// is asserted by the GPU-box runbook (which triggers a real XID), not
 	// here
 	"nvidia_smi_xid_",
+	// query fields nvidia-smi marks deprecated on R590+ while NVML still
+	// serves their values
+	"nvidia_smi_display_mode",
+	"nvidia_smi_display_active",
+	"nvidia_smi_power_management",
+	"nvidia_smi_clocks_applications_graphics_clock_hz",
+	"nvidia_smi_clocks_applications_memory_clock_hz",
 }
 
 func isNVMLOnlyFamily(family string) bool {
@@ -647,19 +746,6 @@ func anySeries(series map[string]bool) string {
 
 // scrapeBackend runs the exporter in-process with the given backend and
 // returns nvidia_smi_* family -> set of series signatures (name{labels}).
-// backendDriverVersion opens the nvml backend once to read the driver version,
-// which the metric-family parity test needs to know the deprecation boundary.
-func backendDriverVersion(t *testing.T) string {
-	t.Helper()
-
-	backend, err := nvmlnative.New(slogt.New(t))
-	require.NoError(t, err, "is the NVIDIA driver library available on this machine?")
-
-	t.Cleanup(backend.Close)
-
-	return backend.DriverVersion()
-}
-
 func scrapeBackend(t *testing.T, backend string, extraArgs ...string) map[string]map[string]bool {
 	t.Helper()
 

@@ -4,6 +4,9 @@ nvidia_smi_accounting_buffer_size{uuid="00000000-0000-0000-0000-000000000000"} 4
 # HELP nvidia_smi_accounting_mode accounting.mode
 # TYPE nvidia_smi_accounting_mode gauge
 nvidia_smi_accounting_mode{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_addressing_mode addressing_mode
+# TYPE nvidia_smi_addressing_mode gauge
+nvidia_smi_addressing_mode{uuid="00000000-0000-0000-0000-000000000000"} 0
 # HELP nvidia_smi_clocks_current_graphics_clock_hz clocks.current.graphics [MHz]
 # TYPE nvidia_smi_clocks_current_graphics_clock_hz gauge
 nvidia_smi_clocks_current_graphics_clock_hz{uuid="00000000-0000-0000-0000-000000000000"} 2.07e+09

@@ -6,6 +6,10 @@ nvidia_smi_accounting_buffer_size{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 4
 # TYPE nvidia_smi_accounting_mode gauge
 nvidia_smi_accounting_mode{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
 nvidia_smi_accounting_mode{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
+# HELP nvidia_smi_addressing_mode addressing_mode
+# TYPE nvidia_smi_addressing_mode gauge
+nvidia_smi_addressing_mode{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_addressing_mode{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
 # HELP nvidia_smi_c2c_mode c2c.mode
 # TYPE nvidia_smi_c2c_mode gauge
 nvidia_smi_c2c_mode{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
@@ -317,6 +321,10 @@ nvidia_smi_fabric_clique_id{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
 # TYPE nvidia_smi_fabric_state gauge
 nvidia_smi_fabric_state{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 3
 nvidia_smi_fabric_state{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 3
+# HELP nvidia_smi_fabric_status fabric.status
+# TYPE nvidia_smi_fabric_status gauge
+nvidia_smi_fabric_status{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_fabric_status{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
 # HELP nvidia_smi_failed_scrapes_total Number of failed collections
 # TYPE nvidia_smi_failed_scrapes_total counter
 nvidia_smi_failed_scrapes_total 0
@@ -538,6 +546,10 @@ nvidia_smi_platform_host_id{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1
 # TYPE nvidia_smi_platform_module_id gauge
 nvidia_smi_platform_module_id{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1
 nvidia_smi_platform_module_id{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1
+# HELP nvidia_smi_platform_peer_type platform.peer_type
+# TYPE nvidia_smi_platform_peer_type gauge
+nvidia_smi_platform_peer_type{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_platform_peer_type{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
 # HELP nvidia_smi_platform_slot_number platform.slot_number
 # TYPE nvidia_smi_platform_slot_number gauge
 nvidia_smi_platform_slot_number{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0

@@ -64,9 +64,26 @@ func TestTransformFieldValueEnumFields(t *testing.T) {
 			"GPU Reset": 1, "Reset": 1, "gpu reset": 1,
 			"Node Reboot": 2, "Reboot": 2,
 			"Drain P2P": 3, "Drain and Reset": 4,
+			"5": 5,
 		},
 		"fabric.state": {
 			"Not Supported": 0, "Not Started": 1, "In Progress": 2, "Completed": 3,
+			"4": 4,
+		},
+		"fabric.status": {
+			"Success": 0, "14": 14,
+		},
+		"addressing_mode": {
+			"None": 0, "HMM": 1, "ATS": 2, "3": 3,
+		},
+		"gom.current": {
+			"All On": 0, "Compute": 1, "Low Double Precision": 2, "3": 3,
+		},
+		"gom.pending": {
+			"All On": 0, "Compute": 1, "Low Double Precision": 2,
+		},
+		"platform.peer_type": {
+			"Direct Connected": 0, "Switch Connected": 1, "2": 2,
 		},
 	}
 
@@ -86,10 +103,16 @@ func TestTransformFieldValueEnumFields(t *testing.T) {
 func TestTransformFieldValueEnumDrops(t *testing.T) {
 	t.Parallel()
 
-	absent := []string{"", "N/A", "[N/A]", "[Not Supported]", "[Insufficient Permissions]", "state  N/A"}
+	absent := []string{
+		"", "N/A", "[N/A]", "[Not Supported]", "[Insufficient Permissions]",
+		"[Function Not Found]", "state  N/A", "status N/A",
+	}
 	unexpected := []string{"[Unknown Error]", "definitely-not-a-value", "Power Cycle"}
 
-	for _, field := range []nvidiasmi.QField{"gpu_recovery_action", "fabric.state"} {
+	for _, field := range []nvidiasmi.QField{
+		"gpu_recovery_action", "fabric.state", "fabric.status",
+		"addressing_mode", "gom.current", "gom.pending", "platform.peer_type",
+	} {
 		for _, raw := range absent {
 			_, err := nvidiasmi.TransformFieldValue(field, raw, 1)
 			require.ErrorIsf(t, err, nvidiasmi.ErrAbsentValue, "field %q value %q", field, raw)

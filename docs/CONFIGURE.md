@@ -183,7 +183,7 @@ Basic auth passwords are hashed with `bcrypt`, which is outside the FIPS module.
 
 `--collect.backend=nvml` is the recommended backend on Linux and Windows. It reads GPU metrics directly from the driver library (`libnvidia-ml.so.1` on Linux, `nvml.dll` on Windows) without spawning `nvidia-smi`.
 
-For every query field both `nvml` and `exec` serve, the exported series is identical in name, labels and value. On top of that shared core, `nvml` exports families that only the driver library provides (documented in [METRICS.md](METRICS.md)).
+For every query field both `nvml` and `exec` serve, the exported series shares the same metric name, base unit, label set and enum mapping, with `nvml` preserving native driver precision and availability. On top of that shared core, `nvml` exports families that only the driver library provides (documented in [METRICS.md](METRICS.md)).
 
 The `nvidia_smi_*` metric prefix is used by both backends. It refers to the metric schema, not the collection mechanism.
 
@@ -202,7 +202,7 @@ What each backend supports (`demo` serves synthetic data, see [Demo mode](#demo-
 
 | Capability | nvml (recommended) | exec (1.x default) | demo |
 | --- | --- | --- | --- |
-| Query-field metrics (identical names, labels, values) | yes | yes | synthetic |
+| Query-field metrics (shared schema: names, units, labels, enum mappings) | yes | yes | synthetic |
 | `gpu_info` with the `cuda_version` label | yes | yes | yes |
 | Per-process metrics (`--collect.compute-apps`) | yes | yes | yes |
 | Per-process engine utilization (`*_app_*_utilization_ratio`) | yes | no | yes |

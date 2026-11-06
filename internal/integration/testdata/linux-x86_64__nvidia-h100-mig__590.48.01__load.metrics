@@ -4,6 +4,9 @@ nvidia_smi_accounting_buffer_size{uuid="00000000-0000-0000-0000-000000000000"} 4
 # HELP nvidia_smi_accounting_mode accounting.mode
 # TYPE nvidia_smi_accounting_mode gauge
 nvidia_smi_accounting_mode{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_addressing_mode addressing_mode
+# TYPE nvidia_smi_addressing_mode gauge
+nvidia_smi_addressing_mode{uuid="00000000-0000-0000-0000-000000000000"} 0
 # HELP nvidia_smi_c2c_mode c2c.mode
 # TYPE nvidia_smi_c2c_mode gauge
 nvidia_smi_c2c_mode{uuid="00000000-0000-0000-0000-000000000000"} 0
@@ -212,6 +215,9 @@ nvidia_smi_fabric_clique_id{uuid="00000000-0000-0000-0000-000000000000"} 0
 # HELP nvidia_smi_fabric_state fabric.state
 # TYPE nvidia_smi_fabric_state gauge
 nvidia_smi_fabric_state{uuid="00000000-0000-0000-0000-000000000000"} 3
+# HELP nvidia_smi_fabric_status fabric.status
+# TYPE nvidia_smi_fabric_status gauge
+nvidia_smi_fabric_status{uuid="00000000-0000-0000-0000-000000000000"} 0
 # HELP nvidia_smi_failed_scrapes_total Number of failed collections
 # TYPE nvidia_smi_failed_scrapes_total counter
 nvidia_smi_failed_scrapes_total 0
@@ -308,6 +314,9 @@ nvidia_smi_platform_host_id{uuid="00000000-0000-0000-0000-000000000000"} 1
 # HELP nvidia_smi_platform_module_id platform.module_id
 # TYPE nvidia_smi_platform_module_id gauge
 nvidia_smi_platform_module_id{uuid="00000000-0000-0000-0000-000000000000"} 7
+# HELP nvidia_smi_platform_peer_type platform.peer_type
+# TYPE nvidia_smi_platform_peer_type gauge
+nvidia_smi_platform_peer_type{uuid="00000000-0000-0000-0000-000000000000"} 0
 # HELP nvidia_smi_platform_slot_number platform.slot_number
 # TYPE nvidia_smi_platform_slot_number gauge
 nvidia_smi_platform_slot_number{uuid="00000000-0000-0000-0000-000000000000"} 0

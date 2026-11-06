@@ -219,7 +219,22 @@ var nvmlSymbolRequirements = []symbolRequirement{
 	{
 		goCall: "GetDisplayMode",
 		anyOf:  []string{"nvmlDeviceGetDisplayMode", "nvmlDeviceGetDisplayMode_v2", "nvmlDeviceGetDisplayMode_v3"},
-		serves: "display_attached",
+		serves: "display_mode, display_attached",
+	},
+	{
+		goCall: "GetPowerManagementMode",
+		anyOf:  []string{"nvmlDeviceGetPowerManagementMode"},
+		serves: "power.management",
+	},
+	{
+		goCall: "GetApplicationsClock",
+		anyOf:  []string{"nvmlDeviceGetApplicationsClock"},
+		serves: "clocks.applications.*",
+	},
+	{
+		goCall: "GetDefaultApplicationsClock",
+		anyOf:  []string{"nvmlDeviceGetDefaultApplicationsClock"},
+		serves: "clocks.default_applications.*",
 	},
 	{
 		goCall: "GetDisplayActive",

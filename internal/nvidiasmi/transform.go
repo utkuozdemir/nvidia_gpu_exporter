@@ -24,11 +24,12 @@ var ErrAbsentValue = errors.New("value is an expected-absent token")
 // enumFieldAbsentTokens are the values that mean "this field exists but is not
 // available here". This is IsKnownAbsentValue minus "[unknown error]": for a
 // health field an unknown error is a retrieval failure worth surfacing, not a
-// clean unsupported state. Drivers 525 through 570 print "state  N/A" for
-// fabric.state on GPUs without NVLink fabric.
+// clean unsupported state. Drivers 525 through 570 print "state  N/A" and
+// "status N/A" for fabric.state and fabric.status on GPUs without NVLink
+// fabric.
 var enumFieldAbsentTokens = map[string]struct{}{
 	"": {}, "n/a": {}, "[n/a]": {}, "[not supported]": {}, "[insufficient permissions]": {},
-	"state  n/a": {},
+	"[function not found]": {}, "state  n/a": {}, "status n/a": {},
 }
 
 // fieldValueMappers maps a query field whose value is an NVML enum string to a
@@ -49,6 +50,25 @@ var fieldValueMappers = map[QField]func(string) (float64, error){
 	fabricStateQField: enumValueMapper(fabricStateQField, map[string]float64{
 		"not supported": 0, "not started": 1, "in progress": 2, "completed": 3,
 	}),
+	// nvmlReturn_t for the NVLink fabric registration status (0 = Success).
+	fabricStatusQField: enumValueMapper(fabricStatusQField, map[string]float64{
+		"success": 0,
+	}),
+	// nvmlDeviceAddressingModeType_t (0 = None, 1 = HMM, 2 = ATS).
+	addressingModeQField: enumValueMapper(addressingModeQField, map[string]float64{
+		"none": 0, "hmm": 1, "ats": 2,
+	}),
+	// nvmlGpuOperationMode_t (0 = All On, 1 = Compute, 2 = Low Double Precision).
+	gomCurrentQField: enumValueMapper(gomCurrentQField, map[string]float64{
+		"all on": 0, "compute": 1, "low double precision": 2,
+	}),
+	gomPendingQField: enumValueMapper(gomPendingQField, map[string]float64{
+		"all on": 0, "compute": 1, "low double precision": 2,
+	}),
+	// nvmlPlatformInfo_t.peerType (0 = Direct Connected, 1 = Switch Connected).
+	platformPeerTypeQField: enumValueMapper(platformPeerTypeQField, map[string]float64{
+		"direct connected": 0, "switch connected": 1,
+	}),
 }
 
 // IsEnumMappedField reports whether the field's value is mapped through an NVML
@@ -61,9 +81,9 @@ func IsEnumMappedField(qField QField) bool {
 }
 
 // enumValueMapper builds a mapper for an NVML enum field: expected-absent tokens
-// resolve to ErrAbsentValue (skipped quietly), recognized strings map to their
-// native integer, and any other value returns a plain error so it is never
-// turned into a bogus number and the exporter can report it.
+// resolve to ErrAbsentValue (skipped quietly), recognized strings or native
+// bare integer values map to their integer, and any other value returns a plain
+// error so it is never turned into a bogus number and the exporter can report it.
 func enumValueMapper(field QField, table map[string]float64) func(string) (float64, error) {
 	return func(raw string) (float64, error) {
 		key := strings.ToLower(strings.TrimSpace(raw))
@@ -74,6 +94,10 @@ func enumValueMapper(field QField, table map[string]float64) func(string) (float
 
 		if v, ok := table[key]; ok {
 			return v, nil
+		}
+
+		if v, err := strconv.ParseInt(key, 10, 64); err == nil {
+			return float64(v), nil
 		}
 
 		return 0, fmt.Errorf("field %q value %q is not a recognized enum value", field, raw)

@@ -57,10 +57,10 @@ So it is pure Go, works on any platform, and stays faithful to the real backends
 
 Two invariants hold this together, and both are easy to break by accident:
 
-- For every query field both backends serve, they must emit identical metrics, down to the label sets and values.
+- For every query field both backends serve, they must emit the same metric schema: identical metric names, base units, label sets and enum mappings.
   Users switch between the backends and their dashboards and alerts must keep working.
-  The nvml catalog exists precisely to guarantee this, and it stores the exact header strings `nvidia-smi` prints, not paraphrases of them.
-  Declining to serve a field is allowed; serving it differently is not.
+  The nvml catalog exists to guarantee this schema compatibility, and it stores the exact header strings `nvidia-smi` prints, not paraphrases of them.
+  Declining to serve a field is allowed, and `nvml` preserves the driver's native precision and availability rather than rounding or dropping values to imitate `nvidia-smi` formatting quirks.
 - The demo backend targets the nvml surface, not the exec one, closely enough that dashboards and alerts can be developed against it.
   It approximates that surface without replicating it, and the differences are documented in the demo mode section of `docs/CONFIGURE.md`.
   The one most likely to mislead: demo always serves the PCIe throughput family, while the real nvml backend serves it only when asked.

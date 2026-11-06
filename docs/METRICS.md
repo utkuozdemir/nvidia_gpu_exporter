@@ -2,7 +2,7 @@
 
 This page describes the exported metrics and what they mean.
 
-Which metrics appear depends on your GPU, driver, operating system and collection backend (`nvml` or `exec`). For every query field both backends serve, the exported series is identical in name, labels and value. The one exception is the collection status metric: `nvml` reports `nvidia_smi_nvml_return_code` in place of `nvidia_smi_command_exit_code`.
+Which metrics appear depends on your GPU, driver, operating system and collection backend (`nvml` or `exec`). For every query field both backends serve, the exported series shares the same metric name, base unit, label set and enum mapping, while `nvml` preserves the driver's native byte and milliwatt precision and serves fields that `nvidia-smi` marks deprecated while the driver library still answers. The collection status metric differs by backend: `nvml` reports `nvidia_smi_nvml_return_code` in place of `nvidia_smi_command_exit_code`.
 
 On top of that shared core, the `nvml` backend serves the driver-only metric families described below. The `demo` backend synthesizes the full `nvml` surface, see [CONFIGURE.md](CONFIGURE.md#demo-mode).
 
@@ -194,11 +194,20 @@ Multi-state fields carry the state as their integer value:
 - `nvidia_smi_fabric_state`: `0` Not Supported, `1` Not Started,
   `2` In Progress, `3` Completed. Only present on GPUs that join an NVLink
   fabric.
+- `nvidia_smi_fabric_status`: `0` Success, or the non-zero NVML error code
+  reported for the GPU fabric registration (exported once `fabric_state`
+  reaches `3` Completed, with non-zero error codes available on the `nvml`
+  backend).
 - `nvidia_smi_compute_mode`: `0` Default, `1` Exclusive Thread,
   `2` Prohibited, `3` Exclusive Process.
+- `nvidia_smi_addressing_mode`: `0` None, `1` HMM, `2` ATS.
+- `nvidia_smi_gom_current` and `nvidia_smi_gom_pending`: GPU Operation Mode,
+  `0` All On, `1` Compute, `2` Low Double Precision.
+- `nvidia_smi_platform_peer_type`: `0` Direct Connected,
+  `1` Switch Connected.
 
-The last three map to their native NVML enum integer. `pstate` is the raw
-performance-state number.
+All multi-state fields except `pstate` map to their native NVML enum integer.
+`pstate` is the raw performance-state number.
 
 `gpu_recovery_action` and `fabric_state` only appear when the hardware and
 driver report them (the recovery action needs a recent driver). Their absence

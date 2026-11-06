@@ -216,6 +216,9 @@ nvidia_smi_platform_host_id{uuid="00000000-0000-0000-0000-000000000000"} 1
 # HELP nvidia_smi_platform_module_id platform.module_id
 # TYPE nvidia_smi_platform_module_id gauge
 nvidia_smi_platform_module_id{uuid="00000000-0000-0000-0000-000000000000"} 1
+# HELP nvidia_smi_platform_peer_type platform.peer_type
+# TYPE nvidia_smi_platform_peer_type gauge
+nvidia_smi_platform_peer_type{uuid="00000000-0000-0000-0000-000000000000"} 0
 # HELP nvidia_smi_platform_slot_number platform.slot_number
 # TYPE nvidia_smi_platform_slot_number gauge
 nvidia_smi_platform_slot_number{uuid="00000000-0000-0000-0000-000000000000"} 0

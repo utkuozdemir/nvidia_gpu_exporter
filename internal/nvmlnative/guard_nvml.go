@@ -20,6 +20,7 @@ type device interface {
 	GetAccountingBufferSize() (int, nvml.Return)
 	GetAccountingMode() (nvml.EnableState, nvml.Return)
 	GetAddressingMode() (nvml.DeviceAddressingMode, nvml.Return)
+	GetApplicationsClock(clockType nvml.ClockType) (uint32, nvml.Return)
 	GetC2cModeInfoV1() (nvml.C2cModeInfo_v1, nvml.Return)
 	GetClockInfo(clockType nvml.ClockType) (uint32, nvml.Return)
 	GetComputeInstanceId() (int, nvml.Return)
@@ -32,6 +33,7 @@ type device interface {
 	GetCurrPcieLinkGeneration() (int, nvml.Return)
 	GetCurrPcieLinkWidth() (int, nvml.Return)
 	GetDecoderUtilization() (uint32, uint32, nvml.Return)
+	GetDefaultApplicationsClock(clockType nvml.ClockType) (uint32, nvml.Return)
 	GetDisplayActive() (nvml.EnableState, nvml.Return)
 	GetDisplayMode() (nvml.EnableState, nvml.Return)
 	GetDramEncryptionMode() (nvml.DramEncryptionInfo, nvml.DramEncryptionInfo, nvml.Return)
@@ -78,6 +80,7 @@ type device interface {
 	GetPowerManagementDefaultLimit() (uint32, nvml.Return)
 	GetPowerManagementLimit() (uint32, nvml.Return)
 	GetPowerManagementLimitConstraints() (uint32, uint32, nvml.Return)
+	GetPowerManagementMode() (nvml.EnableState, nvml.Return)
 	GetPowerUsage() (uint32, nvml.Return)
 	GetProcessUtilization(lastSeenTimestamp uint64) ([]nvml.ProcessUtilizationSample, nvml.Return)
 	GetRemappedRows() (int, int, bool, bool, nvml.Return)
@@ -137,6 +140,14 @@ func (g guardedDevice) GetAddressingMode() (nvml.DeviceAddressingMode, nvml.Retu
 	}
 
 	return g.dev.GetAddressingMode()
+}
+
+func (g guardedDevice) GetApplicationsClock(p0 nvml.ClockType) (uint32, nvml.Return) {
+	if !g.avail.has("nvmlDeviceGetApplicationsClock") {
+		return 0, nvml.ERROR_FUNCTION_NOT_FOUND
+	}
+
+	return g.dev.GetApplicationsClock(p0)
 }
 
 func (g guardedDevice) GetC2cModeInfoV1() (nvml.C2cModeInfo_v1, nvml.Return) {
@@ -247,6 +258,14 @@ func (g guardedDevice) GetDecoderUtilization() (uint32, uint32, nvml.Return) {
 	}
 
 	return g.dev.GetDecoderUtilization()
+}
+
+func (g guardedDevice) GetDefaultApplicationsClock(p0 nvml.ClockType) (uint32, nvml.Return) {
+	if !g.avail.has("nvmlDeviceGetDefaultApplicationsClock") {
+		return 0, nvml.ERROR_FUNCTION_NOT_FOUND
+	}
+
+	return g.dev.GetDefaultApplicationsClock(p0)
 }
 
 func (g guardedDevice) GetDisplayActive() (nvml.EnableState, nvml.Return) {
@@ -649,6 +668,16 @@ func (g guardedDevice) GetPowerManagementLimitConstraints() (uint32, uint32, nvm
 	}
 
 	return g.dev.GetPowerManagementLimitConstraints()
+}
+
+func (g guardedDevice) GetPowerManagementMode() (nvml.EnableState, nvml.Return) {
+	if !g.avail.has("nvmlDeviceGetPowerManagementMode") {
+		var z0 nvml.EnableState
+
+		return z0, nvml.ERROR_FUNCTION_NOT_FOUND
+	}
+
+	return g.dev.GetPowerManagementMode()
 }
 
 func (g guardedDevice) GetPowerUsage() (uint32, nvml.Return) {
