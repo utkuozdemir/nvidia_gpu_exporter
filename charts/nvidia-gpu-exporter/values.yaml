@@ -129,8 +129,15 @@ serviceMonitor:
   tlsConfig: {}
   # -- Additional labels for the ServiceMonitor, e.g. to match your Prometheus instance's selector
   additionalLabels: {}
-  # -- Relabelings to apply to the scraped targets
-  relabelings: []
+  # -- Relabelings to apply to the scraped targets. By default, `instance` is
+  # set to the node name and `pod` is dropped so that per-GPU series are not
+  # split when a pod is recreated. Include these entries when setting custom
+  # relabelings.
+  relabelings:
+    - sourceLabels: [__meta_kubernetes_pod_node_name]
+      targetLabel: instance
+    - action: labeldrop
+      regex: pod
   # -- Relabelings to apply to the scraped metrics
   metricRelabelings: []
 
@@ -145,8 +152,15 @@ podMonitor:
   scrapeTimeout: ""
   # -- Additional labels for the PodMonitor
   additionalLabels: {}
-  # -- Relabelings to apply to the scraped targets
-  relabelings: []
+  # -- Relabelings to apply to the scraped targets. By default, `instance` is
+  # set to the node name and `pod` is dropped so that per-GPU series are not
+  # split when a pod is recreated. Include these entries when setting custom
+  # relabelings.
+  relabelings:
+    - sourceLabels: [__meta_kubernetes_pod_node_name]
+      targetLabel: instance
+    - action: labeldrop
+      regex: pod
   # -- Relabelings to apply to the scraped metrics
   metricRelabelings: []
 

@@ -300,18 +300,14 @@ nodes. When installing multiple releases of this chart, enable `prometheusRule`
 in only one of them.
 
 With [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack),
-match the stack's release selector label, relabel `instance` from the pod IP
-to the node name so pod restarts do not split per-GPU series, and ensure the
-Grafana sidecar watches all namespaces (`sidecar.dashboards.searchNamespace=ALL`):
+match the stack's release selector label and ensure the Grafana sidecar
+watches all namespaces (`sidecar.dashboards.searchNamespace=ALL`):
 
 ```yaml
 serviceMonitor:
   enabled: true
   additionalLabels:
     release: kube-prometheus-stack # your stack's release name
-  relabelings:
-    - sourceLabels: [__meta_kubernetes_pod_node_name]
-      targetLabel: instance
 prometheusRule:
   enabled: true
   additionalLabels:
@@ -356,7 +352,7 @@ grafanaDashboard:
 | podMonitor.enabled | bool | `false` | Create a Prometheus Operator PodMonitor instead of a ServiceMonitor (requires the Prometheus Operator CRDs). Enable either this or the ServiceMonitor, not both, otherwise the targets are scraped twice. |
 | podMonitor.interval | string | `"15s"` | Scrape interval |
 | podMonitor.metricRelabelings | list | `[]` | Relabelings to apply to the scraped metrics |
-| podMonitor.relabelings | list | `[]` | Relabelings to apply to the scraped targets |
+| podMonitor.relabelings | list | `[{"sourceLabels":["__meta_kubernetes_pod_node_name"],"targetLabel":"instance"},{"action":"labeldrop","regex":"pod"}]` | Relabelings to apply to the scraped targets. By default, `instance` is set to the node name and `pod` is dropped so that per-GPU series are not split when a pod is recreated. Include these entries when setting custom relabelings. |
 | podMonitor.scrapeTimeout | string | `""` | Scrape timeout |
 | podSecurityContext | object | `{"runAsNonRoot":true,"seccompProfile":{"type":"RuntimeDefault"}}` | Security context for the pods. The defaults pass `restricted` Pod Security Standard admission. `runAsUser` is unset on purpose: the image's own uid applies, and an OpenShift SCC can still assign one. |
 | port | int | `9835` | Port to listen on |
@@ -415,7 +411,7 @@ grafanaDashboard:
 | serviceMonitor.enabled | bool | `false` | Create a Prometheus Operator ServiceMonitor (requires the Prometheus Operator CRDs) |
 | serviceMonitor.interval | string | `"15s"` | Scrape interval |
 | serviceMonitor.metricRelabelings | list | `[]` | Relabelings to apply to the scraped metrics |
-| serviceMonitor.relabelings | list | `[]` | Relabelings to apply to the scraped targets |
+| serviceMonitor.relabelings | list | `[{"sourceLabels":["__meta_kubernetes_pod_node_name"],"targetLabel":"instance"},{"action":"labeldrop","regex":"pod"}]` | Relabelings to apply to the scraped targets. By default, `instance` is set to the node name and `pod` is dropped so that per-GPU series are not split when a pod is recreated. Include these entries when setting custom relabelings. |
 | serviceMonitor.scheme | string | `"http"` | Scrape scheme |
 | serviceMonitor.scrapeTimeout | string | `""` | Scrape timeout |
 | serviceMonitor.tlsConfig | object | `{}` | TLS configuration for scraping |
