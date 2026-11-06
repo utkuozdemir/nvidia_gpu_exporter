@@ -300,18 +300,14 @@ nodes. When installing multiple releases of this chart, enable `prometheusRule`
 in only one of them.
 
 With [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack),
-match the stack's release selector label, relabel `instance` from the pod IP
-to the node name so pod restarts do not split per-GPU series, and ensure the
-Grafana sidecar watches all namespaces (`sidecar.dashboards.searchNamespace=ALL`):
+match the stack's release selector label and ensure the Grafana sidecar
+watches all namespaces (`sidecar.dashboards.searchNamespace=ALL`):
 
 ```yaml
 serviceMonitor:
   enabled: true
   additionalLabels:
     release: kube-prometheus-stack # your stack's release name
-  relabelings:
-    - sourceLabels: [__meta_kubernetes_pod_node_name]
-      targetLabel: instance
 prometheusRule:
   enabled: true
   additionalLabels:
