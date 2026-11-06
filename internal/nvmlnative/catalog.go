@@ -497,9 +497,9 @@ func Resolve(
 // not listed here. Adding a field here is the explicit "defer" decision, and
 // adding it to the catalog is the fix.
 var deferredFields = map[nvidiasmi.QField]bool{
-	"kmd_version":           true,
-	"pcie.link.gen.hostmax": true,
-	"gpu_uptime":            true,
+	"kmd_version":           true, // duplicates driver_version (already on gpu_info) and returns a version string
+	"pcie.link.gen.hostmax": true, // read via NVML's private export table, no public API or field ID
+	"gpu_uptime":            true, // multi-unit duration text, not parsed as a number by exec either
 }
 
 // deferredFieldPrefixes covers whole deferred families (vGPU capabilities,
