@@ -48,7 +48,7 @@ FROM goreleaser/goreleaser:${GORELEASER_VERSION} AS goreleaser-bin
 # toolchain build. The downloads are a linear chain: bumping an earlier tool
 # re-fetches the later ones, which is a few seconds and not worth a stage per
 # tool.
-FROM alpine:3@sha256:3f4d6b32e26703c6082839234f43769d5046b3ac7c910033911d1e71d8cd630a AS tools
+FROM alpine:3@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf AS tools
 RUN apk add --no-cache curl tar git
 ARG TARGETARCH
 ARG GOLANGCI_LINT_VERSION
