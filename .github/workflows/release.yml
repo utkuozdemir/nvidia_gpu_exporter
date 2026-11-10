@@ -116,7 +116,7 @@ jobs:
       # a pinned helm, not the runner image's: the packaged chart must not
       # change because the runner picked up a new helm
       - name: Install helm
-        uses: Azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        uses: Azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5.1.0
         with:
           # renovate: depName=helm/helm datasource=github-releases
           version: v4.3.1
@@ -398,7 +398,7 @@ jobs:
           name: chart
           path: /tmp/chart-dist
       - name: Install helm
-        uses: Azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        uses: Azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5.1.0
         with:
           # renovate: depName=helm/helm datasource=github-releases
           version: v4.3.1
