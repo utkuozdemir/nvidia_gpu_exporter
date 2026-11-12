@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.28
+# syntax=docker/dockerfile:1.29
 #
 # The development and CI toolchain, one stage per check.
 #
@@ -32,7 +32,7 @@ ARG DASHBOARD_LINTER_VERSION=0.5.2
 # renovate: depName=markdownlint-cli datasource=npm
 ARG MARKDOWNLINT_VERSION=0.50.0
 # renovate: depName=node datasource=docker
-ARG NODE_VERSION=26.13.0
+ARG NODE_VERSION=26.13.1
 # renovate: depName=koalaman/shellcheck datasource=docker
 ARG SHELLCHECK_VERSION=v0.11.0
 # the single declaration of the goreleaser version: the workflows read it from
