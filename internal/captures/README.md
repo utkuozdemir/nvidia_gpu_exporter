@@ -76,8 +76,8 @@ using format-preserving placeholders (tests only care about the shape of the
 data, not the real value):
 
 - GPU UUID → `GPU-00000000-0000-0000-0000-000000000000`
+- MIG UUID → `MIG-00000000-0000-0000-0000-000000000000`
 - Serial → `0000000000000`
-- Hostname → `redacted-host`
 
 Left as-is, since they are not sensitive: PCI bus id, VBIOS version, model name,
 memory size, compute capability. Process names are kept, because the per-process

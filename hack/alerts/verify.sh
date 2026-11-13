@@ -9,8 +9,11 @@
 # Needs only docker + python3; helm, yq and promtool run from pinned images.
 set -euo pipefail
 
+# renovate: depName=alpine/helm datasource=docker
 HELM_IMAGE=alpine/helm:3.19.0
+# renovate: depName=mikefarah/yq datasource=docker
 YQ_IMAGE=mikefarah/yq:4.48.1
+# renovate: depName=prom/prometheus datasource=docker
 PROM_IMAGE=prom/prometheus:v3.13.1
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -116,6 +119,19 @@ if [ "$got" != "$want" ]; then
   exit 1
 fi
 echo "additionalRuleLabels reach every rule without touching severity"
+
+# 4. test-connection pod's dig fallbacks must match values.yaml defaults
+want_img="$(docker run --rm -v "$chart:/chart:ro" "$HELM_IMAGE" \
+  template ci /chart --show-only templates/tests/test-connection.yaml |
+  docker run --rm -i "$YQ_IMAGE" eval '.spec.containers[0].image' -)"
+got_img="$(docker run --rm -v "$chart:/chart:ro" "$HELM_IMAGE" \
+  template ci /chart --show-only templates/tests/test-connection.yaml --set test=null |
+  docker run --rm -i "$YQ_IMAGE" eval '.spec.containers[0].image' -)"
+if [ "$got_img" != "$want_img" ]; then
+  echo "FAIL: test=null rendered image $got_img, expected $want_img (test-connection.yaml fallback drifted from values.yaml)" >&2
+  exit 1
+fi
+echo "test-connection fallback image matches values.yaml ($got_img)"
 
 echo "--- promtool check rules"
 docker run --rm -v "$here:/w" --entrypoint /bin/promtool "$PROM_IMAGE" \
