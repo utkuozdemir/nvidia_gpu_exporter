@@ -227,6 +227,10 @@ func opsFromEntries(entries map[string]overrideEntry) ([]rawOverride, error) {
 			continue
 		}
 
+		if entry.rng == nil {
+			return nil, fmt.Errorf("override for %q needs a value, or both min and max", field)
+		}
+
 		if _, err := validateRange(field, *entry.rng); err != nil {
 			return nil, err
 		}
