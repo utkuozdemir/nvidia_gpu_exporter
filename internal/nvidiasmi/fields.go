@@ -1,11 +1,8 @@
 package nvidiasmi
 
 import (
-	"bytes"
 	"context"
-	"errors"
 	"fmt"
-	"os/exec"
 	"regexp"
 	"strings"
 )
@@ -174,52 +171,17 @@ func ParseAutoQFields(
 	nvidiaSmiCommand string,
 	run RunFunc,
 ) ([]QField, error) {
-	cmdAndArgs, err := SplitCommand(nvidiaSmiCommand)
+	outStr, _, err := execQuery(ctx, nvidiaSmiCommand, run, "--help-query-gpu")
 	if err != nil {
 		return nil, err
-	}
-
-	cmdAndArgs = append(cmdAndArgs, "--help-query-gpu")
-	cmd := exec.CommandContext(ctx, cmdAndArgs[0], cmdAndArgs[1:]...) //nolint:gosec
-	cmd.WaitDelay = waitDelay
-
-	var stdout bytes.Buffer
-
-	var stderr bytes.Buffer
-
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	err = run(cmd)
-
-	outStr := stdout.String()
-	errStr := stderr.String()
-
-	exitCode := -1
-
-	if exitError, ok := errors.AsType[*exec.ExitError](err); ok {
-		exitCode = exitError.ExitCode()
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf(
-			"command failed: code: %d | command: %q | stdout: %q | stderr: %q: %w",
-			exitCode,
-			strings.Join(cmdAndArgs, " "),
-			outStr,
-			errStr,
-			err,
-		)
 	}
 
 	fields := ExtractQFields(outStr)
 	if fields == nil {
 		return nil, fmt.Errorf(
-			"could not extract any query fields: code: %d | command: %q | stdout: %q | stderr: %q",
-			exitCode,
-			strings.Join(cmdAndArgs, " "),
+			"could not extract any query fields: command: %q | stdout: %q",
+			nvidiaSmiCommand+" --help-query-gpu",
 			outStr,
-			errStr,
 		)
 	}
 
@@ -248,15 +210,6 @@ func ExtractQFields(text string) []QField {
 	}
 
 	return fields
-}
-
-func toQFieldSlice(ss []string) []QField {
-	r := make([]QField, len(ss))
-	for i, s := range ss {
-		r[i] = QField(s)
-	}
-
-	return r
 }
 
 func toRFieldSlice(ss []string) []RField {

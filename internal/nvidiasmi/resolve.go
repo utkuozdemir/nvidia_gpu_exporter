@@ -2,6 +2,7 @@ package nvidiasmi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -58,11 +59,13 @@ func ResolveFields(
 	run RunFunc,
 	logger *slog.Logger,
 ) (ResolvedFields, error) {
-	qFieldsSeparated := strings.Split(qFieldsRaw, ",")
+	parsedFields, auto, err := parseQFieldsRaw(qFieldsRaw)
+	if err != nil {
+		return ResolvedFields{}, err
+	}
 
-	qFields := withRequiredFields(toQFieldSlice(qFieldsSeparated))
+	var qFields []QField
 
-	auto := len(qFieldsSeparated) == 1 && qFieldsSeparated[0] == qFieldsAuto
 	if auto {
 		parsed, err := autoQFields(ctx, command, timeout, run)
 		if err != nil {
@@ -84,6 +87,8 @@ func ResolveFields(
 		// query. An unadvertised identity field simply leaves its gpu_info
 		// label empty.
 		qFields = removeDuplicates(parsed)
+	} else {
+		qFields = withRequiredFields(parsedFields)
 	}
 
 	qFields = filterExcludedQFields(qFields, qFieldsExcludeRaw, logger)
@@ -268,8 +273,10 @@ func ResolveFromCatalog(
 	qFieldsExcludeRaw string,
 	logger *slog.Logger,
 ) (ResolvedFields, error) {
-	qFieldsSeparated := strings.Split(qFieldsRaw, ",")
-	auto := len(qFieldsSeparated) == 1 && qFieldsSeparated[0] == qFieldsAuto
+	parsedFields, auto, err := parseQFieldsRaw(qFieldsRaw)
+	if err != nil {
+		return ResolvedFields{}, err
+	}
 
 	var qFields []QField
 
@@ -278,7 +285,7 @@ func ResolveFromCatalog(
 		// carry the identity fields, unlike a discovered list
 		qFields = slices.Clone(order)
 	} else {
-		qFields = withRequiredFields(toQFieldSlice(qFieldsSeparated))
+		qFields = withRequiredFields(parsedFields)
 	}
 
 	qFields = filterExcludedQFields(qFields, qFieldsExcludeRaw, logger)
@@ -299,4 +306,27 @@ func ResolveFromCatalog(
 		Returned: returned,
 		Info:     slices.Clone(infoFields),
 	}, nil
+}
+
+func parseQFieldsRaw(raw string) ([]QField, bool, error) {
+	var fields []QField
+
+	for part := range strings.SplitSeq(raw, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		fields = append(fields, QField(part))
+	}
+
+	if len(fields) == 0 {
+		return nil, false, errors.New("query field list must contain at least one field")
+	}
+
+	if len(fields) == 1 && string(fields[0]) == qFieldsAuto {
+		return nil, true, nil
+	}
+
+	return fields, false, nil
 }
