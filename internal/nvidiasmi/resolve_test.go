@@ -160,3 +160,37 @@ func TestResolveFieldsAutoNormalizesDiscoveredList(t *testing.T) {
 	assert.NotContains(t, resolved.Query, nvidiasmi.QField("compute_cap"),
 		"auto mode must not append identity fields that --help-query-gpu did not advertise")
 }
+
+func TestResolveTrimsWhitespaceAndRejectsEmptyFieldList(t *testing.T) {
+	t.Parallel()
+
+	order := []nvidiasmi.QField{
+		"uuid", "name", "driver_model.current", "driver_model.pending",
+		"vbios_version", "driver_version", "pci.bus_id", "serial",
+		"compute_cap", "pci.sub_device_id", "index", "utilization.gpu", "memory.used",
+	}
+	catalog := make(map[nvidiasmi.QField]nvidiasmi.RField, len(order))
+
+	for _, f := range order {
+		catalog[f] = nvidiasmi.RField(f)
+	}
+
+	resolved, err := nvidiasmi.ResolveFromCatalog(
+		order, catalog, " utilization.gpu , memory.used , ", "", slogt.New(t),
+	)
+	require.NoError(t, err)
+	assert.Contains(t, resolved.Query, nvidiasmi.QField("utilization.gpu"))
+	assert.Contains(t, resolved.Query, nvidiasmi.QField("memory.used"))
+
+	autoResolved, err := nvidiasmi.ResolveFromCatalog(order, catalog, " AUTO ", "", slogt.New(t))
+	require.NoError(t, err)
+	assert.Equal(t, order, autoResolved.Query)
+
+	for _, empty := range []string{"", " , "} {
+		_, err = nvidiasmi.ResolveFromCatalog(order, catalog, empty, "", slogt.New(t))
+		require.Error(t, err)
+
+		_, err = nvidiasmi.ResolveFields(t.Context(), "nvidia-smi", empty, "", time.Second, nil, slogt.New(t))
+		require.Error(t, err)
+	}
+}
