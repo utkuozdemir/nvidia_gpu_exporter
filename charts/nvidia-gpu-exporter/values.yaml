@@ -393,7 +393,7 @@ test:
     # -- Image repository for the `helm test` connection-check pod
     repository: docker.io/library/busybox
     # -- Image tag for the `helm test` pod
-    tag: "1.38"
+    tag: "1.38.0"
     # -- Image pull policy for the `helm test` pod
     pullPolicy: IfNotPresent
 

@@ -33,7 +33,7 @@
 #   -h, --help         Show this help.
 #
 # Privacy: by default, identifiers that can fingerprint a machine (GPU UUID,
-# serial, hostname) are replaced with format-preserving placeholders. Tests only
+# MIG UUID, serial) are replaced with format-preserving placeholders. Tests only
 # care about the shape of the data, not the real values. Please still skim the
 # file (especially process names) before sharing.
 
@@ -105,7 +105,7 @@ cat << 'BANNER'
    * Runs a series of READ-ONLY `nvidia-smi` commands (queries, help, monitors).
      It never changes any GPU/system setting.
    * Writes ONE .txt file: a metadata header plus one section per command.
-   * By default, MASKS fingerprinting identifiers (GPU UUID, serial, hostname)
+   * By default, MASKS fingerprinting identifiers (GPU UUID, MIG UUID, serial)
      with format-preserving placeholders. Pass --no-mask to keep raw values.
  Attach that file to a bug report, or commit it in a pull request.
 --------------------------------------------------------------------------------
@@ -449,23 +449,44 @@ sed_inplace() {
   sed "$@" "$OUTFILE" > "$OUTFILE.tmp" && mv "$OUTFILE.tmp" "$OUTFILE"
 }
 
+escape_sed() {
+  printf '%s' "$1" | sed 's/[][\\.*^$/]/\\&/g'
+}
+
 if [ "$MASK" -eq 1 ]; then
   echo ">> masking identifiers"
   i=0
   nv --query-gpu=uuid --format=csv,noheader 2> /dev/null | sed 's/^ *//;s/ *$//' | while IFS= read -r u; do
     [ -n "$u" ] || continue
     ph="$(printf 'GPU-%08d-0000-0000-0000-%012d' "$i" "$i")"
+    u_lc="$(printf '%s' "$u" | tr '[:upper:]' '[:lower:]')"
+    ph_lc="$(printf '%s' "$ph" | tr '[:upper:]' '[:lower:]')"
     sed_inplace \
-      -e "s/${u}/${ph}/g" \
-      -e "s/$(printf '%s' "$u" | tr '[:upper:]' '[:lower:]')/$(printf '%s' "$ph" | tr '[:upper:]' '[:lower:]')/g"
+      -e "s/$(escape_sed "$u")/${ph}/g" \
+      -e "s/$(escape_sed "$u_lc")/${ph_lc}/g"
+    i=$((i + 1))
+  done
+  i=0
+  awk '{
+    s = $0
+    while (match(s, /MIG-[0-9A-Fa-f]+(-[0-9A-Fa-f]+)+/)) {
+      if (RLENGTH == 40) {
+        m = substr(s, RSTART, RLENGTH)
+        if (!seen[tolower(m)]++) print m
+      }
+      s = substr(s, RSTART + RLENGTH)
+    }
+  }' "$OUTFILE" | while IFS= read -r m; do
+    ph="$(printf 'MIG-%08d-0000-0000-0000-%012d' "$i" "$i")"
+    sed_inplace \
+      -e "s/${m}/${ph}/g" \
+      -e "s/$(printf '%s' "$m" | tr '[:upper:]' '[:lower:]')/$(printf '%s' "$ph" | tr '[:upper:]' '[:lower:]')/g"
     i=$((i + 1))
   done
   nv --query-gpu=serial --format=csv,noheader 2> /dev/null | sed 's/^ *//;s/ *$//' | while IFS= read -r s; do
-    case "$s" in "" | "[N/A]" | "N/A") continue ;; esac
-    sed_inplace "s/${s}/0000000000000/g"
+    case "$s" in "" | "["*"]" | "N/A") continue ;; esac
+    sed_inplace "s/$(escape_sed "$s")/0000000000000/g"
   done
-  HOSTN="$(hostname 2> /dev/null || uname -n 2> /dev/null)"
-  [ -n "${HOSTN:-}" ] && sed_inplace "s/${HOSTN}/redacted-host/g"
 fi
 
 cat << EOF

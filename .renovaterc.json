@@ -7,6 +7,9 @@
     ":automergeDigest",
     ":semanticCommitTypeAll(chore)"
   ],
+  "ignorePresets": [
+    ":ignoreModulesAndTests"
+  ],
   "osvVulnerabilityAlerts": true,
   "postUpdateOptions": [
     "gomodTidy"
@@ -61,7 +64,9 @@
       "managerFilePatterns": [
         "/\\.github\\/workflows\\/.*/",
         "/Taskfile\\.yml/",
-        "/hack\\/dev\\.Dockerfile/"
+        "/hack\\/dev\\.Dockerfile/",
+        "/hack\\/.*\\.sh/",
+        "/charts\\/.*\\/templates\\/.*\\.yaml/"
       ],
       "matchStrings": [
         "# renovate: depName=(?<depName>[^\\s]+)( datasource=(?<datasource>[^\\s]+))?( registryUrl=(?<registryUrl>\\S+))?\\n[^\\n]*?(?<currentValue>v?\\d+\\.\\d+\\.\\d+(-[\\S]+)?)"
@@ -82,6 +87,18 @@
       "depNameTemplate": "golang/go",
       "datasourceTemplate": "github-tags",
       "extractVersionTemplate": "^go(?<version>\\d+\\.\\d+\\.\\d+)$"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/charts\\/.*\\/README\\.md/"
+      ],
+      "matchStrings": [
+        "\\| test\\.image\\.tag \\| string \\| `\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\"` \\|"
+      ],
+      "depNameTemplate": "docker.io/library/busybox",
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "semver"
     }
   ]
 }
