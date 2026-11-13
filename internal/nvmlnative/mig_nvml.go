@@ -106,7 +106,7 @@ func (b *Backend) collectMIG(
 	// freed through a second export, so a driver providing only part of the set
 	// would either leak or crash on teardown.
 	if !b.gpmAvailable() {
-		return false
+		return true
 	}
 
 	return b.collectMIGUtilization(dev, parentUUID, extras, groups)
