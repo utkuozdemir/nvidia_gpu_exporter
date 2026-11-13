@@ -53,11 +53,7 @@ func FuzzExporterRegisters(f *testing.F) {
 			Info:     []nvidiasmi.InfoField{{QField: nvidiasmi.UUIDQField, Label: "uuid"}},
 		}
 
-		features := Features{
-			ComputeApps: true, GraphicsApps: true, ComputeAppMIGLabels: true,
-			ComputeAppIdentityLabels: true, PCIeThroughput: true,
-			Energy: true, MIG: true, XIDEvents: true,
-		}
+		features := allFeatures(t)
 
 		exp := New(context.Background(), DefaultPrefix, fields, emptySource{},
 			features, nil, NVMLReturnCodeMetric, slog.New(slog.DiscardHandler))

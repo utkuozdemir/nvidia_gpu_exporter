@@ -13,6 +13,7 @@ import (
 func FuzzValidateMetricsPath(f *testing.F) {
 	f.Add("/metrics")
 	f.Add("/-/healthy")
+	f.Add("/-/gpu-healthy")
 	f.Add("/debug/pprof/x")
 	f.Add("/a b")
 	f.Fuzz(func(t *testing.T, metricsPath string) {
@@ -33,11 +34,16 @@ func FuzzValidateMetricsPath(f *testing.F) {
 			mux.Handle("GET "+metricsPath, http.NotFoundHandler())
 			mux.HandleFunc("GET /-/healthy", healthHandler("Healthy"))
 			mux.HandleFunc("GET /-/ready", healthHandler("Ready"))
+			mux.HandleFunc("GET /-/gpu-healthy", gpuHealthHandler(nil, nil))
 			registerPprof(mux)
 		}()
 
 		// the accepted path must not swallow a reserved route
-		for _, reserved := range []string{"/-/healthy", "/-/ready", "/debug/pprof/", "/debug/pprof/profile"} {
+		reservedRoutes := []string{
+			"/-/healthy", "/-/ready", "/-/gpu-healthy",
+			"/debug/pprof/", "/debug/pprof/profile",
+		}
+		for _, reserved := range reservedRoutes {
 			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://x"+reserved, nil)
 			if err != nil {
 				continue
