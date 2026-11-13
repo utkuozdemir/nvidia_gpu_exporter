@@ -102,6 +102,8 @@ var guardedSymbols = []string{
 	"nvmlGpmMetricsGet",
 	"nvmlEventSetCreate",
 	"nvmlEventSetFree",
+	"nvmlEventSetWait",
+	"nvmlEventSetWait_v2",
 	"nvmlSystemGetProcessName",
 	"nvmlSystemGetDriverVersion",
 	"nvmlSystemGetCudaDriverVersion",

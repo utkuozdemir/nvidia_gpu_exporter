@@ -198,9 +198,9 @@ func (b *Backend) xidRegister(warnings *xidWatcherLog) (nvml.EventSet, map[nvml.
 	// the event set is a resource group as well: it is created, waited on and
 	// freed through separate exports, so it is only safe to create when all of
 	// them are present.
-	if !b.avail.Load().hasAll(
-		"nvmlEventSetCreate", "nvmlEventSetFree", "nvmlDeviceRegisterEvents",
-	) {
+	avail := b.avail.Load()
+	if !avail.hasAll("nvmlEventSetCreate", "nvmlEventSetFree", "nvmlDeviceRegisterEvents") ||
+		!avail.hasAny("nvmlEventSetWait_v2", "nvmlEventSetWait") {
 		return nil, nil, 0, false, false
 	}
 
