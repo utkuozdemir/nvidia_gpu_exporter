@@ -22,7 +22,8 @@ spec:
     subtree may not exist yet */}}
     {{- $testImage := dig "image" (dict) (.Values.test | default dict) }}
     - name: wget
-      image: "{{ $testImage.repository | default "docker.io/library/busybox" }}:{{ $testImage.tag | default "1.37" }}"
+      # renovate: depName=docker.io/library/busybox datasource=docker
+      image: "{{ $testImage.repository | default "docker.io/library/busybox" }}:{{ $testImage.tag | default "1.38.0" }}"
       imagePullPolicy: {{ $testImage.pullPolicy | default "IfNotPresent" }}
       # restricted-profile security context so the test pod passes admission
       # in namespaces enforcing the "restricted" Pod Security Standard

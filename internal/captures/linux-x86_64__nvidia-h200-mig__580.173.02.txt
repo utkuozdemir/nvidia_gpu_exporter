@@ -1184,7 +1184,7 @@ Reason that describes why the page was retired. Can take one of two values:
 # $ nvidia-smi -L
 ################################################################################
 GPU 0: NVIDIA H200 (UUID: GPU-00000000-0000-0000-0000-000000000000)
-  MIG 3g.71gb     Device  0: (UUID: MIG-f165f0ad-bde2-5b72-acdf-73bbf48eeb2c)
+  MIG 3g.71gb     Device  0: (UUID: MIG-00000000-0000-0000-0000-000000000000)
 
 
 ################################################################################
