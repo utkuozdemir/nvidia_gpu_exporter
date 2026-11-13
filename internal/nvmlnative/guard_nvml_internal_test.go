@@ -8,6 +8,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -55,14 +56,35 @@ func TestCollectionMakesNoCallWhenNoSymbolIsAvailable(t *testing.T) {
 
 	fields := resolveFields(t, "AUTO")
 
-	opts := CollectOptions{
-		ComputeApps: true, GraphicsApps: true, PCIeThroughput: true, Energy: true, MIG: true,
-	}
+	opts := allCollectOptions(t)
 
 	// must not panic: every getter is unavailable, so none may be reached
 	reading, _, err := backend.QueryFunc(fields, opts)(t.Context())
 	require.NoError(t, err)
 	require.NotNil(t, reading.Table)
+
+	var warnings xidWatcherLog
+
+	set, _, _, registered, lifecycle := backend.xidRegister(&warnings)
+	assert.Nil(t, set)
+	assert.False(t, registered)
+	assert.False(t, lifecycle)
+}
+
+func allCollectOptions(t *testing.T) CollectOptions {
+	t.Helper()
+
+	var opts CollectOptions
+
+	val := reflect.ValueOf(&opts).Elem()
+	for idx := range val.NumField() {
+		field := val.Field(idx)
+		require.Equal(t, reflect.Bool, field.Kind(),
+			"unexpected non-bool field %s on CollectOptions", val.Type().Field(idx).Name)
+		field.SetBool(true)
+	}
+
+	return opts
 }
 
 // TestGuardedSymbolsMatchTheGuard keeps the probed symbol list in lockstep with

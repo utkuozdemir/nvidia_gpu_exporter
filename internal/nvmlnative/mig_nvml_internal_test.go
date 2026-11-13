@@ -3,7 +3,9 @@
 package nvmlnative
 
 import (
+	"errors"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -661,4 +663,42 @@ func TestWholeGPUGPMCrossCycle(t *testing.T) {
 	require.NotNil(t, util.DRAMBandwidthUtilizationRatio)
 	assert.InDelta(t, 0.52, *util.DRAMBandwidthUtilizationRatio, 1e-9)
 	assert.Equal(t, 1, gpm.live())
+}
+
+func TestMIGMissingGPMExportsContinuesToRemainingGPUs(t *testing.T) {
+	t.Parallel()
+
+	first := migParent(true,
+		migDevice("MIG-AAAAAAAA-1111-1111-1111-111111111111", 1),
+	)
+	first.GetTotalEnergyConsumptionFunc = func() (uint64, nvml.Return) { return 1000, nvml.SUCCESS }
+
+	second := migParent(true,
+		migDevice("MIG-BBBBBBBB-2222-2222-2222-222222222222", 2),
+	)
+	second.GetUUIDFunc = func() (string, nvml.Return) { return "GPU-22222222-2222-2222-2222-222222222222", nvml.SUCCESS }
+	second.GetTotalEnergyConsumptionFunc = func() (uint64, nvml.Return) { return 2000, nvml.SUCCESS }
+
+	fake := &fakeAPI{devices: []nvml.Device{first, second}}
+
+	api := fake.api()
+	api.lookupSymbol = func(name string) error {
+		if strings.HasPrefix(name, "nvmlGpm") {
+			return errors.New("symbol not found")
+		}
+
+		return nil
+	}
+
+	backend, err := newWithAPI(api, slogt.New(t))
+	require.NoError(t, err)
+
+	opts := CollectOptions{MIG: true, Energy: true}
+	reading, _, err := backend.QueryFunc(resolveFields(t, "power.draw"), opts)(t.Context())
+	require.NoError(t, err)
+
+	require.Len(t, reading.Extras.MIG, 2, "missing GPM exports on GPU 0 must not abort MIG collection for GPU 1")
+	assert.Equal(t, "11111111-2222-3333-4444-555555555555", reading.Extras.MIG[0].ParentUUID)
+	assert.Equal(t, "22222222-2222-2222-2222-222222222222", reading.Extras.MIG[1].ParentUUID)
+	require.Len(t, reading.Extras.Energy, 2, "missing GPM exports on GPU 0 must not drop energy metrics for GPU 1")
 }
