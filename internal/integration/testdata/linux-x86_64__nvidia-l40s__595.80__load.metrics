@@ -222,6 +222,9 @@ nvidia_smi_gsp_mode_default{uuid="00000000-0000-0000-0000-000000000000"} 1
 # HELP nvidia_smi_index index
 # TYPE nvidia_smi_index gauge
 nvidia_smi_index{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_inforom_checksum_validation inforom.checksum_validation
+# TYPE nvidia_smi_inforom_checksum_validation gauge
+nvidia_smi_inforom_checksum_validation{uuid="00000000-0000-0000-0000-000000000000"} 1
 # HELP nvidia_smi_inforom_ecc inforom.ecc
 # TYPE nvidia_smi_inforom_ecc gauge
 nvidia_smi_inforom_ecc{uuid="00000000-0000-0000-0000-000000000000"} 6.16

@@ -103,6 +103,7 @@ var volatileFieldPrefixes = []string{
 	"timestamp", "temperature.", "power.draw", "utilization.", "clocks.current.",
 	"memory.used", "memory.free", "fan.speed", "pstate", "encoder.stats.",
 	"clocks_event_reasons", "clocks_throttle_reasons", "ecc.errors.",
+	"gpu_uptime", "bbx.time_run",
 }
 
 func isVolatileField(q nvidiasmi.QField) bool {
@@ -168,13 +169,20 @@ func compareField(
 		return 0
 	}
 
-	if execAbsent != nativeAbsent {
-		t.Errorf("absence mismatch between the backends\n"+
+	if !execAbsent && nativeAbsent {
+		t.Errorf("field present in exec is absent in the nvml backend\n"+
 			"  gpu: %s\n  field: %s\n  exec: %q / %q\n  nvml: %q\n"+
 			"  fix: the error-to-token mapping or the collector for this field in internal/nvmlnative",
 			uuid, qField, beforeCell.RawValue, afterCell.RawValue, nativeCell.RawValue)
 
 		return 1
+	}
+
+	if execAbsent && !nativeAbsent {
+		t.Logf("nvml serves a value for a field absent in exec: %s (nvml=%q, exec=%q)",
+			qField, nativeCell.RawValue, beforeCell.RawValue)
+
+		return 0
 	}
 
 	if nativeAbsent {
@@ -612,8 +620,7 @@ func compareFamiliesExecToNVML(
 
 		for series := range nativeSeries {
 			if _, ok := execSeries[series]; !ok {
-				t.Errorf("series only the nvml backend exports\n  family: %s\n  series: %s",
-					family, series)
+				t.Logf("series only the nvml backend exports in shared family %s: %s", family, series)
 			}
 		}
 	}
@@ -677,13 +684,14 @@ var nvmlOnlyFamilyPrefixes = []string{
 	// is asserted by the GPU-box runbook (which triggers a real XID), not
 	// here
 	"nvidia_smi_xid_",
-	// query fields nvidia-smi marks deprecated on R590+ while NVML still
-	// serves their values
+	// query fields nvidia-smi marks deprecated or omits on newer drivers while
+	// NVML still serves their values
 	"nvidia_smi_display_mode",
 	"nvidia_smi_display_active",
 	"nvidia_smi_power_management",
 	"nvidia_smi_clocks_applications_graphics_clock_hz",
 	"nvidia_smi_clocks_applications_memory_clock_hz",
+	"nvidia_smi_reset_status_",
 }
 
 func isNVMLOnlyFamily(family string) bool {

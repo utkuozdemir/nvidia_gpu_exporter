@@ -131,9 +131,9 @@ func TransformRawValue(rawValue string, valueMultiplier float64) (float64, error
 	val := strings.ToLower(trimmed)
 
 	switch val {
-	case "enabled", "yes", "active":
+	case "enabled", "yes", "active", "valid":
 		return 1, nil
-	case "disabled", "no", "not active":
+	case "disabled", "no", "not active", "invalid":
 		return 0, nil
 	case "default":
 		return 0, nil

@@ -141,6 +141,13 @@ var nvmlSymbolRequirements = []symbolRequirement{
 		serves: "pcie_throughput_*_bytes_per_second",
 	},
 	{goCall: "validateInforom", anyOf: []string{"nvmlDeviceValidateInforom"}, serves: "inforom.checksum_validation"},
+	{goCall: "deviceGetGpuUptimeV1", anyOf: []string{"nvmlDeviceGetGpuUptime_v1"}, serves: "gpu_uptime"},
+	{goCall: "deviceGetTemperatureV", anyOf: []string{"nvmlDeviceGetTemperatureV"}, serves: "temperature.gpu_max"},
+	{
+		goCall: "GetBBXTimeData_v1",
+		anyOf:  []string{"nvmlDeviceGetBBXTimeData_v1"},
+		serves: "bbx.time_run",
+	},
 	{
 		goCall: "GetName",
 		anyOf:  []string{"nvmlDeviceGetName", "nvmlDeviceGetName_v2", "nvmlDeviceGetName_v3"},
