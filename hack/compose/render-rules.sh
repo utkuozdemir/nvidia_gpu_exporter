@@ -12,7 +12,9 @@
 # dependencies stay docker + python3.
 set -euo pipefail
 
+# renovate: depName=alpine/helm datasource=docker
 HELM_IMAGE=alpine/helm:3.19.0
+# renovate: depName=mikefarah/yq datasource=docker
 YQ_IMAGE=mikefarah/yq:4.48.1
 DEV_FOR=30s
 

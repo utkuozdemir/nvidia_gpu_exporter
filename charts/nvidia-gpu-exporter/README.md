@@ -418,7 +418,7 @@ grafanaDashboard:
 | telemetryPath | string | `"/metrics"` | The path to expose the metrics from |
 | test.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for the `helm test` pod |
 | test.image.repository | string | `"docker.io/library/busybox"` | Image repository for the `helm test` connection-check pod |
-| test.image.tag | string | `"1.38"` | Image tag for the `helm test` pod |
+| test.image.tag | string | `"1.38.0"` | Image tag for the `helm test` pod |
 | tolerations | list | `[]` | Tolerations for the pods. GPU node pools are often tainted (e.g. `nvidia.com/gpu=present:NoSchedule`) so that only GPU workloads land on them. This chart deliberately requests no GPU resource, so add a matching toleration here or the exporter will not schedule on those nodes. |
 | updateStrategy | object | `{"rollingUpdate":{"maxUnavailable":1},"type":"RollingUpdate"}` | Update strategy of the DaemonSet. Raise `rollingUpdate.maxUnavailable` (absolute or percentage) to roll out faster on large clusters, or use `type: OnDelete` for manually staged rollouts. |
 | volumeMounts | list | `[]` | Extra volume mounts for the exporter container |

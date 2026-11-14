@@ -1,7 +1,9 @@
 package capture_test
 
 import (
+	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -9,6 +11,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/capture"
+)
+
+var (
+	maskedHeaderRe    = regexp.MustCompile(`(?m)^masked:\s*yes\s*$`)
+	captureUUIDRe     = regexp.MustCompile(`(?i)\b(?:GPU|MIG)-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b`)
+	placeholderUUIDRe = regexp.MustCompile(`(?i)^(?:GPU|MIG)-0{6}[0-9]{2}-0000-0000-0000-0{10}[0-9]{2}$`)
 )
 
 // TestLoadCorpus parses every committed capture and checks the invariants the
@@ -72,7 +80,24 @@ func TestLoadCorpus(t *testing.T) {
 			appsSection := capt.Find("idle", "query-compute-apps")
 			require.NotNil(t, appsSection)
 			assert.Contains(t, appsSection.Command, "--query-compute-apps=")
+
+			checkMaskedUUIDs(t, path, capt.Header)
 		})
+	}
+}
+
+func checkMaskedUUIDs(t *testing.T, path, header string) {
+	t.Helper()
+
+	if !maskedHeaderRe.MatchString(header) {
+		return
+	}
+
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	for _, match := range captureUUIDRe.FindAllString(string(raw), -1) {
+		assert.Regexp(t, placeholderUUIDRe, match, "unmasked UUID in %s", filepath.Base(path))
 	}
 }
 
