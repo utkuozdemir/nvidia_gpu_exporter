@@ -36,6 +36,7 @@ type nvmlAPI struct {
 	validateInforom       func(nvml.Device) nvml.Return
 	deviceGetGpuUptimeV1  func(nvml.Device) (uint32, nvml.Return)
 	deviceGetTemperatureV func(nvml.Device, uint32) (int32, nvml.Return)
+	deviceGetFanSpeedRPM  func(nvml.Device, int) (uint32, nvml.Return)
 	// the GPM entry points are package-level in go-nvml AND its sample
 	// mock cannot pass through the real metrics call (a private concrete
 	// type assertion), so they must live on the seam
@@ -71,6 +72,7 @@ func realNVML() nvmlAPI {
 		validateInforom:       nvml.DeviceValidateInforom,
 		deviceGetGpuUptimeV1:  nvml.DeviceGetGpuUptimeV1,
 		deviceGetTemperatureV: nvml.DeviceGetTemperatureV,
+		deviceGetFanSpeedRPM:  nvml.DeviceGetFanSpeedRPM,
 		gpmSampleAlloc:        nvml.GpmSampleAlloc,
 		gpmSampleFree:     nvml.GpmSampleFree,
 		gpmSampleGet:      nvml.GpmSampleGet,
@@ -1805,7 +1807,7 @@ func (b *Backend) collectExtras(ctx context.Context, opts CollectOptions) collec
 		b.warnOnce("cuda-version", "cannot read the CUDA version", ret)
 	}
 
-	if !opts.Energy && !opts.PCIeThroughput && !opts.PCIeReplays && !opts.NVLink && !opts.GPM && !opts.MIG {
+	if !opts.hasDeviceExtras() {
 		return extras
 	}
 
@@ -1865,6 +1867,13 @@ func (b *Backend) collectDeviceExtras(
 		return false
 	}
 
+	// GPM runs before collectPcie so non-MIG Hopper+ GPUs fill PCIe throughput
+	// from the non-blocking GPM sample window instead of sleeping 40ms in
+	// GetPcieThroughput.
+	if opts.GPM && !b.collectGPM(dev, uuid, extras, seenGIs) {
+		return false
+	}
+
 	if opts.PCIeThroughput && !b.collectPcie(ctx, dev, uuid, extras) {
 		return false
 	}
@@ -1877,7 +1886,19 @@ func (b *Backend) collectDeviceExtras(
 		return false
 	}
 
-	if opts.GPM && !b.collectGPM(dev, uuid, extras, seenGIs) {
+	if opts.Fans && !b.collectFans(dev, uuid, extras) {
+		return false
+	}
+
+	if opts.BAR1 && !b.collectBAR1(dev, uuid, extras) {
+		return false
+	}
+
+	if opts.TemperatureThresholds && !b.collectTemperatureThresholds(dev, uuid, extras) {
+		return false
+	}
+
+	if opts.PowerSource && !b.collectPowerSource(dev, uuid, extras) {
 		return false
 	}
 
@@ -2048,6 +2069,12 @@ func (b *Backend) collectPcie(
 	uuid string,
 	extras *collect.Extras,
 ) bool {
+	for _, sample := range extras.PCIe {
+		if sample.UUID == uuid {
+			return true
+		}
+	}
+
 	tx, ret := dev.GetPcieThroughput(nvml.PCIE_UTIL_TX_BYTES)
 	if ret != nvml.SUCCESS {
 		return b.extrasFailure("pcie", "cannot sample the PCIe throughput", ret)

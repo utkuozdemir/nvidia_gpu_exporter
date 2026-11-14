@@ -634,15 +634,19 @@ func buildFeatures(cfg collectConfig) exporter.Features {
 		GraphicsApps:             cfg.graphicsApps,
 		ComputeAppMIGLabels:      cfg.computeAppsMIG,
 		ComputeAppIdentityLabels: cfg.computeAppsIdentity,
-		// the extras families exist in the nvml backend and its demo twin,
-		// and the demo serves the PCIe family unconditionally
-		PCIeThroughput: cfg.pcieThroughput || cfg.backend == backendDemo,
-		PCIeReplays:    extrasCapable,
-		NVLink:         extrasCapable,
-		GPM:            extrasCapable,
-		Energy:         extrasCapable,
-		MIG:            extrasCapable,
-		XIDEvents:      extrasCapable,
+		// the extras families exist in the nvml backend and its demo twin.
+		// Non-MIG Hopper+ GPUs fill PCIe throughput from GPM without sleeping.
+		PCIeThroughput:        cfg.pcieThroughput || extrasCapable,
+		PCIeReplays:           extrasCapable,
+		NVLink:                extrasCapable,
+		GPM:                   extrasCapable,
+		Energy:                extrasCapable,
+		MIG:                   extrasCapable,
+		XIDEvents:             extrasCapable,
+		Fans:                  extrasCapable,
+		BAR1:                  extrasCapable,
+		TemperatureThresholds: extrasCapable,
+		PowerSource:           extrasCapable,
 	}
 }
 
@@ -732,14 +736,18 @@ func setupNVMLBackend(
 	superviseXIDWatcher(ctx, eg, backend, logger)
 
 	opts := nvmlnative.CollectOptions{
-		ComputeApps:    cfg.computeApps,
-		GraphicsApps:   cfg.graphicsApps,
-		PCIeThroughput: cfg.pcieThroughput,
-		PCIeReplays:    true,
-		NVLink:         true,
-		GPM:            true,
-		Energy:         true,
-		MIG:            true,
+		ComputeApps:           cfg.computeApps,
+		GraphicsApps:          cfg.graphicsApps,
+		PCIeThroughput:        cfg.pcieThroughput,
+		PCIeReplays:           true,
+		NVLink:                true,
+		GPM:                   true,
+		Energy:                true,
+		MIG:                   true,
+		Fans:                  true,
+		BAR1:                  true,
+		TemperatureThresholds: true,
+		PowerSource:           true,
 	}
 
 	return resolved, backend.QueryFunc(resolved, opts), backend, exporter.NVMLReturnCodeMetric, nil

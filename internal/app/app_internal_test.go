@@ -395,6 +395,10 @@ func (f fakeXIDSource) XIDCounts() []collect.XIDCounter {
 	return f.counters
 }
 
+func (f fakeXIDSource) MIGXIDCounts() []collect.MIGXIDCounter {
+	return nil
+}
+
 func (f fakeXIDSource) XIDWatcherEnabled() bool {
 	return true
 }

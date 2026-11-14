@@ -26,4 +26,17 @@ type CollectOptions struct {
 	// MIG enables the per-MIG-instance readings. GPUs without MIG mode
 	// enabled contribute nothing beyond one mode probe.
 	MIG bool
+	// Fans enables per-fan current ratio, target ratio and RPM gauges.
+	Fans bool
+	// BAR1 enables per-GPU BAR1 memory usage gauges.
+	BAR1 bool
+	// TemperatureThresholds enables per-GPU temperature threshold gauges.
+	TemperatureThresholds bool
+	// PowerSource enables the per-GPU power source gauge.
+	PowerSource bool
+}
+
+func (o CollectOptions) hasDeviceExtras() bool {
+	return o.Energy || o.PCIeThroughput || o.PCIeReplays || o.NVLink ||
+		o.GPM || o.MIG || o.Fans || o.BAR1 || o.TemperatureThresholds || o.PowerSource
 }

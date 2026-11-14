@@ -143,6 +143,17 @@ var nvmlSymbolRequirements = []symbolRequirement{
 	{goCall: "validateInforom", anyOf: []string{"nvmlDeviceValidateInforom"}, serves: "inforom.checksum_validation"},
 	{goCall: "deviceGetGpuUptimeV1", anyOf: []string{"nvmlDeviceGetGpuUptime_v1"}, serves: "gpu_uptime"},
 	{goCall: "deviceGetTemperatureV", anyOf: []string{"nvmlDeviceGetTemperatureV"}, serves: "temperature.gpu_max"},
+	{goCall: "deviceGetFanSpeedRPM", anyOf: []string{"nvmlDeviceGetFanSpeedRPM"}, serves: "fan_speed_rpm"},
+	{goCall: "GetNumFans", anyOf: []string{"nvmlDeviceGetNumFans"}, serves: "fan_speed_*"},
+	{goCall: "GetFanSpeed_v2", anyOf: []string{"nvmlDeviceGetFanSpeed_v2"}, serves: "fan_speed_current_ratio"},
+	{goCall: "GetTargetFanSpeed", anyOf: []string{"nvmlDeviceGetTargetFanSpeed"}, serves: "fan_speed_target_ratio"},
+	{goCall: "GetBAR1MemoryInfo", anyOf: []string{"nvmlDeviceGetBAR1MemoryInfo"}, serves: "bar1_memory_*_bytes"},
+	{
+		goCall: "GetTemperatureThreshold",
+		anyOf:  []string{"nvmlDeviceGetTemperatureThreshold"},
+		serves: "temperature_threshold_*_celsius",
+	},
+	{goCall: "GetPowerSource", anyOf: []string{"nvmlDeviceGetPowerSource"}, serves: "power_source"},
 	{
 		goCall: "GetBBXTimeData_v1",
 		anyOf:  []string{"nvmlDeviceGetBBXTimeData_v1"},

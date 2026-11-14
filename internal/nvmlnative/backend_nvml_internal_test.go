@@ -59,6 +59,7 @@ func (f *fakeAPI) api() nvmlAPI {
 		validateInforom:       func(nvml.Device) nvml.Return { return nvml.SUCCESS },
 		deviceGetGpuUptimeV1:  func(nvml.Device) (uint32, nvml.Return) { return 0, nvml.ERROR_NOT_SUPPORTED },
 		deviceGetTemperatureV: func(nvml.Device, uint32) (int32, nvml.Return) { return 0, nvml.ERROR_NOT_SUPPORTED },
+		deviceGetFanSpeedRPM:  func(nvml.Device, int) (uint32, nvml.Return) { return 0, nvml.ERROR_NOT_SUPPORTED },
 	}
 }
 

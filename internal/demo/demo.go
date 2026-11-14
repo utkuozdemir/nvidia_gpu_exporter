@@ -64,9 +64,10 @@ type Backend struct {
 	now func() time.Time
 	rng *demoRand
 
-	energy map[string]*energyState
-	nvlink map[string]*nvlinkState
-	xids   map[string]map[uint64]*xidStat
+	energy  map[string]*energyState
+	nvlink  map[string]*nvlinkState
+	xids    map[string]map[uint64]*xidStat
+	migXIDs map[migXIDKey]*xidStat
 	// xidsSeeded records that the initial events were applied (they resolve
 	// GPU indexes against the first served table).
 	xidsSeeded bool
@@ -98,6 +99,13 @@ type nvlinkState struct {
 type xidStat struct {
 	count uint64
 	last  time.Time
+}
+
+type migXIDKey struct {
+	uuid              string
+	gpuInstanceID     string
+	computeInstanceID string
+	xid               uint64
 }
 
 // New loads and validates the initial configuration (the built-in default
@@ -199,6 +207,29 @@ func (b *Backend) XIDCounts() []collect.XIDCounter {
 	return counters
 }
 
+// MIGXIDCounts serves the accumulated synthetic MIG-attributed XID events.
+func (b *Backend) MIGXIDCounts() []collect.MIGXIDCounter {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	var counters []collect.MIGXIDCounter
+
+	for key, stat := range b.migXIDs {
+		counters = append(counters, collect.MIGXIDCounter{
+			UUID:              key.uuid,
+			GPUInstanceID:     key.gpuInstanceID,
+			ComputeInstanceID: key.computeInstanceID,
+			XID:               key.xid,
+			Count:             stat.count,
+			LastSeen:          stat.last,
+		})
+	}
+
+	sortMIGXIDCounters(counters)
+
+	return counters
+}
+
 // XIDWatcherEnabled reports that the synthetic XID watcher is active in demo
 // mode.
 func (b *Backend) XIDWatcherEnabled() bool {
@@ -228,6 +259,7 @@ func (b *Backend) resetState(snap snapshot) {
 	b.energy = map[string]*energyState{}
 	b.nvlink = map[string]*nvlinkState{}
 	b.xids = map[string]map[uint64]*xidStat{}
+	b.migXIDs = map[migXIDKey]*xidStat{}
 	b.xidsSeeded = false
 	b.nextXIDAt = time.Time{}
 	b.seenGIs = map[string]bool{}
@@ -346,6 +378,10 @@ func (b *Backend) overlay(reading *collect.Reading) {
 	synthAppIdentity(reading)
 	b.tickXIDs(uuids, snap.extras, now)
 	b.synthAppUtilization(reading)
+	b.synthFans(uuids, reading)
+	b.synthBAR1(uuids, reading)
+	synthTemperatureThresholds(uuids, reading)
+	synthPowerSources(uuids, reading)
 }
 
 // privatePower fills the power draws the public query left out, from the

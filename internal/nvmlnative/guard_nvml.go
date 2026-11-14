@@ -21,6 +21,7 @@ type device interface {
 	GetAccountingMode() (nvml.EnableState, nvml.Return)
 	GetAddressingMode() (nvml.DeviceAddressingMode, nvml.Return)
 	GetApplicationsClock(clockType nvml.ClockType) (uint32, nvml.Return)
+	GetBAR1MemoryInfo() (nvml.BAR1Memory, nvml.Return)
 	GetBBXTimeData_v1() (nvml.BBXTimeData_v1, nvml.Return)
 	GetC2cModeInfoV1() (nvml.C2cModeInfo_v1, nvml.Return)
 	GetClockInfo(clockType nvml.ClockType) (uint32, nvml.Return)
@@ -44,6 +45,7 @@ type device interface {
 	GetEncoderUtilization() (uint32, uint32, nvml.Return)
 	GetEnforcedPowerLimit() (uint32, nvml.Return)
 	GetFanSpeed() (uint32, nvml.Return)
+	GetFanSpeed_v2(fan int) (uint32, nvml.Return)
 	GetFieldValues(values []nvml.FieldValue) nvml.Return
 	GetGpuFabricInfoV2() (nvml.GpuFabricInfo_v2, nvml.Return)
 	GetGpuInstanceId() (int, nvml.Return)
@@ -71,6 +73,7 @@ type device interface {
 	GetMigDeviceHandleByIndex(index int) (device, nvml.Return)
 	GetMigMode() (int, int, nvml.Return)
 	GetName() (string, nvml.Return)
+	GetNumFans() (int, nvml.Return)
 	GetOfaUtilization() (uint32, uint32, nvml.Return)
 	GetPcieThroughput(counter nvml.PcieUtilCounter) (uint32, nvml.Return)
 	GetPciInfo() (nvml.PciInfo, nvml.Return)
@@ -82,6 +85,7 @@ type device interface {
 	GetPowerManagementLimit() (uint32, nvml.Return)
 	GetPowerManagementLimitConstraints() (uint32, uint32, nvml.Return)
 	GetPowerManagementMode() (nvml.EnableState, nvml.Return)
+	GetPowerSource() (nvml.PowerSource, nvml.Return)
 	GetPowerUsage() (uint32, nvml.Return)
 	GetProcessUtilization(lastSeenTimestamp uint64) ([]nvml.ProcessUtilizationSample, nvml.Return)
 	GetRemappedRows() (int, int, bool, bool, nvml.Return)
@@ -93,7 +97,9 @@ type device interface {
 	GetSramEccErrorStatus() (nvml.EccSramErrorStatus, nvml.Return)
 	GetSupportedClocksEventReasons() (uint64, nvml.Return)
 	GetSupportedClocksThrottleReasons() (uint64, nvml.Return)
+	GetTargetFanSpeed(fan int) (int, nvml.Return)
 	GetTemperature(sensor nvml.TemperatureSensors) (uint32, nvml.Return)
+	GetTemperatureThreshold(thresholdType nvml.TemperatureThresholds) (uint32, nvml.Return)
 	GetTotalEccErrors(errorType nvml.MemoryErrorType, counterType nvml.EccCounterType) (uint64, nvml.Return)
 	GetTotalEnergyConsumption() (uint64, nvml.Return)
 	GetUtilizationRates() (nvml.Utilization, nvml.Return)
@@ -149,6 +155,16 @@ func (g guardedDevice) GetApplicationsClock(p0 nvml.ClockType) (uint32, nvml.Ret
 	}
 
 	return g.dev.GetApplicationsClock(p0)
+}
+
+func (g guardedDevice) GetBAR1MemoryInfo() (nvml.BAR1Memory, nvml.Return) {
+	if !g.avail.has("nvmlDeviceGetBAR1MemoryInfo") {
+		var z0 nvml.BAR1Memory
+
+		return z0, nvml.ERROR_FUNCTION_NOT_FOUND
+	}
+
+	return g.dev.GetBAR1MemoryInfo()
 }
 
 //nolint:revive // the name must match go-nvml's Device interface to delegate
@@ -375,6 +391,15 @@ func (g guardedDevice) GetFanSpeed() (uint32, nvml.Return) {
 	return g.dev.GetFanSpeed()
 }
 
+//nolint:revive // the name must match go-nvml's Device interface to delegate
+func (g guardedDevice) GetFanSpeed_v2(p0 int) (uint32, nvml.Return) {
+	if !g.avail.has("nvmlDeviceGetFanSpeed_v2") {
+		return 0, nvml.ERROR_FUNCTION_NOT_FOUND
+	}
+
+	return g.dev.GetFanSpeed_v2(p0)
+}
+
 func (g guardedDevice) GetFieldValues(p0 []nvml.FieldValue) nvml.Return {
 	if !g.avail.has("nvmlDeviceGetFieldValues") {
 		return nvml.ERROR_FUNCTION_NOT_FOUND
@@ -588,6 +613,14 @@ func (g guardedDevice) GetName() (string, nvml.Return) {
 	return g.dev.GetName()
 }
 
+func (g guardedDevice) GetNumFans() (int, nvml.Return) {
+	if !g.avail.has("nvmlDeviceGetNumFans") {
+		return 0, nvml.ERROR_FUNCTION_NOT_FOUND
+	}
+
+	return g.dev.GetNumFans()
+}
+
 func (g guardedDevice) GetOfaUtilization() (uint32, uint32, nvml.Return) {
 	if !g.avail.has("nvmlDeviceGetOfaUtilization") {
 		return 0, 0, nvml.ERROR_FUNCTION_NOT_FOUND
@@ -690,6 +723,16 @@ func (g guardedDevice) GetPowerManagementMode() (nvml.EnableState, nvml.Return) 
 	}
 
 	return g.dev.GetPowerManagementMode()
+}
+
+func (g guardedDevice) GetPowerSource() (nvml.PowerSource, nvml.Return) {
+	if !g.avail.has("nvmlDeviceGetPowerSource") {
+		var z0 nvml.PowerSource
+
+		return z0, nvml.ERROR_FUNCTION_NOT_FOUND
+	}
+
+	return g.dev.GetPowerSource()
 }
 
 func (g guardedDevice) GetPowerUsage() (uint32, nvml.Return) {
@@ -795,6 +838,22 @@ func (g guardedDevice) GetTemperature(p0 nvml.TemperatureSensors) (uint32, nvml.
 	}
 
 	return g.dev.GetTemperature(p0)
+}
+
+func (g guardedDevice) GetTargetFanSpeed(p0 int) (int, nvml.Return) {
+	if !g.avail.has("nvmlDeviceGetTargetFanSpeed") {
+		return 0, nvml.ERROR_FUNCTION_NOT_FOUND
+	}
+
+	return g.dev.GetTargetFanSpeed(p0)
+}
+
+func (g guardedDevice) GetTemperatureThreshold(p0 nvml.TemperatureThresholds) (uint32, nvml.Return) {
+	if !g.avail.has("nvmlDeviceGetTemperatureThreshold") {
+		return 0, nvml.ERROR_FUNCTION_NOT_FOUND
+	}
+
+	return g.dev.GetTemperatureThreshold(p0)
 }
 
 func (g guardedDevice) GetTotalEccErrors(p0 nvml.MemoryErrorType, p1 nvml.EccCounterType) (uint64, nvml.Return) {
