@@ -123,6 +123,14 @@ type Features struct {
 	// XIDEvents enables the XID error counter families (nvml backend). The
 	// values come from the XIDSource passed to New, not from the snapshot.
 	XIDEvents bool
+	// Fans enables the per-fan current ratio, target ratio and RPM gauges.
+	Fans bool
+	// BAR1 enables the per-GPU BAR1 memory usage gauges.
+	BAR1 bool
+	// TemperatureThresholds enables the per-GPU thermal threshold gauges.
+	TemperatureThresholds bool
+	// PowerSource enables the per-GPU power source gauge.
+	PowerSource bool
 }
 
 // XIDSource serves the cumulative XID error counts and watcher status. It is
@@ -131,6 +139,7 @@ type Features struct {
 // happen). The implementation must be safe for concurrent use.
 type XIDSource interface {
 	XIDCounts() []collect.XIDCounter
+	MIGXIDCounts() []collect.MIGXIDCounter
 	XIDWatcherEnabled() bool
 }
 
@@ -159,11 +168,17 @@ type GPUExporter struct {
 	gpmDescs              *gpmDescs
 	energyDesc            *prometheus.Desc
 	migDescs              *migDescs
+	fanDescs              *fanDescs
+	bar1Descs             *bar1Descs
+	tempThresholdDescs    *tempThresholdDescs
+	powerSourceDesc       *prometheus.Desc
 	appMIGLabels          bool
 	appIdentityLabels     bool
 	xids                  XIDSource
 	xidCountDesc          *prometheus.Desc
 	xidTimestampDesc      *prometheus.Desc
+	migXIDCountDesc       *prometheus.Desc
+	migXIDTimestampDesc   *prometheus.Desc
 	xidWatcherDesc        *prometheus.Desc
 	logger                *slog.Logger
 	ctx                   context.Context //nolint:containedctx
@@ -245,6 +260,50 @@ func (m *migDescs) all() []*prometheus.Desc {
 	}
 }
 
+type fanDescs struct {
+	currentRatio *prometheus.Desc
+	targetRatio  *prometheus.Desc
+	rpm          *prometheus.Desc
+}
+
+func (f *fanDescs) all() []*prometheus.Desc {
+	if f == nil {
+		return nil
+	}
+
+	return []*prometheus.Desc{f.currentRatio, f.targetRatio, f.rpm}
+}
+
+type bar1Descs struct {
+	total *prometheus.Desc
+	used  *prometheus.Desc
+	free  *prometheus.Desc
+}
+
+func (b *bar1Descs) all() []*prometheus.Desc {
+	if b == nil {
+		return nil
+	}
+
+	return []*prometheus.Desc{b.total, b.used, b.free}
+}
+
+type tempThresholdDescs struct {
+	shutdown  *prometheus.Desc
+	slowdown  *prometheus.Desc
+	memoryMax *prometheus.Desc
+	gpuMax    *prometheus.Desc
+	acoustic  *prometheus.Desc
+}
+
+func (t *tempThresholdDescs) all() []*prometheus.Desc {
+	if t == nil {
+		return nil
+	}
+
+	return []*prometheus.Desc{t.shutdown, t.slowdown, t.memoryMax, t.gpuMax, t.acoustic}
+}
+
 // New builds the exporter. A metric family whose feature is off in features
 // gets nil descriptors: the exporter neither describes nor emits its series.
 func New(
@@ -292,10 +351,14 @@ func New(
 		pcieRolloversDesc: pcieRolloversDesc,
 		nvlinkTxDesc:      nvlinkTxDesc,
 		nvlinkRxDesc:      nvlinkRxDesc,
-		gpmDescs:          newGPMDescs(prefix, features.GPM),
-		energyDesc:        newEnergyDesc(prefix, features.Energy),
-		migDescs:          newMIGDescs(prefix, features.MIG),
-		appMIGLabels:      features.ComputeAppMIGLabels,
+		gpmDescs:           newGPMDescs(prefix, features.GPM),
+		energyDesc:         newEnergyDesc(prefix, features.Energy),
+		migDescs:           newMIGDescs(prefix, features.MIG),
+		fanDescs:           newFanDescs(prefix, features.Fans),
+		bar1Descs:          newBAR1Descs(prefix, features.BAR1),
+		tempThresholdDescs: newTempThresholdDescs(prefix, features.TemperatureThresholds),
+		powerSourceDesc:    newPowerSourceDesc(prefix, features.PowerSource),
+		appMIGLabels:       features.ComputeAppMIGLabels,
 		appIdentityLabels: features.ComputeAppIdentityLabels,
 		xids:              xids,
 		logger:            logger,
@@ -331,6 +394,17 @@ func addXIDDescs(exp *GPUExporter, prefix string, enabled bool) {
 		"Unix timestamp of the most recently observed XID error, as received by the exporter "+
 			"(the driver events carry no timestamp of their own).",
 		[]string{uuidLabel, "xid"},
+		nil)
+	exp.migXIDCountDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(prefix, "", "mig_xid_errors_total"),
+		"Number of MIG-attributed XID errors observed since the exporter started. "+
+			"A series appears when its first MIG-scoped event arrives.",
+		[]string{uuidLabel, "gpu_instance_id", "compute_instance_id", "xid"},
+		nil)
+	exp.migXIDTimestampDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(prefix, "", "mig_xid_last_timestamp_seconds"),
+		"Unix timestamp of the most recently observed MIG-attributed XID error, as received by the exporter.",
+		[]string{uuidLabel, "gpu_instance_id", "compute_instance_id", "xid"},
 		nil)
 	exp.xidWatcherDesc = prometheus.NewDesc(
 		prometheus.BuildFQName(prefix, "", "xid_watcher_enabled"),
@@ -433,12 +507,12 @@ func newPCIeDescs(prefix string, enabled bool) (*prometheus.Desc, *prometheus.De
 
 	tx := prometheus.NewDesc(
 		prometheus.BuildFQName(prefix, "", "pcie_throughput_tx_bytes_per_second"),
-		"PCIe traffic transmitted by the GPU, sampled by the driver over a dedicated 20ms window.",
+		"PCIe traffic transmitted by the GPU in bytes per second.",
 		[]string{uuidLabel},
 		nil)
 	rx := prometheus.NewDesc(
 		prometheus.BuildFQName(prefix, "", "pcie_throughput_rx_bytes_per_second"),
-		"PCIe traffic received by the GPU, sampled by the driver over a dedicated 20ms window.",
+		"PCIe traffic received by the GPU in bytes per second.",
 		[]string{uuidLabel},
 		nil)
 
@@ -590,6 +664,88 @@ func newMIGDescs(prefix string, enabled bool) *migDescs {
 	}
 }
 
+func newFanDescs(prefix string, enabled bool) *fanDescs {
+	if !enabled {
+		return nil
+	}
+
+	fanLabels := []string{uuidLabel, "fan"}
+
+	return &fanDescs{
+		currentRatio: prometheus.NewDesc(
+			prometheus.BuildFQName(prefix, "", "fan_speed_current_ratio"),
+			"Intended operating speed of a GPU fan as a fraction of its maximum speed (0 to 1), "+
+				"as reported by the fan controller.",
+			fanLabels,
+			nil),
+		targetRatio: prometheus.NewDesc(
+			prometheus.BuildFQName(prefix, "", "fan_speed_target_ratio"),
+			"Target speed of a GPU fan as a fraction of its maximum speed (0 to 1).",
+			fanLabels,
+			nil),
+		rpm: prometheus.NewDesc(
+			prometheus.BuildFQName(prefix, "", "fan_speed_rpm"),
+			"Intended operating speed of a GPU fan in revolutions per minute, "+
+				"as reported by the fan controller.",
+			fanLabels,
+			nil),
+	}
+}
+
+func newBAR1Descs(prefix string, enabled bool) *bar1Descs {
+	if !enabled {
+		return nil
+	}
+
+	bar1Desc := func(kind, help string) *prometheus.Desc {
+		return prometheus.NewDesc(
+			prometheus.BuildFQName(prefix, "", "bar1_memory_"+kind+"_bytes"),
+			help,
+			[]string{uuidLabel},
+			nil)
+	}
+
+	return &bar1Descs{
+		total: bar1Desc("total", "Total BAR1 aperture memory of the GPU in bytes."),
+		used:  bar1Desc("used", "Used BAR1 aperture memory of the GPU in bytes."),
+		free:  bar1Desc("free", "Free BAR1 aperture memory of the GPU in bytes."),
+	}
+}
+
+func newTempThresholdDescs(prefix string, enabled bool) *tempThresholdDescs {
+	if !enabled {
+		return nil
+	}
+
+	threshDesc := func(kind, help string) *prometheus.Desc {
+		return prometheus.NewDesc(
+			prometheus.BuildFQName(prefix, "", "temperature_threshold_"+kind+"_celsius"),
+			help,
+			[]string{uuidLabel},
+			nil)
+	}
+
+	return &tempThresholdDescs{
+		shutdown:  threshDesc("shutdown", "GPU shutdown temperature threshold in degrees Celsius."),
+		slowdown:  threshDesc("slowdown", "GPU hardware slowdown temperature threshold in degrees Celsius."),
+		memoryMax: threshDesc("memory_max", "Maximum operating GPU memory temperature threshold in degrees Celsius."),
+		gpuMax:    threshDesc("gpu_max", "Maximum operating GPU die temperature threshold in degrees Celsius."),
+		acoustic:  threshDesc("acoustic", "Current acoustic temperature target of the GPU in degrees Celsius."),
+	}
+}
+
+func newPowerSourceDesc(prefix string, enabled bool) *prometheus.Desc {
+	if !enabled {
+		return nil
+	}
+
+	return prometheus.NewDesc(
+		prometheus.BuildFQName(prefix, "", "power_source"),
+		"Power source feeding the GPU (0 = AC, 1 = battery, 2 = undersized).",
+		[]string{uuidLabel},
+		nil)
+}
+
 // WithContext returns a collector that renders the same metrics but bounds
 // its collection by the given context. The HTTP handler uses it to bound each
 // scrape's collection by the scrape's own lifetime. The copy shares all
@@ -682,9 +838,27 @@ func (e *GPUExporter) describeExtras(descCh chan<- *prometheus.Desc) {
 		e.sendDesc(descCh, desc)
 	}
 
+	for _, desc := range e.fanDescs.all() {
+		e.sendDesc(descCh, desc)
+	}
+
+	for _, desc := range e.bar1Descs.all() {
+		e.sendDesc(descCh, desc)
+	}
+
+	for _, desc := range e.tempThresholdDescs.all() {
+		e.sendDesc(descCh, desc)
+	}
+
+	if e.powerSourceDesc != nil {
+		e.sendDesc(descCh, e.powerSourceDesc)
+	}
+
 	if e.xidCountDesc != nil {
 		e.sendDesc(descCh, e.xidCountDesc)
 		e.sendDesc(descCh, e.xidTimestampDesc)
+		e.sendDesc(descCh, e.migXIDCountDesc)
+		e.sendDesc(descCh, e.migXIDTimestampDesc)
 		e.sendDesc(descCh, e.xidWatcherDesc)
 	}
 }
@@ -710,6 +884,16 @@ func (e *GPUExporter) renderXIDs(metricCh chan<- prometheus.Metric) {
 		e.sendLabeledCounter(metricCh, e.xidCountDesc, float64(counter.Count), counter.UUID, xid)
 		e.sendLabeledGauge(metricCh, e.xidTimestampDesc,
 			float64(counter.LastSeen.UnixNano())/1e9, counter.UUID, xid)
+	}
+
+	for _, counter := range e.xids.MIGXIDCounts() {
+		xid := strconv.FormatUint(counter.XID, 10)
+
+		e.sendLabeledCounter(metricCh, e.migXIDCountDesc, float64(counter.Count),
+			counter.UUID, counter.GPUInstanceID, counter.ComputeInstanceID, xid)
+		e.sendLabeledGauge(metricCh, e.migXIDTimestampDesc,
+			float64(counter.LastSeen.UnixNano())/1e9,
+			counter.UUID, counter.GPUInstanceID, counter.ComputeInstanceID, xid)
 	}
 }
 
@@ -794,6 +978,60 @@ func (e *GPUExporter) renderExtras(metricCh chan<- prometheus.Metric, snapshot c
 
 		for _, instance := range snapshot.Extras.MIG {
 			e.renderMIGInstance(metricCh, instance, emittedGIs)
+		}
+	}
+
+	e.renderHardwareExtras(metricCh, snapshot.Extras)
+}
+
+//nolint:cyclop // flat per-family rendering
+func (e *GPUExporter) renderHardwareExtras(metricCh chan<- prometheus.Metric, extras collect.Extras) {
+	if e.fanDescs != nil {
+		for _, fan := range extras.Fans {
+			if fan.CurrentRatio != nil {
+				e.sendLabeledGauge(metricCh, e.fanDescs.currentRatio, *fan.CurrentRatio, fan.UUID, fan.Fan)
+			}
+
+			if fan.TargetRatio != nil {
+				e.sendLabeledGauge(metricCh, e.fanDescs.targetRatio, *fan.TargetRatio, fan.UUID, fan.Fan)
+			}
+
+			if fan.RPM != nil {
+				e.sendLabeledGauge(metricCh, e.fanDescs.rpm, float64(*fan.RPM), fan.UUID, fan.Fan)
+			}
+		}
+	}
+
+	if e.bar1Descs != nil {
+		for _, mem := range extras.BAR1 {
+			e.sendConstWithUUID(metricCh, e.bar1Descs.total, prometheus.GaugeValue, float64(mem.Total), mem.UUID)
+			e.sendConstWithUUID(metricCh, e.bar1Descs.used, prometheus.GaugeValue, float64(mem.Used), mem.UUID)
+			e.sendConstWithUUID(metricCh, e.bar1Descs.free, prometheus.GaugeValue, float64(mem.Free), mem.UUID)
+		}
+	}
+
+	if e.tempThresholdDescs != nil {
+		for _, thresh := range extras.TemperatureThresholds {
+			for _, entry := range []struct {
+				desc  *prometheus.Desc
+				value *uint32
+			}{
+				{e.tempThresholdDescs.shutdown, thresh.Shutdown},
+				{e.tempThresholdDescs.slowdown, thresh.Slowdown},
+				{e.tempThresholdDescs.memoryMax, thresh.MemoryMax},
+				{e.tempThresholdDescs.gpuMax, thresh.GPUMax},
+				{e.tempThresholdDescs.acoustic, thresh.Acoustic},
+			} {
+				if entry.value != nil {
+					e.sendConstWithUUID(metricCh, entry.desc, prometheus.GaugeValue, float64(*entry.value), thresh.UUID)
+				}
+			}
+		}
+	}
+
+	if e.powerSourceDesc != nil {
+		for _, src := range extras.PowerSources {
+			e.sendConstWithUUID(metricCh, e.powerSourceDesc, prometheus.GaugeValue, float64(src.Source), src.UUID)
 		}
 	}
 }
@@ -1187,8 +1425,16 @@ var fixedMetricNames = []string{
 	"mig_graphics_activity_ratio", "mig_sm_activity_ratio", "mig_sm_occupancy_ratio",
 	"mig_tensor_activity_ratio", "mig_dram_bandwidth_utilization_ratio",
 	"mig_pcie_throughput_tx_bytes_per_second", "mig_pcie_throughput_rx_bytes_per_second",
+	"fan_speed_current_ratio", "fan_speed_target_ratio", "fan_speed_rpm",
+	"bar1_memory_total_bytes", "bar1_memory_used_bytes", "bar1_memory_free_bytes",
+	"temperature_threshold_shutdown_celsius", "temperature_threshold_slowdown_celsius",
+	"temperature_threshold_memory_max_celsius", "temperature_threshold_gpu_max_celsius",
+	"temperature_threshold_acoustic_celsius",
+	"power_source",
 	// XID
-	"xid_errors_total", "xid_last_timestamp_seconds", "xid_watcher_enabled",
+	"xid_errors_total", "xid_last_timestamp_seconds",
+	"mig_xid_errors_total", "mig_xid_last_timestamp_seconds",
+	"xid_watcher_enabled",
 }
 
 // reservedMetricNames returns the fully-qualified names no query field may

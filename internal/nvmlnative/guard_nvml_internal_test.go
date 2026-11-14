@@ -97,7 +97,7 @@ func TestGuardedSymbolsMatchTheGuard(t *testing.T) {
 	var source []byte
 
 	for _, name := range []string{
-		"guard_nvml.go", "backend_nvml.go", "mig_nvml.go", "xid_nvml.go",
+		"guard_nvml.go", "backend_nvml.go", "extras_nvml.go", "mig_nvml.go", "xid_nvml.go",
 	} {
 		part, err := os.ReadFile(name)
 		require.NoError(t, err)

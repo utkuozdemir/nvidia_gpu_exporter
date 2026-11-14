@@ -21,12 +21,14 @@ type (
 	InforomObject       int32
 	MemoryErrorType     int32
 	MemoryLocation      int32
-	PageRetirementCause int32
-	PcieUtilCounter     int32
-	Pstates             int32
-	Return              int32
-	TemperatureSensors  int32
-	ValueType           int32
+	PageRetirementCause   int32
+	PcieUtilCounter       int32
+	PowerSource           uint32
+	Pstates               int32
+	Return                int32
+	TemperatureSensors    int32
+	TemperatureThresholds int32
+	ValueType             int32
 )
 
 const (
@@ -128,6 +130,12 @@ const (
 	TEMPERATURE_GPU     TemperatureSensors = 0
 	TEMPERATURE_GPU_MAX uint32             = 1
 
+	TEMPERATURE_THRESHOLD_SHUTDOWN      TemperatureThresholds = 0
+	TEMPERATURE_THRESHOLD_SLOWDOWN      TemperatureThresholds = 1
+	TEMPERATURE_THRESHOLD_MEM_MAX       TemperatureThresholds = 2
+	TEMPERATURE_THRESHOLD_GPU_MAX       TemperatureThresholds = 3
+	TEMPERATURE_THRESHOLD_ACOUSTIC_CURR TemperatureThresholds = 5
+
 	PCIE_UTIL_TX_BYTES PcieUtilCounter = 0
 	PCIE_UTIL_RX_BYTES PcieUtilCounter = 1
 
@@ -205,6 +213,18 @@ type C2cModeInfo_v1 struct {
 
 type BBXTimeData_v1 struct {
 	TimeRun uint32
+}
+
+type BAR1Memory struct {
+	Bar1Total uint64
+	Bar1Free  uint64
+	Bar1Used  uint64
+}
+
+type fanSpeedInfoV1 struct {
+	Version uint32
+	Fan     uint32
+	Speed   uint32
 }
 
 type temperatureV1 struct {
@@ -410,6 +430,10 @@ type rawEventData struct {
 const (
 	_ = uint(8-unsafe.Sizeof(DeviceAddressingMode{})) + uint(unsafe.Sizeof(DeviceAddressingMode{})-8)
 	_ = uint(4-unsafe.Sizeof(C2cModeInfo_v1{})) + uint(unsafe.Sizeof(C2cModeInfo_v1{})-4)
+	_ = uint(4-unsafe.Sizeof(BBXTimeData_v1{})) + uint(unsafe.Sizeof(BBXTimeData_v1{})-4)
+	_ = uint(24-unsafe.Sizeof(BAR1Memory{})) + uint(unsafe.Sizeof(BAR1Memory{})-24)
+	_ = uint(12-unsafe.Sizeof(fanSpeedInfoV1{})) + uint(unsafe.Sizeof(fanSpeedInfoV1{})-12)
+	_ = uint(12-unsafe.Sizeof(temperatureV1{})) + uint(unsafe.Sizeof(temperatureV1{})-12)
 	_ = uint(24-unsafe.Sizeof(ProcessInfo{})) + uint(unsafe.Sizeof(ProcessInfo{})-24)
 	_ = uint(32-unsafe.Sizeof(ProcessUtilizationSample{})) + uint(unsafe.Sizeof(ProcessUtilizationSample{})-32)
 	_ = uint(16-unsafe.Sizeof(processInfoV1{})) + uint(unsafe.Sizeof(processInfoV1{})-16)
@@ -492,6 +516,7 @@ type Device interface {
 	GetAccountingMode() (EnableState, Return)
 	GetAddressingMode() (DeviceAddressingMode, Return)
 	GetApplicationsClock(clockType ClockType) (uint32, Return)
+	GetBAR1MemoryInfo() (BAR1Memory, Return)
 	GetBBXTimeData_v1() (BBXTimeData_v1, Return)
 	GetC2cModeInfoV() C2cModeInfoHandler
 	GetClockInfo(clockType ClockType) (uint32, Return)
@@ -515,6 +540,7 @@ type Device interface {
 	GetEncoderUtilization() (uint32, uint32, Return)
 	GetEnforcedPowerLimit() (uint32, Return)
 	GetFanSpeed() (uint32, Return)
+	GetFanSpeed_v2(fan int) (uint32, Return)
 	GetFieldValues(values []FieldValue) Return
 	GetGpuFabricInfoV() GpuFabricInfoHandler
 	GetGpuInstanceId() (int, Return)
@@ -542,6 +568,7 @@ type Device interface {
 	GetMigDeviceHandleByIndex(index int) (Device, Return)
 	GetMigMode() (int, int, Return)
 	GetName() (string, Return)
+	GetNumFans() (int, Return)
 	GetOfaUtilization() (uint32, uint32, Return)
 	GetPcieThroughput(counter PcieUtilCounter) (uint32, Return)
 	GetPciInfo() (PciInfo, Return)
@@ -553,6 +580,7 @@ type Device interface {
 	GetPowerManagementLimit() (uint32, Return)
 	GetPowerManagementLimitConstraints() (uint32, uint32, Return)
 	GetPowerManagementMode() (EnableState, Return)
+	GetPowerSource() (PowerSource, Return)
 	GetPowerUsage() (uint32, Return)
 	GetProcessUtilization(lastSeenTimestamp uint64) ([]ProcessUtilizationSample, Return)
 	GetRemappedRows() (int, int, bool, bool, Return)
@@ -564,7 +592,9 @@ type Device interface {
 	GetSramEccErrorStatus() (EccSramErrorStatus, Return)
 	GetSupportedClocksEventReasons() (uint64, Return)
 	GetSupportedClocksThrottleReasons() (uint64, Return)
+	GetTargetFanSpeed(fan int) (int, Return)
 	GetTemperature(sensor TemperatureSensors) (uint32, Return)
+	GetTemperatureThreshold(thresholdType TemperatureThresholds) (uint32, Return)
 	GetTotalEccErrors(errorType MemoryErrorType, counterType EccCounterType) (uint64, Return)
 	GetTotalEnergyConsumption() (uint64, Return)
 	GetUtilizationRates() (Utilization, Return)
@@ -774,6 +804,28 @@ func DeviceGetTemperatureV(device Device, sensor uint32) (int32, Return) {
 	return temp.Temperature, toReturn(r1)
 }
 
+// DeviceGetFanSpeedRPM reads a fan's speed in RPM.
+func DeviceGetFanSpeedRPM(device Device, fan int) (uint32, Return) {
+	dev, ok := device.(winDevice)
+	if !ok || fan < 0 {
+		return 0, ERROR_INVALID_ARGUMENT
+	}
+
+	proc, ok := findProc("nvmlDeviceGetFanSpeedRPM")
+	if !ok {
+		return 0, ERROR_FUNCTION_NOT_FOUND
+	}
+
+	info := fanSpeedInfoV1{
+		Version: structVersion[fanSpeedInfoV1](1),
+		Fan:     uint32(fan), //nolint:gosec // checked non-negative
+	}
+
+	r1, _, _ := proc.Call(dev.handle, uintptr(unsafe.Pointer(&info)))
+
+	return info.Speed, toReturn(r1)
+}
+
 type winGpmSample struct {
 	handle uintptr
 }
@@ -907,7 +959,10 @@ func (s winEventSet) Wait(timeoutms uint32) (EventData, Return) {
 		return EventData{}, ERROR_FUNCTION_NOT_FOUND
 	}
 
-	var raw rawEventData
+	raw := rawEventData{
+		GpuInstanceId:     ^uint32(0),
+		ComputeInstanceId: ^uint32(0),
+	}
 
 	r1, _, _ := proc.Call(s.handle, uintptr(unsafe.Pointer(&raw)), uintptr(timeoutms))
 
@@ -982,6 +1037,19 @@ func (d winDevice) GetApplicationsClock(clockType ClockType) (uint32, Return) {
 	r1, _, _ := proc.Call(d.handle, uintptr(uint32(clockType)), uintptr(unsafe.Pointer(&clock))) //nolint:gosec // enum
 
 	return clock, toReturn(r1)
+}
+
+func (d winDevice) GetBAR1MemoryInfo() (BAR1Memory, Return) {
+	var mem BAR1Memory
+
+	proc, ok := findProc("nvmlDeviceGetBAR1MemoryInfo")
+	if !ok {
+		return mem, ERROR_FUNCTION_NOT_FOUND
+	}
+
+	r1, _, _ := proc.Call(d.handle, uintptr(unsafe.Pointer(&mem)))
+
+	return mem, toReturn(r1)
 }
 
 //nolint:revive // matches go-nvml Device method name
@@ -1173,6 +1241,24 @@ func (d winDevice) GetEnforcedPowerLimit() (uint32, Return) {
 
 func (d winDevice) GetFanSpeed() (uint32, Return) {
 	return d.getUint32("nvmlDeviceGetFanSpeed")
+}
+
+//nolint:revive // matches go-nvml Device method name
+func (d winDevice) GetFanSpeed_v2(fan int) (uint32, Return) {
+	if fan < 0 {
+		return 0, ERROR_INVALID_ARGUMENT
+	}
+
+	proc, ok := findProc("nvmlDeviceGetFanSpeed_v2")
+	if !ok {
+		return 0, ERROR_FUNCTION_NOT_FOUND
+	}
+
+	var speed uint32
+
+	r1, _, _ := proc.Call(d.handle, uintptr(uint32(fan)), uintptr(unsafe.Pointer(&speed)))
+
+	return speed, toReturn(r1)
 }
 
 func (d winDevice) GetFieldValues(values []FieldValue) Return {
@@ -1392,6 +1478,12 @@ func (d winDevice) GetName() (string, Return) {
 	return d.getString("nvmlDeviceGetName", deviceNameV2BufferSize)
 }
 
+func (d winDevice) GetNumFans() (int, Return) {
+	val, ret := d.getUint32("nvmlDeviceGetNumFans")
+
+	return int(val), ret
+}
+
 func (d winDevice) GetOfaUtilization() (uint32, uint32, Return) {
 	return d.getTwoUint32("nvmlDeviceGetOfaUtilization")
 }
@@ -1480,6 +1572,12 @@ func (d winDevice) GetPowerManagementMode() (EnableState, Return) {
 	val, ret := d.getUint32("nvmlDeviceGetPowerManagementMode")
 
 	return toEnableState(val), ret
+}
+
+func (d winDevice) GetPowerSource() (PowerSource, Return) {
+	val, ret := d.getUint32("nvmlDeviceGetPowerSource")
+
+	return PowerSource(val), ret
 }
 
 func (d winDevice) GetPowerUsage() (uint32, Return) {
@@ -1636,6 +1734,23 @@ func (d winDevice) GetSupportedClocksThrottleReasons() (uint64, Return) {
 	return d.getUint64("nvmlDeviceGetSupportedClocksThrottleReasons")
 }
 
+func (d winDevice) GetTargetFanSpeed(fan int) (int, Return) {
+	if fan < 0 {
+		return 0, ERROR_INVALID_ARGUMENT
+	}
+
+	proc, ok := findProc("nvmlDeviceGetTargetFanSpeed")
+	if !ok {
+		return 0, ERROR_FUNCTION_NOT_FOUND
+	}
+
+	var target uint32
+
+	r1, _, _ := proc.Call(d.handle, uintptr(uint32(fan)), uintptr(unsafe.Pointer(&target)))
+
+	return int(target), toReturn(r1)
+}
+
 func (d winDevice) GetTemperature(sensor TemperatureSensors) (uint32, Return) {
 	proc, ok := findProc("nvmlDeviceGetTemperature")
 	if !ok {
@@ -1645,6 +1760,19 @@ func (d winDevice) GetTemperature(sensor TemperatureSensors) (uint32, Return) {
 	var temp uint32
 
 	r1, _, _ := proc.Call(d.handle, uintptr(uint32(sensor)), uintptr(unsafe.Pointer(&temp))) //nolint:gosec // enum
+
+	return temp, toReturn(r1)
+}
+
+func (d winDevice) GetTemperatureThreshold(thresholdType TemperatureThresholds) (uint32, Return) {
+	proc, ok := findProc("nvmlDeviceGetTemperatureThreshold")
+	if !ok {
+		return 0, ERROR_FUNCTION_NOT_FOUND
+	}
+
+	var temp uint32
+
+	r1, _, _ := proc.Call(d.handle, uintptr(uint32(thresholdType)), uintptr(unsafe.Pointer(&temp))) //nolint:gosec // enum
 
 	return temp, toReturn(r1)
 }

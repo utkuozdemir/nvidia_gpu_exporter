@@ -292,6 +292,7 @@ func (b *Backend) collectGPM(
 	ids := []uint32{
 		gpmMetricGraphicsUtil, gpmMetricSMUtil, gpmMetricSMOccupancy,
 		gpmMetricAnyTensorUtil, gpmMetricDramBwUtil,
+		gpmMetricPcieTxPerSec, gpmMetricPcieRxPerSec,
 	}
 
 	util, ok := b.gpmSample(
@@ -314,6 +315,14 @@ func (b *Backend) collectGPM(
 			TensorActivityRatio:           util.TensorActivityRatio,
 			DRAMBandwidthUtilizationRatio: util.DRAMBandwidthUtilizationRatio,
 		})
+
+		if util.PCIeTXBytesPerSecond != nil && util.PCIeRXBytesPerSecond != nil {
+			extras.PCIe = append(extras.PCIe, collect.PCIeThroughput{
+				UUID:             uuid,
+				TXBytesPerSecond: *util.PCIeTXBytesPerSecond,
+				RXBytesPerSecond: *util.PCIeRXBytesPerSecond,
+			})
+		}
 	}
 
 	return true

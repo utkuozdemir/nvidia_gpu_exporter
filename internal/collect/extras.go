@@ -33,6 +33,50 @@ type Extras struct {
 	// GPUs with MIG mode enabled, and the demo backend synthesizes its
 	// configured topology.
 	MIG []MIGInstance
+	// Fans holds per-fan current speed ratio, target speed ratio and RPM
+	// readings on actively cooled GPUs.
+	Fans []FanReading
+	// BAR1 holds per-GPU BAR1 aperture memory usage in bytes.
+	BAR1 []BAR1Memory
+	// TemperatureThresholds holds per-GPU thermal thresholds in Celsius.
+	TemperatureThresholds []TemperatureThresholds
+	// PowerSources holds per-GPU power source states.
+	PowerSources []PowerSource
+}
+
+// FanReading is one fan's speed readings on a GPU. Each value is nil when that
+// getter is unsupported on the card or driver.
+type FanReading struct {
+	UUID         string
+	Fan          string
+	CurrentRatio *float64
+	TargetRatio  *float64
+	RPM          *uint32
+}
+
+// BAR1Memory is one GPU's BAR1 aperture memory usage in bytes.
+type BAR1Memory struct {
+	UUID  string
+	Total uint64
+	Used  uint64
+	Free  uint64
+}
+
+// TemperatureThresholds holds one GPU's thermal thresholds in degrees Celsius.
+// Unsupported thresholds on a given card or driver are nil.
+type TemperatureThresholds struct {
+	UUID      string
+	Shutdown  *uint32
+	Slowdown  *uint32
+	MemoryMax *uint32
+	GPUMax    *uint32
+	Acoustic  *uint32
+}
+
+// PowerSource is one GPU's active power source (0 = AC, 1 = battery, 2 = undersized).
+type PowerSource struct {
+	UUID   string
+	Source uint32
 }
 
 // PCIeReplayCounter is one GPU's cumulative PCIe replay and replay-rollover
@@ -97,6 +141,17 @@ type XIDCounter struct {
 	// LastSeen is when the most recent event was received by the exporter
 	// (NVML events carry no timestamp of their own).
 	LastSeen time.Time
+}
+
+// MIGXIDCounter is one (GPU, GPU instance, compute instance, XID code) tuple's
+// cumulative error-event count for MIG-attributed XID events.
+type MIGXIDCounter struct {
+	UUID              string
+	GPUInstanceID     string
+	ComputeInstanceID string
+	XID               uint64
+	Count             uint64
+	LastSeen          time.Time
 }
 
 // MIGInstance is one MIG device: a compute instance inside a GPU instance of

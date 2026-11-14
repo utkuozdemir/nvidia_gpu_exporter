@@ -510,9 +510,23 @@ func TestBackendMetricFamilyParityOnRealGPU(t *testing.T) {
 		"nvidia_smi_pcie_replays_total",
 		"nvidia_smi_pcie_replay_rollovers_total",
 		"nvidia_smi_xid_watcher_enabled",
+		"nvidia_smi_bar1_memory_",
+		"nvidia_smi_temperature_threshold_",
+		"nvidia_smi_power_source",
 	} {
 		if !hasFamilyWithPrefix(nativeFamilies, family) {
 			t.Errorf("nvml-only metric family missing from the nvml backend: %s", family)
+		}
+	}
+
+	if _, hasFans := execFamilies["nvidia_smi_fan_speed_ratio"]; hasFans {
+		for _, family := range []string{
+			"nvidia_smi_fan_speed_current_ratio",
+			"nvidia_smi_fan_speed_target_ratio",
+		} {
+			if _, ok := nativeFamilies[family]; !ok {
+				t.Errorf("nvml fan metric family missing on a GPU with fans: %s", family)
+			}
 		}
 	}
 
@@ -672,6 +686,13 @@ var nvmlOnlyFamilyPrefixes = []string{
 	"nvidia_smi_mig_tensor_activity_ratio",
 	"nvidia_smi_mig_dram_bandwidth_utilization_ratio",
 	"nvidia_smi_mig_pcie_throughput_",
+	"nvidia_smi_mig_xid_",
+	"nvidia_smi_fan_speed_current_ratio",
+	"nvidia_smi_fan_speed_target_ratio",
+	"nvidia_smi_fan_speed_rpm",
+	"nvidia_smi_bar1_memory_",
+	"nvidia_smi_temperature_threshold_",
+	"nvidia_smi_power_source",
 	"nvidia_smi_compute_app_sm_utilization_ratio",
 	"nvidia_smi_compute_app_memory_utilization_ratio",
 	"nvidia_smi_compute_app_encoder_utilization_ratio",

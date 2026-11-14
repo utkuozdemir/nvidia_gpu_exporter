@@ -673,3 +673,43 @@ func TestSynthAppUtilizationDualContext(t *testing.T) {
 	require.NotNil(t, reading.GraphicsApps[2].Utilization)
 	assert.Zero(t, reading.GraphicsApps[2].Utilization.EncoderRatio)
 }
+
+func TestDemoMIGXIDsAndHardwareExtras(t *testing.T) {
+	t.Parallel()
+
+	_, err := extrasFrom(t, "extras:\n  xids:\n    initial: [{gpu: 0, ci: 0, xid: 31, count: 1}]\n")
+	require.ErrorContains(t, err, "sets ci without gi")
+
+	backend, err := New(testSource(), "", testLogger())
+	require.NoError(t, err)
+
+	inner := func(_ context.Context) (collect.Reading, int, error) {
+		return collect.Reading{
+			Table: &nvidiasmi.Table{
+				Rows: []nvidiasmi.Row{
+					{QFieldToCells: map[nvidiasmi.QField]nvidiasmi.Cell{
+						nvidiasmi.UUIDQField: {RawValue: "GPU-00000000-0000-0000-0000-000000000000"},
+					}},
+					{QFieldToCells: map[nvidiasmi.QField]nvidiasmi.Cell{
+						nvidiasmi.UUIDQField: {RawValue: "GPU-11111111-1111-1111-1111-111111111111"},
+					}},
+				},
+			},
+		}, 0, nil
+	}
+
+	reading, _, err := backend.WrapQueryFunc(inner)(t.Context())
+	require.NoError(t, err)
+
+	assert.Len(t, reading.Extras.Fans, 4)
+	assert.Len(t, reading.Extras.BAR1, 2)
+	assert.Len(t, reading.Extras.TemperatureThresholds, 2)
+	assert.Len(t, reading.Extras.PowerSources, 2)
+
+	migXIDs := backend.MIGXIDCounts()
+	require.Len(t, migXIDs, 1)
+	assert.Equal(t, "2", migXIDs[0].GPUInstanceID)
+	assert.Equal(t, "0", migXIDs[0].ComputeInstanceID)
+	assert.Equal(t, uint64(31), migXIDs[0].XID)
+	assert.Equal(t, uint64(1), migXIDs[0].Count)
+}

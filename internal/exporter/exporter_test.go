@@ -1081,11 +1081,14 @@ func TestComputeAppIdentityLabels(t *testing.T) {
 
 // staticXIDs is a canned XIDSource.
 type staticXIDs struct {
-	counters []collect.XIDCounter
-	enabled  bool
+	counters    []collect.XIDCounter
+	migCounters []collect.MIGXIDCounter
+	enabled     bool
 }
 
 func (s *staticXIDs) XIDCounts() []collect.XIDCounter { return s.counters }
+
+func (s *staticXIDs) MIGXIDCounts() []collect.MIGXIDCounter { return s.migCounters }
 
 func (s *staticXIDs) XIDWatcherEnabled() bool { return s.enabled }
 
@@ -1159,4 +1162,97 @@ func TestXIDsSuppressedWhenOff(t *testing.T) {
 
 	assert.NotContains(t, families, "aaa_xid_errors_total")
 	assert.NotContains(t, families, "aaa_xid_last_timestamp_seconds")
+}
+
+func TestHardwareExtrasAndMIGXIDRendering(t *testing.T) {
+	t.Parallel()
+
+	curRatio := 0.38
+	tgtRatio := 0.40
+	rpm := uint32(1051)
+	shutdown := uint32(100)
+	slowdown := uint32(97)
+	gpuMax := uint32(89)
+	acoustic := uint32(84)
+
+	extras := collect.Extras{
+		Fans: []collect.FanReading{
+			{UUID: "abc", Fan: "0", CurrentRatio: &curRatio, TargetRatio: &tgtRatio, RPM: &rpm},
+		},
+		BAR1: []collect.BAR1Memory{
+			{UUID: "abc", Total: 256 << 20, Used: 38 << 20, Free: 218 << 20},
+		},
+		TemperatureThresholds: []collect.TemperatureThresholds{
+			{UUID: "abc", Shutdown: &shutdown, Slowdown: &slowdown, GPUMax: &gpuMax, Acoustic: &acoustic},
+		},
+		PowerSources: []collect.PowerSource{
+			{UUID: "abc", Source: 0},
+		},
+	}
+
+	logger := slogt.New(t)
+	resolved, err := nvidiasmi.ResolveFields(
+		t.Context(), "bbb", "fan.speed", "", 0, nvidiasmi.DefaultRunFunc, logger)
+	require.NoError(t, err)
+
+	xids := &staticXIDs{
+		migCounters: []collect.MIGXIDCounter{
+			{
+				UUID: "abc", GPUInstanceID: "2", ComputeInstanceID: "0",
+				XID: 31, Count: 1, LastSeen: time.Unix(1700000000, 500000000),
+			},
+		},
+		enabled: true,
+	}
+
+	exp := exporter.New(
+		t.Context(),
+		"aaa",
+		resolved,
+		&staticSource{snapshot: extrasSnapshot(gpuTable("GPU-ABC"), extras)},
+		exporter.Features{
+			Fans: true, BAR1: true, TemperatureThresholds: true, PowerSource: true, XIDEvents: true,
+		},
+		xids,
+		exporter.ExecExitCodeMetric,
+		logger,
+	)
+
+	families := gatherFamilies(t, exp)
+
+	fanCur := families["aaa_fan_speed_current_ratio"]
+	require.NotNil(t, fanCur)
+	assertFloat(t, 0.38, fanCur.GetMetric()[0].GetGauge().GetValue())
+	assert.Equal(t, "0", labelValue(t, fanCur.GetMetric()[0], "fan"))
+
+	fanTgt := families["aaa_fan_speed_target_ratio"]
+	require.NotNil(t, fanTgt)
+	assertFloat(t, 0.40, fanTgt.GetMetric()[0].GetGauge().GetValue())
+
+	fanRPM := families["aaa_fan_speed_rpm"]
+	require.NotNil(t, fanRPM)
+	assertFloat(t, 1051, fanRPM.GetMetric()[0].GetGauge().GetValue())
+
+	assertFloat(t, float64(256<<20), families["aaa_bar1_memory_total_bytes"].GetMetric()[0].GetGauge().GetValue())
+	assertFloat(t, float64(38<<20), families["aaa_bar1_memory_used_bytes"].GetMetric()[0].GetGauge().GetValue())
+	assertFloat(t, float64(218<<20), families["aaa_bar1_memory_free_bytes"].GetMetric()[0].GetGauge().GetValue())
+
+	assertFloat(t, 100, families["aaa_temperature_threshold_shutdown_celsius"].GetMetric()[0].GetGauge().GetValue())
+	assertFloat(t, 97, families["aaa_temperature_threshold_slowdown_celsius"].GetMetric()[0].GetGauge().GetValue())
+	assert.NotContains(t, families, "aaa_temperature_threshold_memory_max_celsius")
+	assertFloat(t, 89, families["aaa_temperature_threshold_gpu_max_celsius"].GetMetric()[0].GetGauge().GetValue())
+	assertFloat(t, 84, families["aaa_temperature_threshold_acoustic_celsius"].GetMetric()[0].GetGauge().GetValue())
+
+	assertFloat(t, 0, families["aaa_power_source"].GetMetric()[0].GetGauge().GetValue())
+
+	migXID := families["aaa_mig_xid_errors_total"]
+	require.NotNil(t, migXID)
+	assertFloat(t, 1, migXID.GetMetric()[0].GetCounter().GetValue())
+	assert.Equal(t, "2", labelValue(t, migXID.GetMetric()[0], "gpu_instance_id"))
+	assert.Equal(t, "0", labelValue(t, migXID.GetMetric()[0], "compute_instance_id"))
+	assert.Equal(t, "31", labelValue(t, migXID.GetMetric()[0], "xid"))
+
+	migTS := families["aaa_mig_xid_last_timestamp_seconds"]
+	require.NotNil(t, migTS)
+	assertFloat(t, 1700000000.5, migTS.GetMetric()[0].GetGauge().GetValue())
 }

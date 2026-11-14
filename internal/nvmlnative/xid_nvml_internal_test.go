@@ -131,9 +131,16 @@ func TestXIDWatcherCountsEvents(t *testing.T) {
 	backend, err := newWithAPI(api, slogt.New(t))
 	require.NoError(t, err)
 
-	xid.push(nvml.EventData{Device: dev, EventType: nvml.EventTypeXidCriticalError, EventData: 79})
-	xid.push(nvml.EventData{Device: dev, EventType: nvml.EventTypeXidCriticalError, EventData: 79})
-	xid.push(nvml.EventData{Device: dev, EventType: nvml.EventTypeXidCriticalError, EventData: 31})
+	xid.push(nvml.EventData{
+		Device: dev, EventType: nvml.EventTypeXidCriticalError, EventData: 79, GpuInstanceId: migInvalidID,
+	})
+	xid.push(nvml.EventData{
+		Device: dev, EventType: nvml.EventTypeXidCriticalError, EventData: 79, GpuInstanceId: migInvalidID,
+	})
+	xid.push(nvml.EventData{
+		Device: dev, EventType: nvml.EventTypeXidCriticalError, EventData: 31,
+		GpuInstanceId: 2, ComputeInstanceId: 0,
+	})
 
 	cancel, wg := startWatcher(t, backend)
 
@@ -150,6 +157,14 @@ func TestXIDWatcherCountsEvents(t *testing.T) {
 	assert.Equal(t, uint64(79), counts[1].XID)
 	assert.Equal(t, uint64(2), counts[1].Count)
 	assert.False(t, counts[0].LastSeen.IsZero())
+
+	migCounts := backend.MIGXIDCounts()
+	require.Len(t, migCounts, 1)
+	assert.Equal(t, "11111111-2222-3333-4444-555555555555", migCounts[0].UUID)
+	assert.Equal(t, "2", migCounts[0].GPUInstanceID)
+	assert.Equal(t, "0", migCounts[0].ComputeInstanceID)
+	assert.Equal(t, uint64(31), migCounts[0].XID)
+	assert.Equal(t, uint64(1), migCounts[0].Count)
 
 	cancel()
 	wg.Wait()

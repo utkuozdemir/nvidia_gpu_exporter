@@ -326,12 +326,25 @@ func (b *Backend) tickXIDs(uuids []string, extras *extrasConfig, now time.Time) 
 		b.nextXIDAt = now.Add(b.jitteredInterval(interval))
 	}
 
+	migByGPU := map[int][]migInstanceConfig{}
+	for _, gpu := range extras.MIG {
+		migByGPU[gpu.GPU] = gpu.Instances
+	}
+
 	// catch up missed slots, bounded so a long pause cannot burst
 	for fired := 0; fired < 10 && now.After(b.nextXIDAt); fired++ {
-		uuid := uuids[b.rng.src.Intn(len(uuids))]
+		gpuIdx := b.rng.src.Intn(len(uuids))
+		uuid := uuids[gpuIdx]
 		code := extras.XIDs.Codes[b.rng.src.Intn(len(extras.XIDs.Codes))]
 
 		b.bumpXID(uuid, code, 1, b.nextXIDAt)
+
+		if instances := migByGPU[gpuIdx]; len(instances) > 0 {
+			inst := instances[int(code)%len(instances)]
+			ci := int(code) % max(inst.CIs, 1)
+			b.bumpMIGXID(uuid, strconv.Itoa(inst.GI), strconv.Itoa(ci), code, 1, b.nextXIDAt)
+		}
+
 		b.nextXIDAt = b.nextXIDAt.Add(b.jitteredInterval(interval))
 	}
 
@@ -357,6 +370,15 @@ func (b *Backend) seedInitialXIDs(uuids []string, extras *extrasConfig, now time
 		}
 
 		b.bumpXID(uuids[event.GPU], event.XID, event.Count, now)
+
+		if event.GI != nil {
+			ci := ""
+			if event.CI != nil {
+				ci = strconv.Itoa(*event.CI)
+			}
+
+			b.bumpMIGXID(uuids[event.GPU], strconv.Itoa(*event.GI), ci, event.XID, event.Count, now)
+		}
 	}
 }
 
@@ -377,6 +399,28 @@ func (b *Backend) bumpXID(uuid string, xid, count uint64, at time.Time) {
 	if stat == nil {
 		stat = &xidStat{}
 		perGPU[xid] = stat
+	}
+
+	stat.count += count
+	stat.last = at
+}
+
+func (b *Backend) bumpMIGXID(uuid, gi, ci string, xid, count uint64, at time.Time) {
+	if b.migXIDs == nil {
+		b.migXIDs = map[migXIDKey]*xidStat{}
+	}
+
+	key := migXIDKey{
+		uuid:              uuid,
+		gpuInstanceID:     gi,
+		computeInstanceID: ci,
+		xid:               xid,
+	}
+
+	stat := b.migXIDs[key]
+	if stat == nil {
+		stat = &xidStat{}
+		b.migXIDs[key] = stat
 	}
 
 	stat.count += count
@@ -407,6 +451,24 @@ func sortXIDCounters(counters []collect.XIDCounter) {
 	sort.Slice(counters, func(i, j int) bool {
 		if counters[i].UUID != counters[j].UUID {
 			return counters[i].UUID < counters[j].UUID
+		}
+
+		return counters[i].XID < counters[j].XID
+	})
+}
+
+func sortMIGXIDCounters(counters []collect.MIGXIDCounter) {
+	sort.Slice(counters, func(i, j int) bool {
+		if counters[i].UUID != counters[j].UUID {
+			return counters[i].UUID < counters[j].UUID
+		}
+
+		if counters[i].GPUInstanceID != counters[j].GPUInstanceID {
+			return counters[i].GPUInstanceID < counters[j].GPUInstanceID
+		}
+
+		if counters[i].ComputeInstanceID != counters[j].ComputeInstanceID {
+			return counters[i].ComputeInstanceID < counters[j].ComputeInstanceID
 		}
 
 		return counters[i].XID < counters[j].XID
@@ -584,4 +646,72 @@ func pidSlot(pid string, slots int) int {
 	sum := sha256.Sum256([]byte(pid))
 
 	return int(sum[0]) % slots
+}
+
+const demoFansPerGPU = 2
+
+func (b *Backend) synthFans(uuids []string, reading *collect.Reading) {
+	for _, uuid := range uuids {
+		for fan := range demoFansPerGPU {
+			current := b.rng.draw(rangeCfg{Min: 0.32, Max: 0.58})
+			target := b.rng.draw(rangeCfg{Min: 0.35, Max: 0.58})
+			rpm := uint32(900 + current*2200)
+
+			reading.Extras.Fans = append(reading.Extras.Fans, collect.FanReading{
+				UUID:         uuid,
+				Fan:          strconv.Itoa(fan),
+				CurrentRatio: &current,
+				TargetRatio:  &target,
+				RPM:          &rpm,
+			})
+		}
+	}
+}
+
+func (b *Backend) synthBAR1(uuids []string, reading *collect.Reading) {
+	const total = uint64(256) << 30
+
+	for _, uuid := range uuids {
+		used := uint64(b.rng.draw(rangeCfg{Min: 0.08, Max: 0.16}) * float64(total))
+
+		reading.Extras.BAR1 = append(reading.Extras.BAR1, collect.BAR1Memory{
+			UUID:  uuid,
+			Total: total,
+			Used:  used,
+			Free:  total - used,
+		})
+	}
+}
+
+func synthTemperatureThresholds(uuids []string, reading *collect.Reading) {
+	var (
+		shutdown  uint32 = 95
+		slowdown  uint32 = 89
+		memoryMax uint32 = 95
+		gpuMax    uint32 = 87
+		acoustic  uint32 = 83
+	)
+
+	for _, uuid := range uuids {
+		reading.Extras.TemperatureThresholds = append(
+			reading.Extras.TemperatureThresholds,
+			collect.TemperatureThresholds{
+				UUID:      uuid,
+				Shutdown:  &shutdown,
+				Slowdown:  &slowdown,
+				MemoryMax: &memoryMax,
+				GPUMax:    &gpuMax,
+				Acoustic:  &acoustic,
+			},
+		)
+	}
+}
+
+func synthPowerSources(uuids []string, reading *collect.Reading) {
+	for _, uuid := range uuids {
+		reading.Extras.PowerSources = append(reading.Extras.PowerSources, collect.PowerSource{
+			UUID:   uuid,
+			Source: 0,
+		})
+	}
 }

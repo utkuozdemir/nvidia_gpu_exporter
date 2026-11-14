@@ -38,6 +38,7 @@ var wallClockFamilies = map[string]bool{
 	"nvidia_smi_last_collect_duration_seconds":          true,
 	"nvidia_smi_last_collect_success_timestamp_seconds": true,
 	"nvidia_smi_xid_last_timestamp_seconds":             true,
+	"nvidia_smi_mig_xid_last_timestamp_seconds":         true,
 }
 
 // fakeBin is the fake nvidia-smi binary, built once for the whole suite.
@@ -1039,6 +1040,20 @@ func TestDemoBackendDefaultConfig(t *testing.T) {
 		"nvidia_smi_mig_memory_used_bytes",
 		"nvidia_smi_xid_errors_total",
 		"nvidia_smi_xid_last_timestamp_seconds",
+		"nvidia_smi_mig_xid_errors_total",
+		"nvidia_smi_mig_xid_last_timestamp_seconds",
+		"nvidia_smi_fan_speed_current_ratio",
+		"nvidia_smi_fan_speed_target_ratio",
+		"nvidia_smi_fan_speed_rpm",
+		"nvidia_smi_bar1_memory_total_bytes",
+		"nvidia_smi_bar1_memory_used_bytes",
+		"nvidia_smi_bar1_memory_free_bytes",
+		"nvidia_smi_temperature_threshold_shutdown_celsius",
+		"nvidia_smi_temperature_threshold_slowdown_celsius",
+		"nvidia_smi_temperature_threshold_memory_max_celsius",
+		"nvidia_smi_temperature_threshold_gpu_max_celsius",
+		"nvidia_smi_temperature_threshold_acoustic_celsius",
+		"nvidia_smi_power_source",
 	} {
 		assert.Contains(t, first, family+"{", "family %s must be served by the built-in demo config", family)
 	}

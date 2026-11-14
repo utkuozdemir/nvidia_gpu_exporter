@@ -18,6 +18,14 @@ typedef struct {
 } exporterNvmlTemperatureV1;
 
 extern int nvmlDeviceGetTemperatureV(void *device, exporterNvmlTemperatureV1 *temperature);
+
+typedef struct {
+	uint32_t version;
+	uint32_t fan;
+	uint32_t speed;
+} exporterNvmlFanSpeedInfoV1;
+
+extern int nvmlDeviceGetFanSpeedRPM(void *device, exporterNvmlFanSpeedInfoV1 *fanSpeed);
 */
 import "C"
 
@@ -30,6 +38,7 @@ import (
 )
 
 type (
+	BAR1Memory                 = gonvml.BAR1Memory
 	BBXTimeData_v1             = gonvml.BBXTimeData_v1
 	C2cModeInfo_v1             = gonvml.C2cModeInfo_v1
 	ClockType                  = gonvml.ClockType
@@ -62,6 +71,7 @@ type (
 	PciInfo                    = gonvml.PciInfo
 	PciInfoExt                 = gonvml.PciInfoExt
 	PlatformInfo               = gonvml.PlatformInfo
+	PowerSource                = gonvml.PowerSource
 	ProcessInfo                = gonvml.ProcessInfo
 	ProcessUtilizationSample   = gonvml.ProcessUtilizationSample
 	Pstates                    = gonvml.Pstates
@@ -69,6 +79,7 @@ type (
 	Return                     = gonvml.Return
 	RowRemapperHistogramValues = gonvml.RowRemapperHistogramValues
 	TemperatureSensors         = gonvml.TemperatureSensors
+	TemperatureThresholds      = gonvml.TemperatureThresholds
 	Utilization                = gonvml.Utilization
 )
 
@@ -155,6 +166,12 @@ const (
 	TEMPERATURE_GPU = gonvml.TEMPERATURE_GPU
 	// TEMPERATURE_GPU_MAX postdates go-nvml v0.13.3-1's nvml.h (checked against nvidia-smi 620.70.06).
 	TEMPERATURE_GPU_MAX = uint32(1)
+
+	TEMPERATURE_THRESHOLD_SHUTDOWN      = gonvml.TEMPERATURE_THRESHOLD_SHUTDOWN
+	TEMPERATURE_THRESHOLD_SLOWDOWN      = gonvml.TEMPERATURE_THRESHOLD_SLOWDOWN
+	TEMPERATURE_THRESHOLD_MEM_MAX       = gonvml.TEMPERATURE_THRESHOLD_MEM_MAX
+	TEMPERATURE_THRESHOLD_GPU_MAX       = gonvml.TEMPERATURE_THRESHOLD_GPU_MAX
+	TEMPERATURE_THRESHOLD_ACOUSTIC_CURR = gonvml.TEMPERATURE_THRESHOLD_ACOUSTIC_CURR
 
 	VALUE_TYPE_DOUBLE             = gonvml.VALUE_TYPE_DOUBLE
 	VALUE_TYPE_SIGNED_INT         = gonvml.VALUE_TYPE_SIGNED_INT
@@ -249,4 +266,22 @@ func DeviceGetTemperatureV(device Device, sensor uint32) (int32, Return) {
 	ret := Return(C.nvmlDeviceGetTemperatureV(handle, &temp))
 
 	return int32(temp.temperature), ret
+}
+
+// DeviceGetFanSpeedRPM reads a fan's speed in RPM. go-nvml's GetFanSpeedRPM
+// leaves Fan at 0, so per-fan queries require a direct call.
+func DeviceGetFanSpeedRPM(device Device, fan int) (uint32, Return) {
+	handle, ok := rawDeviceHandle(device)
+	if !ok || fan < 0 {
+		return 0, ERROR_INVALID_ARGUMENT
+	}
+
+	var info C.exporterNvmlFanSpeedInfoV1
+
+	info.version = C.uint32_t(uint32(unsafe.Sizeof(info)) | (1 << 24)) //nolint:gosec // fixed C struct size
+	info.fan = C.uint32_t(fan)
+
+	ret := Return(C.nvmlDeviceGetFanSpeedRPM(handle, &info))
+
+	return uint32(info.speed), ret
 }

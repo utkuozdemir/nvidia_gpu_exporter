@@ -669,6 +669,8 @@ func TestWholeGPUGPMCrossCycle(t *testing.T) {
 		gpmMetricSMOccupancy:   45.0,
 		gpmMetricAnyTensorUtil: 30.0,
 		gpmMetricDramBwUtil:    52.0,
+		gpmMetricPcieTxPerSec:  1200,
+		gpmMetricPcieRxPerSec:  2400,
 	}}
 
 	api := fake.api()
@@ -686,14 +688,22 @@ func TestWholeGPUGPMCrossCycle(t *testing.T) {
 	reading, _, err := query(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, reading.Extras.GPM)
+	assert.Empty(t, reading.Extras.PCIe)
 	assert.Equal(t, 1, gpm.live())
 
-	// second cycle diffs against the retained sample
+	// second cycle diffs against the retained sample and skips GetPcieThroughput
+	// even when PCIeThroughput is also requested (no GetPcieThroughputFunc stub)
 	current = current.Add(5 * time.Second)
+	queryWithPCIe := backend.QueryFunc(
+		resolveFields(t, "power.draw"), CollectOptions{GPM: true, PCIeThroughput: true},
+	)
 
-	reading, _, err = query(t.Context())
+	reading, _, err = queryWithPCIe(t.Context())
 	require.NoError(t, err)
 	require.Len(t, reading.Extras.GPM, 1)
+	require.Len(t, reading.Extras.PCIe, 1)
+	assert.InDelta(t, 1200*gpmMibMultiplier, reading.Extras.PCIe[0].TXBytesPerSecond, 1e-9)
+	assert.InDelta(t, 2400*gpmMibMultiplier, reading.Extras.PCIe[0].RXBytesPerSecond, 1e-9)
 
 	util := reading.Extras.GPM[0]
 	assert.Equal(t, "11111111-2222-3333-4444-555555555555", util.UUID)

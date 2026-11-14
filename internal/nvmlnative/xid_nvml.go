@@ -29,11 +29,19 @@ const (
 // goroutine, read at scrape time. It has its own lock because it is the only
 // state shared between the watcher and the scrape path.
 type xidAccumulator struct {
-	mu    sync.Mutex
-	stats map[string]map[uint64]*xidStat
+	mu       sync.Mutex
+	stats    map[string]map[uint64]*xidStat
+	migStats map[migXIDKey]*xidStat
 	// waitWarned makes a persistent event-wait failure visible exactly
 	// once, alongside the accumulator because it shares the same lock.
 	waitWarned bool
+}
+
+type migXIDKey struct {
+	uuid              string
+	gpuInstanceID     string
+	computeInstanceID string
+	xid               uint64
 }
 
 // xidStat is one (GPU, XID code) pair's running state.
@@ -61,6 +69,32 @@ func (a *xidAccumulator) bump(uuid string, xid uint64, at time.Time) {
 	if stat == nil {
 		stat = &xidStat{}
 		perGPU[xid] = stat
+	}
+
+	stat.count++
+	stat.last = at
+}
+
+// bumpMIG records one MIG-attributed XID event alongside the parent GPU count.
+func (a *xidAccumulator) bumpMIG(uuid, gi, ci string, xid uint64, at time.Time) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.migStats == nil {
+		a.migStats = map[migXIDKey]*xidStat{}
+	}
+
+	key := migXIDKey{
+		uuid:              uuid,
+		gpuInstanceID:     gi,
+		computeInstanceID: ci,
+		xid:               xid,
+	}
+
+	stat := a.migStats[key]
+	if stat == nil {
+		stat = &xidStat{}
+		a.migStats[key] = stat
 	}
 
 	stat.count++
@@ -96,11 +130,54 @@ func (a *xidAccumulator) counts() []collect.XIDCounter {
 	return counters
 }
 
+// migCounts snapshots the accumulated MIG-attributed XID state, sorted for
+// deterministic output.
+func (a *xidAccumulator) migCounts() []collect.MIGXIDCounter {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	var counters []collect.MIGXIDCounter
+
+	for key, stat := range a.migStats {
+		counters = append(counters, collect.MIGXIDCounter{
+			UUID:              key.uuid,
+			GPUInstanceID:     key.gpuInstanceID,
+			ComputeInstanceID: key.computeInstanceID,
+			XID:               key.xid,
+			Count:             stat.count,
+			LastSeen:          stat.last,
+		})
+	}
+
+	sort.Slice(counters, func(i, j int) bool {
+		if counters[i].UUID != counters[j].UUID {
+			return counters[i].UUID < counters[j].UUID
+		}
+
+		if counters[i].GPUInstanceID != counters[j].GPUInstanceID {
+			return counters[i].GPUInstanceID < counters[j].GPUInstanceID
+		}
+
+		if counters[i].ComputeInstanceID != counters[j].ComputeInstanceID {
+			return counters[i].ComputeInstanceID < counters[j].ComputeInstanceID
+		}
+
+		return counters[i].XID < counters[j].XID
+	})
+
+	return counters
+}
+
 // XIDCounts serves the accumulated XID error counts to the exporter. Safe
 // for concurrent use, and independent of the collection pipeline by design, so
 // the counters stay visible while collections fail.
 func (b *Backend) XIDCounts() []collect.XIDCounter {
 	return b.xids.counts()
+}
+
+// MIGXIDCounts serves the accumulated MIG-attributed XID error counts.
+func (b *Backend) MIGXIDCounts() []collect.MIGXIDCounter {
+	return b.xids.migCounts()
 }
 
 // XIDWatcherEnabled reports whether the XID event watcher currently holds an
@@ -360,7 +437,18 @@ func (b *Backend) recordXID(uuids map[nvml.Device]string, data nvml.EventData) {
 		uuid = "unknown"
 	}
 
-	b.xids.bump(uuid, data.EventData, b.now())
+	now := b.now()
+	b.xids.bump(uuid, data.EventData, now)
+
+	if b.avail.Load().has("nvmlEventSetWait_v2") && data.GpuInstanceId != migInvalidID {
+		b.xids.bumpMIG(
+			uuid,
+			migAppID(data.GpuInstanceId),
+			migAppID(data.ComputeInstanceId),
+			data.EventData,
+			now,
+		)
+	}
 
 	b.logger.Warn("observed a GPU XID error", "uuid", uuid, "xid", data.EventData)
 }

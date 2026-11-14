@@ -63,6 +63,8 @@ type xidConfig struct {
 // xidEventConfig is one pre-seeded event batch.
 type xidEventConfig struct {
 	GPU   int    `yaml:"gpu"`
+	GI    *int   `yaml:"gi"`
+	CI    *int   `yaml:"ci"`
 	XID   uint64 `yaml:"xid"`
 	Count uint64 `yaml:"count"`
 }
@@ -189,6 +191,18 @@ func (c *extrasConfig) validateXIDs() error {
 	for _, event := range c.XIDs.Initial {
 		if event.GPU < 0 {
 			return fmt.Errorf("initial xid event has a negative gpu index %d", event.GPU)
+		}
+
+		if event.CI != nil && event.GI == nil {
+			return errors.New("initial xid event sets ci without gi")
+		}
+
+		if event.GI != nil && *event.GI < 0 {
+			return fmt.Errorf("initial xid event has a negative gi %d", *event.GI)
+		}
+
+		if event.CI != nil && *event.CI < 0 {
+			return fmt.Errorf("initial xid event has a negative ci %d", *event.CI)
 		}
 	}
 
