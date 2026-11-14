@@ -6,10 +6,10 @@
 // nvidia-smi byte-for-byte; they were verified against a live H100 (driver
 // 590.48.01) via the diff harness in _work/nvml-experiment.
 //
-// Fields nvidia-smi knows that have no verified NVML mapping yet (vGPU
+// Fields nvidia-smi knows that have no checked NVML mapping yet (vGPU
 // capabilities, Blackwell power smoothing, GB200 module power, kmd_version,
-// pcie.link.gen.hostmax, gpu_uptime) are recorded in deferredFields and
-// omitted from this backend's vocabulary until a mapping is added.
+// pcie.link.gen.hostmax) are recorded in deferredFields and omitted from this
+// backend's vocabulary until a mapping is added.
 package nvmlnative
 
 import (
@@ -63,6 +63,8 @@ var fieldOrder = []nvidiasmi.QField{
 	"inforom.ecc",
 	"inforom.pwr",
 	"inforom.checksum_validation",
+	"reset_status.reset_required",
+	"reset_status.drain_and_reset_recommended",
 	"gpu_recovery_action",
 	"gom.current",
 	"gom.pending",
@@ -167,6 +169,7 @@ var fieldOrder = []nvidiasmi.QField{
 	"temperature.gpu",
 	"temperature.gpu.tlimit",
 	"temperature.memory",
+	"temperature.gpu_max",
 	"power.management",
 	"power.draw",
 	"power.draw.average",
@@ -208,6 +211,8 @@ var fieldOrder = []nvidiasmi.QField{
 	"platform.module_id",
 	"platform.gpu_fabric_guid",
 	"hostname",
+	"bbx.time_run",
+	"gpu_uptime",
 }
 
 // catalogRFields maps every catalogued query field to the returned-header
@@ -248,9 +253,11 @@ var catalogRFields = map[nvidiasmi.QField]nvidiasmi.RField{
 	"inforom.img":                    "inforom.img",
 	"inforom.oem":                    "inforom.oem",
 	"inforom.ecc":                    "inforom.ecc",
-	"inforom.pwr":                    "inforom.pwr",
-	"inforom.checksum_validation":    "inforom.checksum_validation",
-	"gpu_recovery_action":            "gpu_recovery_action",
+	"inforom.pwr":                              "inforom.pwr",
+	"inforom.checksum_validation":              "inforom.checksum_validation",
+	"reset_status.reset_required":              "reset_status.reset_required",
+	"reset_status.drain_and_reset_recommended": "reset_status.drain_and_reset_recommended",
+	"gpu_recovery_action":                      "gpu_recovery_action",
 	"gom.current":                    "gom.current",
 	"gom.pending":                    "gom.pending",
 	"fan.speed":                      "fan.speed [%]",
@@ -354,6 +361,7 @@ var catalogRFields = map[nvidiasmi.QField]nvidiasmi.RField{
 	"temperature.gpu":                                         "temperature.gpu",
 	"temperature.gpu.tlimit":                                  "temperature.gpu.tlimit",
 	"temperature.memory":                                      "temperature.memory",
+	"temperature.gpu_max":                                     "temperature.gpu_max",
 	"power.management":                                        "power.management",
 	"power.draw":                                              "power.draw [W]",
 	"power.draw.average":                                      "power.draw.average [W]",
@@ -395,6 +403,8 @@ var catalogRFields = map[nvidiasmi.QField]nvidiasmi.RField{
 	"platform.module_id":                                      "platform.module_id",
 	"platform.gpu_fabric_guid":                                "platform.gpu_fabric_guid",
 	"hostname":                                                "hostname",
+	"bbx.time_run":                                            "bbx.time_run [seconds]",
+	"gpu_uptime":                                              "gpu_uptime [seconds]",
 	"pci.baseClass":                                           "pci.baseClass",
 	"pci.subClass":                                            "pci.subClass",
 }
@@ -499,14 +509,13 @@ func Resolve(
 var deferredFields = map[nvidiasmi.QField]bool{
 	"kmd_version":           true, // duplicates driver_version (already on gpu_info) and returns a version string
 	"pcie.link.gen.hostmax": true, // read via NVML's private export table, no public API or field ID
-	"gpu_uptime":            true, // multi-unit duration text, not parsed as a number by exec either
 }
 
 // deferredFieldPrefixes covers whole deferred families (vGPU capabilities,
 // Blackwell power smoothing, GB200 module power, fabric health...).
 var deferredFieldPrefixes = []string{
 	"vgpu_", "module.power.", "module.enforced.", "gpu.base.", "power_smoothing.",
-	"bbx.", "fabric.health.", "remapped_banks.",
+	"fabric.health.", "remapped_banks.",
 }
 
 // IsDeferredField reports whether an unknown field is a recorded, conscious

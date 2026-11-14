@@ -17,12 +17,11 @@ import (
 )
 
 // TestCatalogDriftAgainstCaptures checks the catalog against every embedded
-// Linux and Windows capture, so a newly contributed capture immediately
-// reveals driver drift. The newest capture on each OS (by driver version)
-// carries the hard assertions: a rename, removal, header change, or a new
-// field with real values fails the build with a message saying what to fix.
-// Older captures only verify the headers they share with the catalog and
-// report the rest, since old drivers legitimately lack newer fields.
+// Linux, Windows, and FreeBSD capture, so a newly contributed capture
+// immediately reveals driver drift. Every capture fails on header mismatches
+// or uncatalogued fields with real values (unless recorded in deferredFields).
+// The newest Linux and Windows captures additionally check that no catalog
+// field silently disappeared from nvidia-smi.
 func TestCatalogDriftAgainstCaptures(t *testing.T) {
 	t.Parallel()
 
@@ -32,15 +31,18 @@ func TestCatalogDriftAgainstCaptures(t *testing.T) {
 	windowsNames := captureNamesWithPrefix(t, "windows-")
 	require.NotEmpty(t, windowsNames)
 
+	freebsdNames := captureNamesWithPrefix(t, "freebsd-")
+
 	maxLinuxVersion := maxDriverVersion(t, linuxNames)
 	maxWindowsVersion := maxDriverVersion(t, windowsNames)
 	t.Logf("newest drivers (hard assertions): linux=%v windows=%v", maxLinuxVersion, maxWindowsVersion)
 
 	aliasExercised := false
 
-	names := make([]string, 0, len(linuxNames)+len(windowsNames))
+	names := make([]string, 0, len(linuxNames)+len(windowsNames)+len(freebsdNames))
 	names = append(names, linuxNames...)
 	names = append(names, windowsNames...)
+	names = append(names, freebsdNames...)
 
 	for _, name := range names {
 		version := versionComponents(t, driverVersionFromCaptureName(t, name))
@@ -48,12 +50,14 @@ func TestCatalogDriftAgainstCaptures(t *testing.T) {
 			aliasExercised = true
 		}
 
-		maxVersion := maxLinuxVersion
-		if strings.HasPrefix(name, "windows-") {
-			maxVersion = maxWindowsVersion
-		}
+		isNewest := false
 
-		isNewest := !versionLess(version, maxVersion)
+		switch {
+		case strings.HasPrefix(name, "linux-"):
+			isNewest = !versionLess(version, maxLinuxVersion)
+		case strings.HasPrefix(name, "windows-"):
+			isNewest = !versionLess(version, maxWindowsVersion)
+		}
 
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -108,10 +112,10 @@ func checkCaptureDrift(t *testing.T, name string, isNewest bool) {
 		checkCatalogFieldsPresent(t, name, vocabulary, query.qFields)
 	}
 
-	// rule 3: unknown fields. On the newest capture a field with a real
-	// value fails: the exec backend would export it and this backend cannot.
-	// Absent or consciously deferred fields are reported for visibility.
-	var unknownAbsent, unknownReal, unknownDeferred []string
+	// rule 3: unknown fields. On every capture a field with a real value
+	// fails: the exec backend exports it on that driver and this backend must
+	// either serve it too or record an explicit deferral.
+	var unknownAbsent, unknownDeferred []string
 
 	for cellIdx, qField := range query.qFields {
 		if _, inCatalog := vocabulary[qField]; inCatalog {
@@ -123,14 +127,12 @@ func checkCaptureDrift(t *testing.T, name string, isNewest bool) {
 			unknownDeferred = append(unknownDeferred, string(qField))
 		case isAbsentCell(query.values[cellIdx]):
 			unknownAbsent = append(unknownAbsent, string(qField))
-		case isNewest:
+		default:
 			t.Errorf("driver advertises a field with real values that the catalog does not serve\n"+
 				"  capture: %s\n  field:   %s\n  value:   %q\n"+
 				"  fix: add it to the catalog and collector in internal/nvmlnative "+
 				"(catalog.go, backend_nvml.go), or record the deferral in deferredFields",
 				name, qField, query.values[cellIdx])
-		default:
-			unknownReal = append(unknownReal, string(qField))
 		}
 	}
 
@@ -142,12 +144,6 @@ func checkCaptureDrift(t *testing.T, name string, isNewest bool) {
 	if len(unknownAbsent) > 0 {
 		t.Logf("%s: %d advertised fields are not in the catalog (absent on this hardware): %s",
 			name, len(unknownAbsent), strings.Join(unknownAbsent, ", "))
-	}
-
-	if len(unknownReal) > 0 {
-		t.Logf("%s: %d advertised fields with REAL values are not in the catalog "+
-			"(this older driver predates the hard assertion; the newest capture governs): %s",
-			name, len(unknownReal), strings.Join(unknownReal, ", "))
 	}
 
 	if isNewest {
@@ -184,7 +180,7 @@ func checkCatalogFieldsPresent(
 	}
 
 	for catalogField := range vocabulary {
-		if isWindowsNVMLOnlyField(name, catalogField) {
+		if isCLIOmittedNVMLField(name, catalogField) {
 			continue
 		}
 
@@ -192,18 +188,25 @@ func checkCatalogFieldsPresent(
 			t.Errorf("catalog field missing from the newest driver (rename or CLI removal?)\n"+
 				"  capture: %s\n  field:   %s\n"+
 				"  fix: if renamed, add an alias in internal/nvmlnative/catalog.go (throttleAliases pattern), "+
-				"or if only the CLI dropped it while NVML still serves it, exempt it in isWindowsNVMLOnlyField",
+				"or if only the CLI dropped it while NVML still serves it, exempt it in isCLIOmittedNVMLField",
 				name, catalogField)
 		}
 	}
 }
 
-func isWindowsNVMLOnlyField(captureName string, field nvidiasmi.QField) bool {
+func isCLIOmittedNVMLField(captureName string, field nvidiasmi.QField) bool {
 	// Windows nvidia-smi omits pci.baseClass and pci.subClass from
 	// --help-query-gpu even though nvml.dll serves them via
 	// nvmlDeviceGetPciInfoExt.
-	return strings.HasPrefix(captureName, "windows-") &&
-		(field == "pci.baseClass" || field == "pci.subClass")
+	if strings.HasPrefix(captureName, "windows-") &&
+		(field == "pci.baseClass" || field == "pci.subClass") {
+		return true
+	}
+
+	// R570+ nvidia-smi dropped reset_status.* from --help-query-gpu when
+	// introducing gpu_recovery_action, while NVML still serves
+	// FI_DEV_RESET_STATUS and FI_DEV_DRAIN_AND_RESET_STATUS.
+	return field == "reset_status.reset_required" || field == "reset_status.drain_and_reset_recommended"
 }
 
 // isAbsentCell reports whether a captured cell value is one of the absent

@@ -31,9 +31,11 @@ type nvmlAPI struct {
 	deviceCount       func() (int, nvml.Return)
 	deviceByIndex     func(int) (nvml.Device, nvml.Return)
 	driverVersion     func() (string, nvml.Return)
-	cudaDriverVersion func() (int, nvml.Return)
-	processName       func(int) (string, nvml.Return)
-	validateInforom   func(nvml.Device) nvml.Return
+	cudaDriverVersion     func() (int, nvml.Return)
+	processName           func(int) (string, nvml.Return)
+	validateInforom       func(nvml.Device) nvml.Return
+	deviceGetGpuUptimeV1  func(nvml.Device) (uint32, nvml.Return)
+	deviceGetTemperatureV func(nvml.Device, uint32) (int32, nvml.Return)
 	// the GPM entry points are package-level in go-nvml AND its sample
 	// mock cannot pass through the real metrics call (a private concrete
 	// type assertion), so they must live on the seam
@@ -64,10 +66,12 @@ func realNVML() nvmlAPI {
 		// libcuda and fails without it, while this one falls back to the
 		// driver's known supported version. The utility-only container
 		// capability (the documented deployment) injects no libcuda.
-		cudaDriverVersion: nvml.SystemGetCudaDriverVersion,
-		processName:       nvml.SystemGetProcessName,
-		validateInforom:   nvml.DeviceValidateInforom,
-		gpmSampleAlloc:    nvml.GpmSampleAlloc,
+		cudaDriverVersion:     nvml.SystemGetCudaDriverVersion,
+		processName:           nvml.SystemGetProcessName,
+		validateInforom:       nvml.DeviceValidateInforom,
+		deviceGetGpuUptimeV1:  nvml.DeviceGetGpuUptimeV1,
+		deviceGetTemperatureV: nvml.DeviceGetTemperatureV,
+		gpmSampleAlloc:        nvml.GpmSampleAlloc,
 		gpmSampleFree:     nvml.GpmSampleFree,
 		gpmSampleGet:      nvml.GpmSampleGet,
 		gpmMigSampleGet:   nvml.GpmMigSampleGet,
@@ -679,7 +683,12 @@ const (
 // edppMultiplierFieldID is NVML_FI_DEV_EDPP_MULTIPLIER, not yet exposed as a
 // go-nvml constant. Trace-verified: nvidia-smi queries this field ID for
 // edpp_multiplier.
-const edppMultiplierFieldID = 274
+const (
+	edppMultiplierFieldID = 274
+	// gpuTempFieldID is the sub-degree (double) GPU temperature field ID added
+	// in R620 (checked against nvidia-smi 620.70.06). Older drivers fall back to GetTemperature.
+	gpuTempFieldID = 308
+)
 
 // collectDevice produces the raw cell strings for one device, exactly as
 // nvidia-smi would print them, calling only the getters the plan requires.
@@ -822,15 +831,16 @@ func (b *Backend) collectDevice(
 	}
 
 	if reqs.want("inforom.checksum_validation") {
-		// "valid" is capture-verified; the corruption spelling is not
-		// seam-level call, so it carries its own guard rather than riding the
-		// guarded device surface
 		ret := nvml.ERROR_FUNCTION_NOT_FOUND
 		if b.avail.Load().has("nvmlDeviceValidateInforom") {
 			ret = b.api.validateInforom(dev.raw())
 		}
 
-		coll.set("inforom.checksum_validation", ret, func() string { return "valid" })
+		if ret == nvml.ERROR_CORRUPTED_INFOROM {
+			coll.values["inforom.checksum_validation"] = "invalid"
+		} else {
+			coll.setBare("inforom.checksum_validation", ret, func() string { return "valid" })
+		}
 	}
 
 	if reqs.want("gom.current", "gom.pending") {
@@ -1070,8 +1080,10 @@ func (b *Backend) collectDevice(
 	}
 
 	if reqs.want("temperature.gpu") {
-		temp, ret := dev.GetTemperature(nvml.TEMPERATURE_GPU)
-		coll.set("temperature.gpu", ret, func() string { return strconv.FormatUint(uint64(temp), 10) })
+		if _, ok := coll.values["temperature.gpu"]; !ok {
+			temp, ret := dev.GetTemperature(nvml.TEMPERATURE_GPU)
+			coll.set("temperature.gpu", ret, func() string { return strconv.FormatUint(uint64(temp), 10) })
+		}
 	}
 
 	if reqs.want("temperature.gpu.tlimit") {
@@ -1079,6 +1091,17 @@ func (b *Backend) collectDevice(
 		coll.set("temperature.gpu.tlimit", ret, func() string {
 			return strconv.FormatInt(int64(margin.MarginTemperature), 10)
 		})
+	}
+
+	if reqs.want("temperature.gpu_max") {
+		var temp int32
+
+		ret := nvml.ERROR_FUNCTION_NOT_FOUND
+		if b.avail.Load().has("nvmlDeviceGetTemperatureV") {
+			temp, ret = b.api.deviceGetTemperatureV(dev.raw(), nvml.TEMPERATURE_GPU_MAX)
+		}
+
+		coll.set("temperature.gpu_max", ret, func() string { return strconv.FormatInt(int64(temp), 10) })
 	}
 
 	if err := ctx.Err(); err != nil {
@@ -1203,6 +1226,22 @@ func (b *Backend) collectDevice(
 		coll.set("hostname", ret, func() string { return hostname })
 	}
 
+	if reqs.want("bbx.time_run") {
+		bbx, ret := dev.GetBBXTimeData_v1()
+		coll.set("bbx.time_run", ret, func() string { return fmt.Sprintf("%d seconds", bbx.TimeRun) })
+	}
+
+	if reqs.want("gpu_uptime") {
+		var seconds uint32
+
+		ret := nvml.ERROR_FUNCTION_NOT_FOUND
+		if b.avail.Load().has("nvmlDeviceGetGpuUptime_v1") {
+			seconds, ret = b.api.deviceGetGpuUptimeV1(dev.raw())
+		}
+
+		coll.set("gpu_uptime", ret, func() string { return fmt.Sprintf("%d seconds", seconds) })
+	}
+
 	if len(coll.denied) > 0 && !b.permLogged {
 		b.permLogged = true
 
@@ -1241,34 +1280,40 @@ func (b *Backend) collectFieldValues(dev device, coll *devCollector, reqs plan) 
 	nsToUs := func(v float64) string { return strconv.FormatFloat(v/1000.0, 'f', -1, 64) + " us" }
 
 	entries := []struct {
-		field  nvidiasmi.QField
-		id     uint32
-		bare   bool
-		format func(v float64) string
+		field    nvidiasmi.QField
+		id       uint32
+		bare     bool
+		optional bool
+		format   func(v float64) string
 	}{
 		{
-			"power.draw.average", nvml.FI_DEV_POWER_AVERAGE, false,
+			"power.draw.average", nvml.FI_DEV_POWER_AVERAGE, false, false,
 			func(v float64) string { return strconv.FormatFloat(v/1000.0, 'f', -1, 64) + " W" },
 		},
 		{
-			"power.draw.instant", nvml.FI_DEV_POWER_INSTANT, false,
+			"power.draw.instant", nvml.FI_DEV_POWER_INSTANT, false, false,
 			func(v float64) string { return strconv.FormatFloat(v/1000.0, 'f', -1, 64) + " W" },
 		},
 		{
-			"temperature.memory", nvml.FI_DEV_MEMORY_TEMP, true,
+			"temperature.gpu", gpuTempFieldID, false, true,
 			func(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) },
 		},
 		{
-			"clocks_event_reasons_counters.sw_power_cap", nvml.FI_DEV_CLOCKS_EVENT_REASON_SW_POWER_CAP, false,
+			"temperature.memory", nvml.FI_DEV_MEMORY_TEMP, true, false,
+			func(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) },
+		},
+		{
+			"clocks_event_reasons_counters.sw_power_cap", nvml.FI_DEV_CLOCKS_EVENT_REASON_SW_POWER_CAP, false, false,
 			nsToUs,
 		},
 		{
-			"clocks_event_reasons_counters.sync_boost", nvml.FI_DEV_CLOCKS_EVENT_REASON_SYNC_BOOST, false,
+			"clocks_event_reasons_counters.sync_boost", nvml.FI_DEV_CLOCKS_EVENT_REASON_SYNC_BOOST, false, false,
 			nsToUs,
 		},
 		{
 			"clocks_event_reasons_counters.sw_thermal_slowdown",
 			nvml.FI_DEV_CLOCKS_EVENT_REASON_SW_THERM_SLOWDOWN,
+			false,
 			false,
 			nsToUs,
 		},
@@ -1276,19 +1321,28 @@ func (b *Backend) collectFieldValues(dev device, coll *devCollector, reqs plan) 
 			"clocks_event_reasons_counters.hw_thermal_slowdown",
 			nvml.FI_DEV_CLOCKS_EVENT_REASON_HW_THERM_SLOWDOWN,
 			false,
+			false,
 			nsToUs,
 		},
 		{
 			"clocks_event_reasons_counters.hw_power_brake_slowdown",
-			nvml.FI_DEV_CLOCKS_EVENT_REASON_HW_POWER_BRAKE_SLOWDOWN, false,
+			nvml.FI_DEV_CLOCKS_EVENT_REASON_HW_POWER_BRAKE_SLOWDOWN, false, false,
 			nsToUs,
 		},
 		{
-			"gpu_recovery_action", nvml.FI_DEV_GET_GPU_RECOVERY_ACTION, false,
+			"reset_status.reset_required", nvml.FI_DEV_RESET_STATUS, false, false,
+			func(v float64) string { return yesNo(v != 0) },
+		},
+		{
+			"reset_status.drain_and_reset_recommended", nvml.FI_DEV_DRAIN_AND_RESET_STATUS, false, false,
+			func(v float64) string { return yesNo(v != 0) },
+		},
+		{
+			"gpu_recovery_action", nvml.FI_DEV_GET_GPU_RECOVERY_ACTION, false, false,
 			func(v float64) string { return recoveryActionStr(uint64(v)) },
 		},
 		{
-			"edpp_multiplier", edppMultiplierFieldID, false,
+			"edpp_multiplier", edppMultiplierFieldID, false, false,
 			func(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) + " %" },
 		},
 	}
@@ -1313,9 +1367,14 @@ func (b *Backend) collectFieldValues(dev device, coll *devCollector, reqs plan) 
 	ret := dev.GetFieldValues(values)
 	if ret != nvml.SUCCESS {
 		for _, entry := range wanted {
-			if entry.bare {
+			switch {
+			case entry.optional:
+				if isLifecycleError(ret) {
+					coll.classify(entry.field, ret)
+				}
+			case entry.bare:
 				coll.setBare(entry.field, ret, nil)
-			} else {
+			default:
 				coll.set(entry.field, ret, nil)
 			}
 		}
@@ -1330,10 +1389,16 @@ func (b *Backend) collectFieldValues(dev device, coll *devCollector, reqs plan) 
 		value, decodeOK := decodeFieldValue(fieldValue)
 
 		switch {
+		case fret != nvml.SUCCESS && entry.optional:
+			if isLifecycleError(fret) {
+				coll.classify(entry.field, fret)
+			}
 		case fret != nvml.SUCCESS && entry.bare:
 			coll.setBare(entry.field, fret, nil)
 		case fret != nvml.SUCCESS:
 			coll.set(entry.field, fret, nil)
+		case !decodeOK && entry.optional:
+			continue
 		case !decodeOK:
 			// an unknown value type from a newer driver: absent, never a panic
 			b.logger.Warn("cannot decode NVML field value",

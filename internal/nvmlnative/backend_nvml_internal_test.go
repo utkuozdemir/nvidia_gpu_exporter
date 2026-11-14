@@ -55,8 +55,10 @@ func (f *fakeAPI) api() nvmlAPI {
 		driverVersion:     func() (string, nvml.Return) { return "590.48.01", nvml.SUCCESS },
 		cudaDriverVersion: func() (int, nvml.Return) { return 13010, nvml.SUCCESS },
 		processName:       func(int) (string, nvml.Return) { return "/usr/bin/burn", nvml.SUCCESS },
-		lookupSymbol:      func(string) error { return nil },
-		validateInforom:   func(nvml.Device) nvml.Return { return nvml.SUCCESS },
+		lookupSymbol:          func(string) error { return nil },
+		validateInforom:       func(nvml.Device) nvml.Return { return nvml.SUCCESS },
+		deviceGetGpuUptimeV1:  func(nvml.Device) (uint32, nvml.Return) { return 0, nvml.ERROR_NOT_SUPPORTED },
+		deviceGetTemperatureV: func(nvml.Device, uint32) (int32, nvml.Return) { return 0, nvml.ERROR_NOT_SUPPORTED },
 	}
 }
 
@@ -1307,4 +1309,83 @@ func TestFabricStatusRequiresCompletedState(t *testing.T) {
 	}, coll, reqs)
 	assert.Equal(t, "Completed", coll.values["fabric.state"])
 	assert.Equal(t, "27", coll.values["fabric.status"])
+}
+
+func TestCatalogAdditionsAndSubDegreeTemp(t *testing.T) {
+	t.Parallel()
+
+	subDegreeSupported := true
+	inforomRet := nvml.SUCCESS
+
+	dev := identityDevice()
+	dev.GetBBXTimeData_v1Func = func() (nvml.BBXTimeData_v1, nvml.Return) {
+		return nvml.BBXTimeData_v1{TimeRun: 13572765}, nvml.SUCCESS
+	}
+	dev.GetTemperatureFunc = func(sensor nvml.TemperatureSensors) (uint32, nvml.Return) {
+		assert.Equal(t, nvml.TEMPERATURE_GPU, sensor)
+
+		return 41, nvml.SUCCESS
+	}
+	dev.GetFieldValuesFunc = func(values []nvml.FieldValue) nvml.Return {
+		for idx := range values {
+			switch values[idx].FieldId {
+			case gpuTempFieldID:
+				if !subDegreeSupported {
+					values[idx].NvmlReturn = uint32(nvml.ERROR_INVALID_ARGUMENT)
+
+					continue
+				}
+
+				values[idx].NvmlReturn = uint32(nvml.SUCCESS)
+				values[idx].ValueType = uint32(nvml.VALUE_TYPE_DOUBLE)
+				binary.LittleEndian.PutUint64(values[idx].Value[:], 0x403df00000000000) // 29.9375
+			case nvml.FI_DEV_RESET_STATUS:
+				values[idx].NvmlReturn = uint32(nvml.SUCCESS)
+				values[idx].ValueType = uint32(nvml.VALUE_TYPE_UNSIGNED_INT)
+				binary.LittleEndian.PutUint32(values[idx].Value[:], 1)
+			case nvml.FI_DEV_DRAIN_AND_RESET_STATUS:
+				values[idx].NvmlReturn = uint32(nvml.SUCCESS)
+				values[idx].ValueType = uint32(nvml.VALUE_TYPE_UNSIGNED_INT)
+				binary.LittleEndian.PutUint32(values[idx].Value[:], 0)
+			}
+		}
+
+		return nvml.SUCCESS
+	}
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	api := fake.api()
+	api.validateInforom = func(nvml.Device) nvml.Return { return inforomRet }
+	api.deviceGetGpuUptimeV1 = func(nvml.Device) (uint32, nvml.Return) { return 2847, nvml.SUCCESS }
+	api.deviceGetTemperatureV = func(_ nvml.Device, sensor uint32) (int32, nvml.Return) {
+		assert.Equal(t, uint32(1), sensor)
+
+		return 52, nvml.SUCCESS
+	}
+
+	backend, err := newWithAPI(api, slogt.New(t))
+	require.NoError(t, err)
+
+	fields := resolveFields(t, "gpu_uptime,bbx.time_run,temperature.gpu,temperature.gpu_max,"+
+		"reset_status.reset_required,reset_status.drain_and_reset_recommended,inforom.checksum_validation")
+	query := backend.QueryFunc(fields, CollectOptions{})
+
+	reading, _, err := query(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "2847 seconds", cellValue(t, reading.Table, "gpu_uptime"))
+	assert.Equal(t, "13572765 seconds", cellValue(t, reading.Table, "bbx.time_run"))
+	assert.Equal(t, "29.9375", cellValue(t, reading.Table, "temperature.gpu"))
+	assert.Equal(t, "52", cellValue(t, reading.Table, "temperature.gpu_max"))
+	assert.Equal(t, "Yes", cellValue(t, reading.Table, "reset_status.reset_required"))
+	assert.Equal(t, "No", cellValue(t, reading.Table, "reset_status.drain_and_reset_recommended"))
+	assert.Equal(t, "valid", cellValue(t, reading.Table, "inforom.checksum_validation"))
+
+	// pre-R620 fallback for temperature.gpu and corrupted InfoROM mapping
+	subDegreeSupported = false
+	inforomRet = nvml.ERROR_CORRUPTED_INFOROM
+
+	reading, _, err = query(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "41", cellValue(t, reading.Table, "temperature.gpu"))
+	assert.Equal(t, "invalid", cellValue(t, reading.Table, "inforom.checksum_validation"))
 }

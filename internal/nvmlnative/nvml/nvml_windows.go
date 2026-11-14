@@ -125,7 +125,8 @@ const (
 	CLOCK_MEM      ClockType = 2
 	CLOCK_VIDEO    ClockType = 3
 
-	TEMPERATURE_GPU TemperatureSensors = 0
+	TEMPERATURE_GPU     TemperatureSensors = 0
+	TEMPERATURE_GPU_MAX uint32             = 1
 
 	PCIE_UTIL_TX_BYTES PcieUtilCounter = 0
 	PCIE_UTIL_RX_BYTES PcieUtilCounter = 1
@@ -174,6 +175,8 @@ const (
 	FI_DEV_NVLINK_THROUGHPUT_DATA_RX                   = 139
 	FI_DEV_POWER_AVERAGE                               = 185
 	FI_DEV_POWER_INSTANT                               = 186
+	FI_DEV_RESET_STATUS                                = 226
+	FI_DEV_DRAIN_AND_RESET_STATUS                      = 227
 	FI_DEV_GET_GPU_RECOVERY_ACTION                     = 230
 	FI_DEV_CLOCKS_EVENT_REASON_SW_THERM_SLOWDOWN       = 269
 	FI_DEV_CLOCKS_EVENT_REASON_HW_THERM_SLOWDOWN       = 270
@@ -198,6 +201,16 @@ type DeviceAddressingMode struct {
 
 type C2cModeInfo_v1 struct {
 	IsC2cEnabled uint32
+}
+
+type BBXTimeData_v1 struct {
+	TimeRun uint32
+}
+
+type temperatureV1 struct {
+	Version     uint32
+	SensorType  uint32
+	Temperature int32
 }
 
 type ProcessInfo struct {
@@ -479,6 +492,7 @@ type Device interface {
 	GetAccountingMode() (EnableState, Return)
 	GetAddressingMode() (DeviceAddressingMode, Return)
 	GetApplicationsClock(clockType ClockType) (uint32, Return)
+	GetBBXTimeData_v1() (BBXTimeData_v1, Return)
 	GetC2cModeInfoV() C2cModeInfoHandler
 	GetClockInfo(clockType ClockType) (uint32, Return)
 	GetComputeInstanceId() (int, Return)
@@ -719,6 +733,47 @@ func DeviceValidateInforom(device Device) Return {
 	return toReturn(r1)
 }
 
+// DeviceGetGpuUptimeV1 returns the GPU uptime in seconds since the last GPU reset or load.
+func DeviceGetGpuUptimeV1(device Device) (uint32, Return) {
+	dev, ok := device.(winDevice)
+	if !ok {
+		return 0, ERROR_INVALID_ARGUMENT
+	}
+
+	proc, ok := findProc("nvmlDeviceGetGpuUptime_v1")
+	if !ok {
+		return 0, ERROR_FUNCTION_NOT_FOUND
+	}
+
+	var seconds uint32
+
+	r1, _, _ := proc.Call(dev.handle, uintptr(unsafe.Pointer(&seconds)))
+
+	return seconds, toReturn(r1)
+}
+
+// DeviceGetTemperatureV reads a versioned temperature sensor value.
+func DeviceGetTemperatureV(device Device, sensor uint32) (int32, Return) {
+	dev, ok := device.(winDevice)
+	if !ok {
+		return 0, ERROR_INVALID_ARGUMENT
+	}
+
+	proc, ok := findProc("nvmlDeviceGetTemperatureV")
+	if !ok {
+		return 0, ERROR_FUNCTION_NOT_FOUND
+	}
+
+	temp := temperatureV1{
+		Version:    structVersion[temperatureV1](1),
+		SensorType: sensor,
+	}
+
+	r1, _, _ := proc.Call(dev.handle, uintptr(unsafe.Pointer(&temp)))
+
+	return temp.Temperature, toReturn(r1)
+}
+
 type winGpmSample struct {
 	handle uintptr
 }
@@ -927,6 +982,20 @@ func (d winDevice) GetApplicationsClock(clockType ClockType) (uint32, Return) {
 	r1, _, _ := proc.Call(d.handle, uintptr(uint32(clockType)), uintptr(unsafe.Pointer(&clock))) //nolint:gosec // enum
 
 	return clock, toReturn(r1)
+}
+
+//nolint:revive // matches go-nvml Device method name
+func (d winDevice) GetBBXTimeData_v1() (BBXTimeData_v1, Return) {
+	var info BBXTimeData_v1
+
+	proc, ok := findProc("nvmlDeviceGetBBXTimeData_v1")
+	if !ok {
+		return info, ERROR_FUNCTION_NOT_FOUND
+	}
+
+	r1, _, _ := proc.Call(d.handle, uintptr(unsafe.Pointer(&info)))
+
+	return info, toReturn(r1)
 }
 
 func (d winDevice) GetC2cModeInfoV() C2cModeInfoHandler {

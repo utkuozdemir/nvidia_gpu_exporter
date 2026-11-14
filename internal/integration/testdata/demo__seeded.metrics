@@ -391,6 +391,10 @@ nvidia_smi_gsp_mode_default{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1
 # TYPE nvidia_smi_index gauge
 nvidia_smi_index{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
 nvidia_smi_index{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1
+# HELP nvidia_smi_inforom_checksum_validation inforom.checksum_validation
+# TYPE nvidia_smi_inforom_checksum_validation gauge
+nvidia_smi_inforom_checksum_validation{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1
+nvidia_smi_inforom_checksum_validation{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1
 # HELP nvidia_smi_inforom_ecc inforom.ecc
 # TYPE nvidia_smi_inforom_ecc gauge
 nvidia_smi_inforom_ecc{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 7.16

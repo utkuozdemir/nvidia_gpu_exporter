@@ -21,6 +21,7 @@ type device interface {
 	GetAccountingMode() (nvml.EnableState, nvml.Return)
 	GetAddressingMode() (nvml.DeviceAddressingMode, nvml.Return)
 	GetApplicationsClock(clockType nvml.ClockType) (uint32, nvml.Return)
+	GetBBXTimeData_v1() (nvml.BBXTimeData_v1, nvml.Return)
 	GetC2cModeInfoV1() (nvml.C2cModeInfo_v1, nvml.Return)
 	GetClockInfo(clockType nvml.ClockType) (uint32, nvml.Return)
 	GetComputeInstanceId() (int, nvml.Return)
@@ -148,6 +149,17 @@ func (g guardedDevice) GetApplicationsClock(p0 nvml.ClockType) (uint32, nvml.Ret
 	}
 
 	return g.dev.GetApplicationsClock(p0)
+}
+
+//nolint:revive // the name must match go-nvml's Device interface to delegate
+func (g guardedDevice) GetBBXTimeData_v1() (nvml.BBXTimeData_v1, nvml.Return) {
+	if !g.avail.has("nvmlDeviceGetBBXTimeData_v1") {
+		var z0 nvml.BBXTimeData_v1
+
+		return z0, nvml.ERROR_FUNCTION_NOT_FOUND
+	}
+
+	return g.dev.GetBBXTimeData_v1()
 }
 
 func (g guardedDevice) GetC2cModeInfoV1() (nvml.C2cModeInfo_v1, nvml.Return) {

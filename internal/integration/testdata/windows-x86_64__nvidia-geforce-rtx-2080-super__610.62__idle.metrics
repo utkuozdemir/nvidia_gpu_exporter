@@ -145,6 +145,9 @@ nvidia_smi_gpu_recovery_action{uuid="00000000-0000-0000-0000-000000000000"} 0
 # HELP nvidia_smi_index index
 # TYPE nvidia_smi_index gauge
 nvidia_smi_index{uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_inforom_checksum_validation inforom.checksum_validation
+# TYPE nvidia_smi_inforom_checksum_validation gauge
+nvidia_smi_inforom_checksum_validation{uuid="00000000-0000-0000-0000-000000000000"} 1
 # HELP nvidia_smi_inforom_oem inforom.oem
 # TYPE nvidia_smi_inforom_oem gauge
 nvidia_smi_inforom_oem{uuid="00000000-0000-0000-0000-000000000000"} 1.1

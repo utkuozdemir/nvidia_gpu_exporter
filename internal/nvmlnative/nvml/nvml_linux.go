@@ -6,19 +6,31 @@ package nvml
 
 /*
 #cgo linux LDFLAGS: -Wl,--export-dynamic -Wl,--unresolved-symbols=ignore-in-object-files
+#include <stdint.h>
+
 extern int nvmlSystemGetProcessName(unsigned int pid, char *name, unsigned int length);
-// Declared directly so the caller controls the buffer length.
+extern int nvmlDeviceGetGpuUptime_v1(void *device, uint32_t *uptimeTimeSeconds);
+
+typedef struct {
+	uint32_t version;
+	uint32_t sensorType;
+	int32_t temperature;
+} exporterNvmlTemperatureV1;
+
+extern int nvmlDeviceGetTemperatureV(void *device, exporterNvmlTemperatureV1 *temperature);
 */
 import "C"
 
 import (
 	"bytes"
+	"reflect"
 	"unsafe"
 
 	gonvml "github.com/NVIDIA/go-nvml/pkg/nvml"
 )
 
 type (
+	BBXTimeData_v1             = gonvml.BBXTimeData_v1
 	C2cModeInfo_v1             = gonvml.C2cModeInfo_v1
 	ClockType                  = gonvml.ClockType
 	ComputeMode                = gonvml.ComputeMode
@@ -106,6 +118,7 @@ const (
 	FI_DEV_CLOCKS_EVENT_REASON_SW_POWER_CAP            = gonvml.FI_DEV_CLOCKS_EVENT_REASON_SW_POWER_CAP
 	FI_DEV_CLOCKS_EVENT_REASON_SW_THERM_SLOWDOWN       = gonvml.FI_DEV_CLOCKS_EVENT_REASON_SW_THERM_SLOWDOWN
 	FI_DEV_CLOCKS_EVENT_REASON_SYNC_BOOST              = gonvml.FI_DEV_CLOCKS_EVENT_REASON_SYNC_BOOST
+	FI_DEV_DRAIN_AND_RESET_STATUS                      = gonvml.FI_DEV_DRAIN_AND_RESET_STATUS
 	FI_DEV_GET_GPU_RECOVERY_ACTION                     = gonvml.FI_DEV_GET_GPU_RECOVERY_ACTION
 	FI_DEV_MEMORY_TEMP                                 = gonvml.FI_DEV_MEMORY_TEMP
 	FI_DEV_NVLINK_LINK_COUNT                           = gonvml.FI_DEV_NVLINK_LINK_COUNT
@@ -115,6 +128,7 @@ const (
 	FI_DEV_PCIE_REPLAY_ROLLOVER_COUNTER                = gonvml.FI_DEV_PCIE_REPLAY_ROLLOVER_COUNTER
 	FI_DEV_POWER_AVERAGE                               = gonvml.FI_DEV_POWER_AVERAGE
 	FI_DEV_POWER_INSTANT                               = gonvml.FI_DEV_POWER_INSTANT
+	FI_DEV_RESET_STATUS                                = gonvml.FI_DEV_RESET_STATUS
 
 	INFOROM_ECC   = gonvml.INFOROM_ECC
 	INFOROM_OEM   = gonvml.INFOROM_OEM
@@ -139,6 +153,8 @@ const (
 	PCIE_UTIL_TX_BYTES = gonvml.PCIE_UTIL_TX_BYTES
 
 	TEMPERATURE_GPU = gonvml.TEMPERATURE_GPU
+	// TEMPERATURE_GPU_MAX postdates go-nvml v0.13.3-1's nvml.h (checked against nvidia-smi 620.70.06).
+	TEMPERATURE_GPU_MAX = uint32(1)
 
 	VALUE_TYPE_DOUBLE             = gonvml.VALUE_TYPE_DOUBLE
 	VALUE_TYPE_SIGNED_INT         = gonvml.VALUE_TYPE_SIGNED_INT
@@ -186,4 +202,51 @@ func SystemGetProcessName(pid int) (string, Return) {
 	}
 
 	return string(buf), ret
+}
+
+func rawDeviceHandle(device Device) (unsafe.Pointer, bool) {
+	val := reflect.ValueOf(device)
+	if !val.IsValid() || val.Kind() != reflect.Struct {
+		return nil, false
+	}
+
+	handle := val.FieldByName("Handle")
+	if !handle.IsValid() || handle.Kind() != reflect.Pointer {
+		return nil, false
+	}
+
+	return handle.UnsafePointer(), true
+}
+
+// DeviceGetGpuUptimeV1 returns the GPU uptime in seconds since the last GPU reset or load.
+func DeviceGetGpuUptimeV1(device Device) (uint32, Return) {
+	handle, ok := rawDeviceHandle(device)
+	if !ok {
+		return 0, ERROR_INVALID_ARGUMENT
+	}
+
+	var seconds C.uint32_t
+
+	ret := Return(C.nvmlDeviceGetGpuUptime_v1(handle, &seconds))
+
+	return uint32(seconds), ret
+}
+
+// DeviceGetTemperatureV reads a versioned temperature sensor value. go-nvml's
+// TemperatureHandler.V1 hardcodes SensorType to 0, so non-zero sensor types
+// require a direct call.
+func DeviceGetTemperatureV(device Device, sensor uint32) (int32, Return) {
+	handle, ok := rawDeviceHandle(device)
+	if !ok {
+		return 0, ERROR_INVALID_ARGUMENT
+	}
+
+	var temp C.exporterNvmlTemperatureV1
+
+	temp.version = C.uint32_t(uint32(unsafe.Sizeof(temp)) | (1 << 24)) //nolint:gosec // fixed C struct size
+	temp.sensorType = C.uint32_t(sensor)
+
+	ret := Return(C.nvmlDeviceGetTemperatureV(handle, &temp))
+
+	return int32(temp.temperature), ret
 }
