@@ -888,7 +888,7 @@ func migExtras() collect.Extras {
 			{
 				ParentUUID: "abc", UUID: "mig-a", GPUInstanceID: "1", ComputeInstanceID: "0",
 				Profile: "1g.10gb",
-				Memory:  &collect.MIGMemory{Total: 1000, Used: 100, Free: 900, Reserved: 50},
+				Memory:  &collect.MIGMemory{Total: 1000, Used: 100, Free: 900, Reserved: new(uint64(50))},
 				// two compute instances of the same GPU instance share the
 				// utilization values
 				Utilization: shared,
@@ -898,13 +898,19 @@ func migExtras() collect.Extras {
 				Profile: "1g.10gb",
 				// same GPU instance: the framebuffer is shared, the values
 				// repeat (as on real hardware)
-				Memory:      &collect.MIGMemory{Total: 1000, Used: 100, Free: 900, Reserved: 50},
+				Memory:      &collect.MIGMemory{Total: 1000, Used: 100, Free: 900, Reserved: new(uint64(50))},
 				Utilization: shared,
 			},
 			{
 				ParentUUID: "abc", UUID: "mig-c", GPUInstanceID: "2", ComputeInstanceID: "0",
 				Profile: "2g.20gb",
 				// memory and utilization unreadable: only the info series
+			},
+			{
+				ParentUUID: "abc", UUID: "mig-d", GPUInstanceID: "3", ComputeInstanceID: "0",
+				Profile: "3g.40gb",
+				// legacy v1 memory fallback: Reserved is nil and must be omitted
+				Memory: &collect.MIGMemory{Total: 2000, Used: 250, Free: 1750},
 			},
 		},
 	}
@@ -919,7 +925,7 @@ func TestMIGExtrasRendered(t *testing.T) {
 
 	info, ok := families["aaa_mig_info"]
 	require.True(t, ok)
-	require.Len(t, info.GetMetric(), 3)
+	require.Len(t, info.GetMetric(), 4)
 
 	first := info.GetMetric()[0]
 	assert.Equal(t, "abc", labelValue(t, first, "uuid"))
@@ -930,10 +936,19 @@ func TestMIGExtrasRendered(t *testing.T) {
 
 	memUsed, ok := families["aaa_mig_memory_used_bytes"]
 	require.True(t, ok)
-	require.Len(t, memUsed.GetMetric(), 1,
-		"memory is per GPU instance: one series for the two-slice instance, none for the unreadable one")
+	require.Len(t, memUsed.GetMetric(), 2,
+		"memory is per GPU instance: one series for the two-slice instance, one for v1 fallback, none for unreadable")
 	assert.Equal(t, "1", labelValue(t, memUsed.GetMetric()[0], "gpu_instance_id"))
 	assertFloat(t, 100, memUsed.GetMetric()[0].GetGauge().GetValue())
+	assert.Equal(t, "3", labelValue(t, memUsed.GetMetric()[1], "gpu_instance_id"))
+	assertFloat(t, 250, memUsed.GetMetric()[1].GetGauge().GetValue())
+
+	memReserved, ok := families["aaa_mig_memory_reserved_bytes"]
+	require.True(t, ok)
+	require.Len(t, memReserved.GetMetric(), 1,
+		"legacy v1 memory fallback has nil Reserved and must omit mig_memory_reserved_bytes")
+	assert.Equal(t, "1", labelValue(t, memReserved.GetMetric()[0], "gpu_instance_id"))
+	assertFloat(t, 50, memReserved.GetMetric()[0].GetGauge().GetValue())
 
 	smActivity, ok := families["aaa_mig_sm_activity_ratio"]
 	require.True(t, ok)
@@ -948,6 +963,19 @@ func TestMIGExtrasRendered(t *testing.T) {
 	pcieTx, ok := families["aaa_mig_pcie_throughput_tx_bytes_per_second"]
 	require.True(t, ok)
 	assertFloat(t, 1048576, pcieTx.GetMetric()[0].GetGauge().GetValue())
+}
+
+func TestCollectSuccessTimestampPreservesSubSecond(t *testing.T) {
+	t.Parallel()
+
+	ts := time.Unix(1751475457, 432100000)
+	snap := extrasSnapshot(gpuTable("GPU-ABC"), collect.Extras{})
+	snap.LastSuccess = ts
+
+	exp := newExtrasExporter(t, exporter.Features{}, snap)
+	families := gatherFamilies(t, exp)
+
+	assert.InDelta(t, 1751475457.4321, gaugeValue(t, families, "aaa_last_collect_success_timestamp_seconds"), 1e-6)
 }
 
 func TestMIGSuppressedWhenOff(t *testing.T) {

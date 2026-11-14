@@ -274,7 +274,7 @@ func (b *Backend) migMemory(instance migInstanceConfig) *collect.MIGMemory {
 		Total:    total,
 		Used:     used,
 		Free:     total - used - reserved,
-		Reserved: reserved,
+		Reserved: &reserved,
 	}
 }
 

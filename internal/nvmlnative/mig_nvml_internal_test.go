@@ -130,8 +130,43 @@ func TestMIGInventoryAndMemory(t *testing.T) {
 	assert.Equal(t, "1g.10gb", first.Profile, "the profile must be parsed out of the device name")
 	require.NotNil(t, first.Memory)
 	assert.Equal(t, uint64(10*1024*1024*1024), first.Memory.Total)
-	assert.Equal(t, uint64(512), first.Memory.Reserved)
+	require.NotNil(t, first.Memory.Reserved)
+	assert.Equal(t, uint64(512), *first.Memory.Reserved)
 	assert.Nil(t, first.Utilization, "no GPM support must mean inventory and memory only")
+}
+
+func TestMIGMemoryV1Fallback(t *testing.T) {
+	t.Parallel()
+
+	mig := migDevice("MIG-AAAAAAAA-1111-1111-1111-111111111111", 1)
+	mig.GetMemoryInfoFunc = func() (nvml.Memory, nvml.Return) {
+		return nvml.Memory{Total: 5 * 1024 * 1024 * 1024, Used: 2048, Free: 1024}, nvml.SUCCESS
+	}
+
+	parent := migParent(false, mig)
+	fake := &fakeAPI{devices: []nvml.Device{parent}}
+	api := fake.api()
+	api.lookupSymbol = func(name string) error {
+		if name == "nvmlDeviceGetMemoryInfo_v2" {
+			return assert.AnError
+		}
+
+		return nil
+	}
+
+	backend, err := newWithAPI(api, slogt.New(t))
+	require.NoError(t, err)
+
+	reading, _, err := backend.QueryFunc(resolveFields(t, "power.draw"), migOpts())(t.Context())
+	require.NoError(t, err)
+	require.Len(t, reading.Extras.MIG, 1)
+
+	mem := reading.Extras.MIG[0].Memory
+	require.NotNil(t, mem)
+	assert.Equal(t, uint64(5*1024*1024*1024), mem.Total)
+	assert.Equal(t, uint64(2048), mem.Used)
+	assert.Equal(t, uint64(1024), mem.Free)
+	assert.Nil(t, mem.Reserved, "v1 GetMemoryInfo has no Reserved field")
 }
 
 func TestMIGDisabledTouchesNoMIGGetter(t *testing.T) {
@@ -234,6 +269,16 @@ func TestMIGGPMCrossCycle(t *testing.T) {
 	require.NotNil(t, reading.Extras.MIG[0].Utilization)
 	assert.InDelta(t, 0.999992, *reading.Extras.MIG[0].Utilization.GraphicsActivityRatio, 1e-9)
 	assert.Equal(t, allocsBefore, gpm.allocs, "the min-window guard must not take a new sample")
+
+	// once the >100ms GPM window (150ms) elapses, sub-second scrapes rotate cleanly
+	current = current.Add(100 * time.Millisecond)
+	gpm.values[gpmMetricGraphicsUtil] = 42.5
+
+	reading, _, err = query(t.Context())
+	require.NoError(t, err)
+	require.NotNil(t, reading.Extras.MIG[0].Utilization)
+	assert.InDelta(t, 0.425, *reading.Extras.MIG[0].Utilization.GraphicsActivityRatio, 1e-9)
+	assert.Equal(t, allocsBefore+1, gpm.allocs, "200ms since seed sample must rotate the GPM sample")
 }
 
 func TestMIGGPMFingerprintInvalidation(t *testing.T) {
