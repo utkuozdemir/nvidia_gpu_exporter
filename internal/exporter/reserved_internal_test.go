@@ -3,6 +3,7 @@ package exporter
 import (
 	"context"
 	"log/slog"
+	"reflect"
 	"regexp"
 	"testing"
 
@@ -12,6 +13,27 @@ import (
 )
 
 var fqNameInDesc = regexp.MustCompile(`fqName: "([^"]*)"`)
+
+// allFeatures returns a Features value with every boolean toggle turned on.
+// Reflection sets every bool field, so a newly added feature flag cannot be
+// missed by the reserved-name or descriptor-registration tests.
+func allFeatures(t *testing.T) Features {
+	t.Helper()
+
+	var features Features
+
+	val := reflect.ValueOf(&features).Elem()
+	for idx := range val.NumField() {
+		field := val.Field(idx)
+		if field.Kind() != reflect.Bool {
+			t.Fatalf("unexpected non-bool field %s on exporter.Features", val.Type().Field(idx).Name)
+		}
+
+		field.SetBool(true)
+	}
+
+	return features
+}
 
 // TestReservedMetricNamesCoverAll pins fixedMetricNames against what the
 // exporter actually describes with every feature on. It is what keeps the list
@@ -24,12 +46,7 @@ func TestReservedMetricNamesCoverAll(t *testing.T) {
 		Info: []nvidiasmi.InfoField{{QField: nvidiasmi.UUIDQField, Label: "uuid"}},
 	}
 
-	features := Features{
-		ComputeApps: true, GraphicsApps: true, ComputeAppMIGLabels: true,
-		ComputeAppIdentityLabels: true, PCIeThroughput: true,
-		PCIeReplays: true, NVLink: true, GPM: true,
-		Energy: true, MIG: true, XIDEvents: true,
-	}
+	features := allFeatures(t)
 
 	for _, exitCodeMetric := range []ExitCodeMetric{ExecExitCodeMetric, NVMLReturnCodeMetric} {
 		exp := New(context.Background(), DefaultPrefix, fields, emptySource{},

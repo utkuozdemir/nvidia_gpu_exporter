@@ -228,6 +228,8 @@ func TestConfigRejectsBadOverride(t *testing.T) {
 		"overrides:\n  power.draw: {value: 100, min: 1, max: 2}\n",
 		"overrides:\n  power.draw: {min: 1}\n",
 		"overrides:\n  power.draw: {mim: 1, max: 2}\n",
+		"overrides:\n  power.draw:\n",
+		"gpus:\n  - overrides:\n      power.draw:\n",
 	} {
 		cfg := writeConfig(t, body)
 		code, _, stderr := runFake(t, "--capture", h200Capture, "--config", cfg, "--query-gpu=uuid", "--format=csv")
