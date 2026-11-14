@@ -253,7 +253,8 @@ func TestSynthMIGShape(t *testing.T) {
 	assert.Nil(t, third.Utilization)
 
 	// the memory invariant holds
-	assert.Equal(t, first.Memory.Total, first.Memory.Used+first.Memory.Free+first.Memory.Reserved)
+	require.NotNil(t, first.Memory.Reserved)
+	assert.Equal(t, first.Memory.Total, first.Memory.Used+first.Memory.Free+*first.Memory.Reserved)
 
 	// the second cycle serves utilization: the busy instance runs hot,
 	// sibling CIs share it

@@ -126,12 +126,13 @@ type MIGInstance struct {
 	Utilization *MIGUtilization
 }
 
-// MIGMemory is one MIG device's memory, in bytes.
+// MIGMemory is one MIG device's memory, in bytes. Reserved is nil when the
+// driver only supports the unversioned memory call (pre-510).
 type MIGMemory struct {
 	Total    uint64
 	Used     uint64
 	Free     uint64
-	Reserved uint64
+	Reserved *uint64
 }
 
 // MIGUtilization is one GPU instance's activity over the window between the

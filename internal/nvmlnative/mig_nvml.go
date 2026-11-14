@@ -29,11 +29,11 @@ const (
 // different unit from the whole-GPU KB/s throughput call) to bytes/s.
 const gpmMibMultiplier = 1024 * 1024
 
-// gpmMinWindow keeps the sampling window from collapsing when several
-// scrapers hit the exporter in quick succession: below it the retained
-// sample is not rotated and the previous computed values are served again,
-// so the window stays anchored instead of shrinking to a meaningless size.
-const gpmMinWindow = time.Second
+// gpmMinWindow keeps the sampling window above NVML's >100ms minimum for
+// nvmlGpmMetricsGet when scrapers hit the exporter in quick succession: below
+// it the retained sample is not rotated and the previous computed values are
+// served again.
+const gpmMinWindow = 150 * time.Millisecond
 
 // gpmMaxWindow bounds how stale a retained sample may grow (a scraper that
 // vanished for a long time): beyond it the sample is reseeded and the cycle
@@ -235,7 +235,18 @@ func (b *Backend) enumerateMIG(
 				Total:    memory.Total,
 				Used:     memory.Used,
 				Free:     memory.Free,
-				Reserved: memory.Reserved,
+				Reserved: new(memory.Reserved),
+			}
+		case ret == nvml.ERROR_FUNCTION_NOT_FOUND:
+			legacy, lret := mig.GetMemoryInfo()
+			if lret == nvml.SUCCESS {
+				instance.Memory = &collect.MIGMemory{
+					Total: legacy.Total,
+					Used:  legacy.Used,
+					Free:  legacy.Free,
+				}
+			} else if isLifecycleError(lret) {
+				return nil, b.extrasFailure("mig", "cannot read a MIG device memory", lret)
 			}
 		case isLifecycleError(ret):
 			return nil, b.extrasFailure("mig", "cannot read a MIG device memory", ret)

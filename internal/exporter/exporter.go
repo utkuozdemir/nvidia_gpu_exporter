@@ -842,7 +842,10 @@ func (e *GPUExporter) renderMIGInstance(
 		e.sendLabeledGauge(metricCh, e.migDescs.memTotal, float64(memory.Total), instanceLabels...)
 		e.sendLabeledGauge(metricCh, e.migDescs.memUsed, float64(memory.Used), instanceLabels...)
 		e.sendLabeledGauge(metricCh, e.migDescs.memFree, float64(memory.Free), instanceLabels...)
-		e.sendLabeledGauge(metricCh, e.migDescs.memReserved, float64(memory.Reserved), instanceLabels...)
+
+		if memory.Reserved != nil {
+			e.sendLabeledGauge(metricCh, e.migDescs.memReserved, float64(*memory.Reserved), instanceLabels...)
+		}
 	}
 
 	util := instance.Utilization
@@ -1038,7 +1041,7 @@ func (e *GPUExporter) renderHealth(metricCh chan<- prometheus.Metric, snapshot c
 
 	if !snapshot.LastSuccess.IsZero() {
 		e.sendConst(metricCh, e.collectTimestampDesc, prometheus.GaugeValue,
-			float64(snapshot.LastSuccess.Unix()))
+			float64(snapshot.LastSuccess.UnixNano())/1e9)
 	}
 }
 
