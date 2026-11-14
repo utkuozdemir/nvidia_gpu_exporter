@@ -4,6 +4,7 @@ package nvmlnative
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -365,4 +366,33 @@ func TestMarkLostSkipsShutdownBehindWedgedWait(t *testing.T) {
 
 	cancel()
 	wg.Wait()
+}
+
+func TestXIDRegisterRequiresWaitExport(t *testing.T) {
+	t.Parallel()
+
+	dev := identityDevice()
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	xid := &xidFake{}
+
+	api := fake.api()
+	xid.install(&api, dev)
+	api.lookupSymbol = func(name string) error {
+		if name == "nvmlEventSetWait" || name == "nvmlEventSetWait_v2" {
+			return errors.New("symbol not found")
+		}
+
+		return nil
+	}
+
+	backend, err := newWithAPI(api, slogt.New(t))
+	require.NoError(t, err)
+
+	var warnings xidWatcherLog
+
+	set, _, _, registered, lifecycle := backend.xidRegister(&warnings)
+	assert.Nil(t, set, "event set must not be created when neither wait export is present")
+	assert.False(t, registered)
+	assert.False(t, lifecycle)
+	assert.Equal(t, int64(0), xid.creates.Load())
 }
