@@ -55,15 +55,16 @@ The catalog explicitly defers fields it has no verified mapping for, and a field
 It is not a fourth code path: it runs the real exec pipeline against an in-process fake `nvidia-smi`, then synthesizes the NVML-only families on top.
 So it is pure Go, works on any platform, and stays faithful to the real backends' quirks almost for free.
 
-Two invariants hold this together, and both are easy to break by accident:
+Three invariants hold this together, and all three are easy to break by accident:
 
-- For every query field both backends serve, they must emit the same metric schema: identical metric names, base units, label sets and enum mappings.
+- Every backend uses its capabilities in full and never skips a metric or coarsens precision or granularity because another backend cannot provide it.
+- Whenever two backends expose the same underlying data, they must emit the same metric schema: identical metric names, base units, label sets and enum mappings.
   Users switch between the backends and their dashboards and alerts must keep working.
-  The nvml catalog exists to guarantee this schema compatibility, and it stores the exact header strings `nvidia-smi` prints, not paraphrases of them.
-  Declining to serve a field is allowed, and `nvml` preserves the driver's native precision and availability rather than rounding or dropping values to imitate `nvidia-smi` formatting quirks.
+  The nvml catalog exists to guarantee this schema compatibility for GPU query fields, and it stores the exact header strings `nvidia-smi` prints, not paraphrases of them.
+  Declining to serve a field is allowed, and each backend preserves the precision and availability its source offers rather than rounding or dropping values to imitate another backend's formatting quirks.
 - The demo backend targets the nvml surface, not the exec one, closely enough that dashboards and alerts can be developed against it.
   It approximates that surface without replicating it, and the differences are documented in the demo mode section of `docs/CONFIGURE.md`.
-  The one most likely to mislead: demo always serves the PCIe throughput family, while the real nvml backend serves it only when asked.
+  The one most likely to mislead: demo always serves the PCIe throughput family on every GPU, while the real nvml backend serves it by default only on non-MIG GPUs with GPM and requires an opt-in flag elsewhere.
 
 Flag combinations that a chosen backend cannot honor are startup errors rather than silent ignores.
 A user passing a custom command with the nvml backend means something the backend cannot do, and failing loudly is the only honest answer.
@@ -140,8 +141,9 @@ Treat every established name as frozen unless there is an explicit decision othe
 
 Some specifics that regularly surprise people:
 
-- Metric names derive from the returned header strings `nvidia-smi` prints, not from the query field names.
+- Metric names for GPU query fields derive from the returned header strings `nvidia-smi` prints, not from the query field names.
   That is why the nvml catalog stores those header strings byte-exactly, and why a driver renaming a header renames a metric.
+- Newly added metric families outside the `nvidia-smi` CSV headers follow upstream Prometheus metric, base-unit and label naming conventions (`_total` on counters, base units such as `_bytes`, `_seconds`, `_celsius` and `_ratio`, and lowercase `snake_case` without a redundant `gpu_` prefix inside `nvidia_smi_`).
 - The `nvidia_smi_` prefix names the data schema, not the collection mechanism.
   It stays as-is in every backend, including the ones that never run `nvidia-smi`.
 - The failed-collection counter's name says "scrapes" and counts collections.
