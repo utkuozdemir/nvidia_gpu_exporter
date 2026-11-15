@@ -10,11 +10,11 @@
 set -euo pipefail
 
 # renovate: depName=alpine/helm datasource=docker
-HELM_IMAGE=alpine/helm:3.19.0
+HELM_IMAGE=alpine/helm:3.22.1
 # renovate: depName=mikefarah/yq datasource=docker
-YQ_IMAGE=mikefarah/yq:4.48.1
+YQ_IMAGE=mikefarah/yq:4.54.3
 # renovate: depName=prom/prometheus datasource=docker
-PROM_IMAGE=prom/prometheus:v3.13.1
+PROM_IMAGE=prom/prometheus:v3.16.0
 
 here="$(cd "$(dirname "$0")" && pwd)"
 repo="$(cd "$here/../.." && pwd)"

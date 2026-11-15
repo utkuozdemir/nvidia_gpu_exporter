@@ -13,9 +13,9 @@
 set -euo pipefail
 
 # renovate: depName=alpine/helm datasource=docker
-HELM_IMAGE=alpine/helm:3.19.0
+HELM_IMAGE=alpine/helm:3.22.1
 # renovate: depName=mikefarah/yq datasource=docker
-YQ_IMAGE=mikefarah/yq:4.48.1
+YQ_IMAGE=mikefarah/yq:4.54.3
 DEV_FOR=30s
 
 here="$(cd "$(dirname "$0")" && pwd)"
