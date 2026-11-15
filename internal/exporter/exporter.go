@@ -95,11 +95,11 @@ var knownUnitSuffixes = []struct {
 type Features struct {
 	// ComputeApps enables the compute per-process metric families.
 	ComputeApps bool
-	// GraphicsApps enables the graphics per-process metric families (nvml
-	// backend, --collect.graphics-apps).
+	// GraphicsApps enables the graphics per-process metric families
+	// (--collect.graphics-apps).
 	GraphicsApps bool
 	// ComputeAppMIGLabels adds the MIG attribution labels to the
-	// per-process metrics (nvml backend, --collect.compute-apps-mig).
+	// per-process metrics (--collect.compute-apps-mig).
 	ComputeAppMIGLabels bool
 	// ComputeAppIdentityLabels adds the workload identity labels
 	// (container_id, systemd_unit) to the per-process metrics
@@ -193,6 +193,8 @@ type appDescs struct {
 	memoryUtil  *prometheus.Desc
 	encoderUtil *prometheus.Desc
 	decoderUtil *prometheus.Desc
+	jpegUtil    *prometheus.Desc
+	ofaUtil     *prometheus.Desc
 	count       *prometheus.Desc
 	success     *prometheus.Desc
 }
@@ -205,6 +207,7 @@ func (a *appDescs) all() []*prometheus.Desc {
 	return []*prometheus.Desc{
 		a.info, a.memory,
 		a.smUtil, a.memoryUtil, a.encoderUtil, a.decoderUtil,
+		a.jpegUtil, a.ofaUtil,
 		a.count, a.success,
 	}
 }
@@ -319,15 +322,7 @@ func New(
 	qFieldToMetricInfoMap := BuildQFieldToMetricInfoMap(
 		prefix, fields.Returned, reservedMetricNames(prefix, exitCodeMetric), logger)
 
-	// cuda_version rides gpu_info but is not a query field: it comes from the
-	// collection's extras, so it is appended after the resolved info fields
-	// rather than joining them (the qfield schema must not see it)
-	infoLabels := make([]string, 0, len(fields.Info)+1)
-	for _, infoField := range fields.Info {
-		infoLabels = append(infoLabels, infoField.Label)
-	}
-
-	infoLabels = append(infoLabels, "cuda_version")
+	infoLabels := buildGPUInfoLabels(fields.Info)
 
 	pcieTxDesc, pcieRxDesc := newPCIeDescs(prefix, features.PCIeThroughput)
 	pcieReplaysDesc, pcieRolloversDesc := newPCIeReplayDescs(prefix, features.PCIeReplays)
@@ -351,14 +346,10 @@ func New(
 		pcieRolloversDesc: pcieRolloversDesc,
 		nvlinkTxDesc:      nvlinkTxDesc,
 		nvlinkRxDesc:      nvlinkRxDesc,
-		gpmDescs:           newGPMDescs(prefix, features.GPM),
-		energyDesc:         newEnergyDesc(prefix, features.Energy),
-		migDescs:           newMIGDescs(prefix, features.MIG),
-		fanDescs:           newFanDescs(prefix, features.Fans),
-		bar1Descs:          newBAR1Descs(prefix, features.BAR1),
-		tempThresholdDescs: newTempThresholdDescs(prefix, features.TemperatureThresholds),
-		powerSourceDesc:    newPowerSourceDesc(prefix, features.PowerSource),
-		appMIGLabels:       features.ComputeAppMIGLabels,
+		gpmDescs:          newGPMDescs(prefix, features.GPM),
+		energyDesc:        newEnergyDesc(prefix, features.Energy),
+		migDescs:          newMIGDescs(prefix, features.MIG),
+		appMIGLabels:      features.ComputeAppMIGLabels,
 		appIdentityLabels: features.ComputeAppIdentityLabels,
 		xids:              xids,
 		logger:            logger,
@@ -370,10 +361,30 @@ func New(
 			nil),
 	}
 
+	addHardwareExtrasDescs(exp, prefix, features)
 	addHealthDescs(exp, prefix, exitCodeMetric)
 	addXIDDescs(exp, prefix, features.XIDEvents)
 
 	return exp
+}
+
+func buildGPUInfoLabels(infoFields []nvidiasmi.InfoField) []string {
+	// cuda_version rides gpu_info but is not a query field: it comes from the
+	// collection's extras, so it is appended after the resolved info fields
+	// rather than joining them (the qfield schema must not see it)
+	infoLabels := make([]string, 0, len(infoFields)+1)
+	for _, infoField := range infoFields {
+		infoLabels = append(infoLabels, infoField.Label)
+	}
+
+	return append(infoLabels, "cuda_version")
+}
+
+func addHardwareExtrasDescs(exp *GPUExporter, prefix string, features Features) {
+	exp.fanDescs = newFanDescs(prefix, features.Fans)
+	exp.bar1Descs = newBAR1Descs(prefix, features.BAR1)
+	exp.tempThresholdDescs = newTempThresholdDescs(prefix, features.TemperatureThresholds)
+	exp.powerSourceDesc = newPowerSourceDesc(prefix, features.PowerSource)
 }
 
 // addXIDDescs builds the XID error counter descriptors, left nil when the
@@ -451,6 +462,14 @@ func newAppDescs(prefix, kind string, enabled, migLabels, identityLabels bool) *
 	}
 
 	labels := appLabelNames(migLabels, identityLabels)
+	utilDesc := func(engine, activity string) *prometheus.Desc {
+		return prometheus.NewDesc(
+			prometheus.BuildFQName(prefix, "", kind+"_app_"+engine+"_utilization_ratio"),
+			"Fraction of time the process "+activity+" during the most recent sample period (0 to 1).",
+			labels,
+			nil,
+		)
+	}
 
 	return &appDescs{
 		info: prometheus.NewDesc(
@@ -463,28 +482,12 @@ func newAppDescs(prefix, kind string, enabled, migLabels, identityLabels bool) *
 			"GPU memory used by the process. Absent when the driver cannot report it (e.g. Windows WDDM).",
 			labels,
 			nil),
-		smUtil: prometheus.NewDesc(
-			prometheus.BuildFQName(prefix, "", kind+"_app_sm_utilization_ratio"),
-			"Fraction of time the process used the GPU's SMs (3D/compute) during the most recent sample period (0 to 1).",
-			labels,
-			nil,
-		),
-		memoryUtil: prometheus.NewDesc(
-			prometheus.BuildFQName(prefix, "", kind+"_app_memory_utilization_ratio"),
-			"Fraction of time the process accessed the GPU's framebuffer memory during the most recent sample period (0 to 1).",
-			labels,
-			nil,
-		),
-		encoderUtil: prometheus.NewDesc(
-			prometheus.BuildFQName(prefix, "", kind+"_app_encoder_utilization_ratio"),
-			"Fraction of time the process used the GPU's video encoder during the most recent sample period (0 to 1).",
-			labels,
-			nil),
-		decoderUtil: prometheus.NewDesc(
-			prometheus.BuildFQName(prefix, "", kind+"_app_decoder_utilization_ratio"),
-			"Fraction of time the process used the GPU's video decoder during the most recent sample period (0 to 1).",
-			labels,
-			nil),
+		smUtil:      utilDesc("sm", "used the GPU's SMs (3D/compute)"),
+		memoryUtil:  utilDesc("memory", "accessed the GPU's framebuffer memory"),
+		encoderUtil: utilDesc("encoder", "used the GPU's video encoder"),
+		decoderUtil: utilDesc("decoder", "used the GPU's video decoder"),
+		jpegUtil:    utilDesc("jpeg", "used the GPU's JPEG engine"),
+		ofaUtil:     utilDesc("ofa", "used the GPU's Optical Flow Accelerator"),
 		count: prometheus.NewDesc(
 			prometheus.BuildFQName(prefix, "", kind+"_apps"),
 			"Number of processes with a "+kind+" context on the GPU.",
@@ -811,55 +814,33 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 }
 
 func (e *GPUExporter) describeExtras(descCh chan<- *prometheus.Desc) {
-	if e.pcieTxDesc != nil {
-		e.sendDesc(descCh, e.pcieTxDesc)
-		e.sendDesc(descCh, e.pcieRxDesc)
+	singles := []*prometheus.Desc{
+		e.pcieTxDesc, e.pcieRxDesc,
+		e.pcieReplaysDesc, e.pcieRolloversDesc,
+		e.nvlinkTxDesc, e.nvlinkRxDesc,
+		e.energyDesc,
+		e.powerSourceDesc,
+		e.xidCountDesc, e.xidTimestampDesc,
+		e.migXIDCountDesc, e.migXIDTimestampDesc,
+		e.xidWatcherDesc,
 	}
 
-	if e.pcieReplaysDesc != nil {
-		e.sendDesc(descCh, e.pcieReplaysDesc)
-		e.sendDesc(descCh, e.pcieRolloversDesc)
+	for _, desc := range singles {
+		if desc != nil {
+			e.sendDesc(descCh, desc)
+		}
 	}
 
-	if e.nvlinkTxDesc != nil {
-		e.sendDesc(descCh, e.nvlinkTxDesc)
-		e.sendDesc(descCh, e.nvlinkRxDesc)
-	}
-
-	for _, desc := range e.gpmDescs.all() {
-		e.sendDesc(descCh, desc)
-	}
-
-	if e.energyDesc != nil {
-		e.sendDesc(descCh, e.energyDesc)
-	}
-
-	for _, desc := range e.migDescs.all() {
-		e.sendDesc(descCh, desc)
-	}
-
-	for _, desc := range e.fanDescs.all() {
-		e.sendDesc(descCh, desc)
-	}
-
-	for _, desc := range e.bar1Descs.all() {
-		e.sendDesc(descCh, desc)
-	}
-
-	for _, desc := range e.tempThresholdDescs.all() {
-		e.sendDesc(descCh, desc)
-	}
-
-	if e.powerSourceDesc != nil {
-		e.sendDesc(descCh, e.powerSourceDesc)
-	}
-
-	if e.xidCountDesc != nil {
-		e.sendDesc(descCh, e.xidCountDesc)
-		e.sendDesc(descCh, e.xidTimestampDesc)
-		e.sendDesc(descCh, e.migXIDCountDesc)
-		e.sendDesc(descCh, e.migXIDTimestampDesc)
-		e.sendDesc(descCh, e.xidWatcherDesc)
+	for _, group := range [][]*prometheus.Desc{
+		e.gpmDescs.all(),
+		e.migDescs.all(),
+		e.fanDescs.all(),
+		e.bar1Descs.all(),
+		e.tempThresholdDescs.all(),
+	} {
+		for _, desc := range group {
+			e.sendDesc(descCh, desc)
+		}
 	}
 }
 
@@ -1207,10 +1188,12 @@ func (e *GPUExporter) renderApp(metricCh chan<- prometheus.Metric, descs *appDes
 	e.sendAppMetric(metricCh, descs.info, 1, app)
 
 	if util := app.Utilization; util != nil {
-		e.sendAppMetric(metricCh, descs.smUtil, util.SMRatio, app)
-		e.sendAppMetric(metricCh, descs.memoryUtil, util.MemoryRatio, app)
-		e.sendAppMetric(metricCh, descs.encoderUtil, util.EncoderRatio, app)
-		e.sendAppMetric(metricCh, descs.decoderUtil, util.DecoderRatio, app)
+		e.sendOptionalAppMetric(metricCh, descs.smUtil, util.SMRatio, app)
+		e.sendOptionalAppMetric(metricCh, descs.memoryUtil, util.MemoryRatio, app)
+		e.sendOptionalAppMetric(metricCh, descs.encoderUtil, util.EncoderRatio, app)
+		e.sendOptionalAppMetric(metricCh, descs.decoderUtil, util.DecoderRatio, app)
+		e.sendOptionalAppMetric(metricCh, descs.jpegUtil, util.JPEGRatio, app)
+		e.sendOptionalAppMetric(metricCh, descs.ofaUtil, util.OFARatio, app)
 	}
 
 	if nvidiasmi.IsKnownAbsentValue(app.UsedMemory) {
@@ -1229,6 +1212,20 @@ func (e *GPUExporter) renderApp(metricCh chan<- prometheus.Metric, descs *appDes
 	}
 
 	e.sendAppMetric(metricCh, descs.memory, num, app)
+}
+
+// sendOptionalAppMetric emits one per-process gauge when value is non-nil.
+func (e *GPUExporter) sendOptionalAppMetric(
+	metricCh chan<- prometheus.Metric,
+	desc *prometheus.Desc,
+	value *float64,
+	app nvidiasmi.ComputeApp,
+) {
+	if value == nil {
+		return
+	}
+
+	e.sendAppMetric(metricCh, desc, *value, app)
 }
 
 // sendAppMetric emits one per-process gauge carrying the compute app labels.
@@ -1408,10 +1405,12 @@ var fixedMetricNames = []string{
 	"compute_app_info", "compute_app_used_memory_bytes",
 	"compute_app_sm_utilization_ratio", "compute_app_memory_utilization_ratio",
 	"compute_app_encoder_utilization_ratio", "compute_app_decoder_utilization_ratio",
+	"compute_app_jpeg_utilization_ratio", "compute_app_ofa_utilization_ratio",
 	"compute_apps", "compute_apps_last_collect_success",
 	"graphics_app_info", "graphics_app_used_memory_bytes",
 	"graphics_app_sm_utilization_ratio", "graphics_app_memory_utilization_ratio",
 	"graphics_app_encoder_utilization_ratio", "graphics_app_decoder_utilization_ratio",
+	"graphics_app_jpeg_utilization_ratio", "graphics_app_ofa_utilization_ratio",
 	"graphics_apps", "graphics_apps_last_collect_success",
 	// nvml extras
 	"pcie_throughput_tx_bytes_per_second", "pcie_throughput_rx_bytes_per_second",

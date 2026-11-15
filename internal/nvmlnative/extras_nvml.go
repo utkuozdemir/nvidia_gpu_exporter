@@ -74,91 +74,83 @@ func (b *Backend) collectFans(dev device, uuid string, extras *collect.Extras) b
 // collectBAR1 appends one device's BAR1 memory usage in bytes.
 func (b *Backend) collectBAR1(dev device, uuid string, extras *collect.Extras) bool {
 	mem, ret := dev.GetBAR1MemoryInfo()
-
-	switch {
-	case ret == nvml.SUCCESS:
+	if ret == nvml.SUCCESS {
 		extras.BAR1 = append(extras.BAR1, collect.BAR1Memory{
 			UUID:  uuid,
 			Total: mem.Bar1Total,
 			Used:  mem.Bar1Used,
 			Free:  mem.Bar1Free,
 		})
-	case ret == nvml.ERROR_NOT_SUPPORTED || ret == nvml.ERROR_FUNCTION_NOT_FOUND:
-	default:
-		return b.extrasFailure("bar1", "cannot read the GPU BAR1 memory", ret)
+
+		return true
 	}
 
-	return true
+	if ret == nvml.ERROR_NOT_SUPPORTED || ret == nvml.ERROR_FUNCTION_NOT_FOUND {
+		return true
+	}
+
+	return b.extrasFailure("bar1", "cannot read the GPU BAR1 memory", ret)
 }
 
 // collectTemperatureThresholds appends one device's thermal thresholds in Celsius.
 func (b *Backend) collectTemperatureThresholds(dev device, uuid string, extras *collect.Extras) bool {
-	read := func(kind nvml.TemperatureThresholds) (*uint32, bool) {
-		val, ret := dev.GetTemperatureThreshold(kind)
+	var (
+		out      = collect.TemperatureThresholds{UUID: uuid}
+		anyValue bool
+	)
 
-		switch {
-		case ret == nvml.SUCCESS:
-			return &val, true
-		case isLifecycleError(ret):
-			return nil, b.extrasFailure("temperature-thresholds", "cannot read a GPU temperature threshold", ret)
-		default:
-			return nil, true
+	targets := []struct {
+		kind nvml.TemperatureThresholds
+		dest **uint32
+	}{
+		{nvml.TEMPERATURE_THRESHOLD_SHUTDOWN, &out.Shutdown},
+		{nvml.TEMPERATURE_THRESHOLD_SLOWDOWN, &out.Slowdown},
+		{nvml.TEMPERATURE_THRESHOLD_MEM_MAX, &out.MemoryMax},
+		{nvml.TEMPERATURE_THRESHOLD_GPU_MAX, &out.GPUMax},
+		{nvml.TEMPERATURE_THRESHOLD_ACOUSTIC_CURR, &out.Acoustic},
+	}
+
+	for _, target := range targets {
+		val, ret := dev.GetTemperatureThreshold(target.kind)
+		if ret == nvml.SUCCESS {
+			*target.dest = &val
+			anyValue = true
+		} else if isLifecycleError(ret) {
+			return b.extrasFailure("temperature-thresholds", "cannot read a GPU temperature threshold", ret)
 		}
 	}
 
-	shutdown, ok := read(nvml.TEMPERATURE_THRESHOLD_SHUTDOWN)
-	if !ok {
-		return false
-	}
-
-	slowdown, ok := read(nvml.TEMPERATURE_THRESHOLD_SLOWDOWN)
-	if !ok {
-		return false
-	}
-
-	memMax, ok := read(nvml.TEMPERATURE_THRESHOLD_MEM_MAX)
-	if !ok {
-		return false
-	}
-
-	gpuMax, ok := read(nvml.TEMPERATURE_THRESHOLD_GPU_MAX)
-	if !ok {
-		return false
-	}
-
-	acoustic, ok := read(nvml.TEMPERATURE_THRESHOLD_ACOUSTIC_CURR)
-	if !ok {
-		return false
-	}
-
-	if shutdown != nil || slowdown != nil || memMax != nil || gpuMax != nil || acoustic != nil {
-		extras.TemperatureThresholds = append(extras.TemperatureThresholds, collect.TemperatureThresholds{
-			UUID:      uuid,
-			Shutdown:  shutdown,
-			Slowdown:  slowdown,
-			MemoryMax: memMax,
-			GPUMax:    gpuMax,
-			Acoustic:  acoustic,
-		})
+	if anyValue {
+		extras.TemperatureThresholds = append(extras.TemperatureThresholds, out)
 	}
 
 	return true
 }
 
+const maxKnownPowerSource = 2
+
 // collectPowerSource appends one device's power source reading.
 func (b *Backend) collectPowerSource(dev device, uuid string, extras *collect.Extras) bool {
 	src, ret := dev.GetPowerSource()
+	if ret == nvml.SUCCESS {
+		code := uint32(src)
+		if code > maxKnownPowerSource {
+			b.logger.Warn("unrecognized GPU power source value, skipping", "uuid", uuid, "power_source", code)
 
-	switch {
-	case ret == nvml.SUCCESS:
+			return true
+		}
+
 		extras.PowerSources = append(extras.PowerSources, collect.PowerSource{
 			UUID:   uuid,
-			Source: uint32(src),
+			Source: code,
 		})
-	case ret == nvml.ERROR_NOT_SUPPORTED || ret == nvml.ERROR_FUNCTION_NOT_FOUND:
-	default:
-		return b.extrasFailure("power-source", "cannot read the GPU power source", ret)
+
+		return true
 	}
 
-	return true
+	if ret == nvml.ERROR_NOT_SUPPORTED || ret == nvml.ERROR_FUNCTION_NOT_FOUND {
+		return true
+	}
+
+	return b.extrasFailure("power-source", "cannot read the GPU power source", ret)
 }

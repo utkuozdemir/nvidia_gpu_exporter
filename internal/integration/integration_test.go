@@ -962,14 +962,65 @@ func TestComputeAppsSoftFailure(t *testing.T) {
 	t.Parallel()
 
 	baseURL := startExporter(t,
-		"--nvidia-smi-command="+fakeCommand(defaultCapture(t), "--fail-arg", "--query-compute-apps"),
-		"--collect.compute-apps")
+		"--nvidia-smi-command="+fakeCommand(defaultCapture(t), "--fail-arg", "PIDS"),
+		"--collect.compute-apps",
+		"--collect.graphics-apps")
 
 	metrics := scrape(t, baseURL)
 	assert.Contains(t, metrics, "nvidia_smi_compute_apps_last_collect_success 0")
+	assert.Contains(t, metrics, "nvidia_smi_graphics_apps_last_collect_success 0")
 	assert.NotContains(t, metrics, "nvidia_smi_compute_app_info")
+	assert.NotContains(t, metrics, "nvidia_smi_graphics_app_info")
 	assert.Contains(t, metrics, "nvidia_smi_gpu_info")
 	assert.Contains(t, metrics, "nvidia_smi_last_collect_success 1")
+}
+
+// TestExecGraphicsAppsMIGAndPmon proves the exec backend serves graphics
+// processes, MIG per-process attribution labels, and pmon per-process
+// utilization (including -i chunking above 4 GPUs).
+func TestExecGraphicsAppsMIGAndPmon(t *testing.T) {
+	t.Parallel()
+
+	t.Run("graphics apps and pmon chunking across 5 GPUs", func(t *testing.T) {
+		t.Parallel()
+
+		baseURL := startExporter(t,
+			"--nvidia-smi-command="+fakeCommand(
+				"linux-x86_64__nvidia-geforce-rtx-4080-super__595.71.05",
+				"--state", "load", "--gpus", "5",
+			),
+			"--collect.compute-apps",
+			"--collect.graphics-apps",
+		)
+
+		metrics := scrape(t, baseURL)
+		assert.Contains(t, metrics, "nvidia_smi_compute_apps_last_collect_success 1")
+		assert.Contains(t, metrics, "nvidia_smi_graphics_apps_last_collect_success 1")
+		assert.Regexp(t, `nvidia_smi_graphics_app_info\{[^}]*process_name="/usr/bin/plasmashell"`, metrics)
+		assert.Regexp(t, `nvidia_smi_compute_app_info\{[^}]*process_name="/usr/bin/kwin_wayland"`, metrics)
+		assert.Regexp(t, `nvidia_smi_graphics_app_info\{[^}]*process_name="/usr/bin/kwin_wayland"`, metrics)
+		assert.Contains(t, metrics, "nvidia_smi_compute_app_encoder_utilization_ratio{")
+	})
+
+	t.Run("MIG attribution labels on exec per-process metrics", func(t *testing.T) {
+		t.Parallel()
+
+		baseURL := startExporter(t,
+			"--nvidia-smi-command="+fakeCommand(
+				"linux-x86_64__nvidia-h200-mig__590.48.01",
+				"--state", "load",
+			),
+			"--collect.compute-apps",
+			"--collect.compute-apps-mig",
+		)
+
+		metrics := scrape(t, baseURL)
+		assert.Regexp(
+			t,
+			`nvidia_smi_compute_app_info\{compute_instance_id="1",gpu_instance_id="2",pid="12267",process_name="\./gpu_burn"`,
+			metrics,
+		)
+	})
 }
 
 // TestNVMLBackendRejectsCustomCommand pins the flag-validation contract: a
@@ -1026,10 +1077,42 @@ func TestDemoBackendDefaultConfig(t *testing.T) {
 	first := scrape(t, baseURL)
 	second := scrape(t, baseURL)
 
+	assertDemoDefaultFamilies(t, first)
+
+	assert.Contains(t, first, "nvidia_smi_xid_watcher_enabled 1")
+
+	assert.Regexp(t, `nvidia_smi_compute_app_info\{[^}]*container_id="[0-9a-f]{64}"`, first)
+	assert.Regexp(t, `nvidia_smi_compute_app_info\{[^}]*systemd_unit="gpu-workload\.service"`, first)
+
+	assert.NotContains(t, first, "nvidia_smi_mig_sm_activity_ratio",
+		"MIG utilization needs a sample pair, like the real backend")
+	assert.NotContains(t, first, "nvidia_smi_sm_activity_ratio",
+		"whole-GPU GPM utilization needs a sample pair, like the real backend")
+	assert.Contains(t, second, "nvidia_smi_mig_sm_activity_ratio{",
+		"the second collection must serve MIG utilization")
+	assert.Contains(t, second, "nvidia_smi_mig_dram_bandwidth_utilization_ratio{",
+		"the second collection must serve MIG DRAM bandwidth utilization")
+	assert.Contains(t, second, "nvidia_smi_sm_activity_ratio{",
+		"the second collection must serve whole-GPU GPM utilization")
+	assert.Contains(t, second, "nvidia_smi_dram_bandwidth_utilization_ratio{",
+		"the second collection must serve whole-GPU DRAM bandwidth utilization")
+
+	assert.Regexp(t, `nvidia_smi_mig_mode_current\{[^}]*\} 1`, first,
+		"a GPU carrying a MIG topology must report the mode on")
+	assert.Regexp(t, `nvidia_smi_gpu_info\{[^}]*cuda_version="[0-9.]+"`, first)
+}
+
+func assertDemoDefaultFamilies(t *testing.T, scraped string) {
+	t.Helper()
+
 	for _, family := range []string{
 		"nvidia_smi_gpu_info",
 		"nvidia_smi_compute_app_info",
+		"nvidia_smi_compute_app_jpeg_utilization_ratio",
+		"nvidia_smi_compute_app_ofa_utilization_ratio",
 		"nvidia_smi_graphics_app_info",
+		"nvidia_smi_graphics_app_jpeg_utilization_ratio",
+		"nvidia_smi_graphics_app_ofa_utilization_ratio",
 		"nvidia_smi_energy_joules_total",
 		"nvidia_smi_pcie_throughput_tx_bytes_per_second",
 		"nvidia_smi_pcie_replays_total",
@@ -1055,30 +1138,8 @@ func TestDemoBackendDefaultConfig(t *testing.T) {
 		"nvidia_smi_temperature_threshold_acoustic_celsius",
 		"nvidia_smi_power_source",
 	} {
-		assert.Contains(t, first, family+"{", "family %s must be served by the built-in demo config", family)
+		assert.Contains(t, scraped, family+"{", "family %s must be served by the built-in demo config", family)
 	}
-
-	assert.Contains(t, first, "nvidia_smi_xid_watcher_enabled 1")
-
-	assert.Regexp(t, `nvidia_smi_compute_app_info\{[^}]*container_id="[0-9a-f]{64}"`, first)
-	assert.Regexp(t, `nvidia_smi_compute_app_info\{[^}]*systemd_unit="gpu-workload\.service"`, first)
-
-	assert.NotContains(t, first, "nvidia_smi_mig_sm_activity_ratio",
-		"MIG utilization needs a sample pair, like the real backend")
-	assert.NotContains(t, first, "nvidia_smi_sm_activity_ratio",
-		"whole-GPU GPM utilization needs a sample pair, like the real backend")
-	assert.Contains(t, second, "nvidia_smi_mig_sm_activity_ratio{",
-		"the second collection must serve MIG utilization")
-	assert.Contains(t, second, "nvidia_smi_mig_dram_bandwidth_utilization_ratio{",
-		"the second collection must serve MIG DRAM bandwidth utilization")
-	assert.Contains(t, second, "nvidia_smi_sm_activity_ratio{",
-		"the second collection must serve whole-GPU GPM utilization")
-	assert.Contains(t, second, "nvidia_smi_dram_bandwidth_utilization_ratio{",
-		"the second collection must serve whole-GPU DRAM bandwidth utilization")
-
-	assert.Regexp(t, `nvidia_smi_mig_mode_current\{[^}]*\} 1`, first,
-		"a GPU carrying a MIG topology must report the mode on")
-	assert.Regexp(t, `nvidia_smi_gpu_info\{[^}]*cuda_version="[0-9.]+"`, first)
 }
 
 // TestDemoBackendEnergyWithoutPowerField proves the energy counter does not

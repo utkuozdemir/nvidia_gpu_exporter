@@ -12,16 +12,16 @@ nvidia_smi_addressing_mode{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
 nvidia_smi_addressing_mode{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
 # HELP nvidia_smi_bar1_memory_free_bytes Free BAR1 aperture memory of the GPU in bytes.
 # TYPE nvidia_smi_bar1_memory_free_bytes gauge
-nvidia_smi_bar1_memory_free_bytes{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 2.49554384688e+11
-nvidia_smi_bar1_memory_free_bytes{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 2.39094430156e+11
+nvidia_smi_bar1_memory_free_bytes{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 2.47275398426e+11
+nvidia_smi_bar1_memory_free_bytes{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 2.51637604264e+11
 # HELP nvidia_smi_bar1_memory_total_bytes Total BAR1 aperture memory of the GPU in bytes.
 # TYPE nvidia_smi_bar1_memory_total_bytes gauge
 nvidia_smi_bar1_memory_total_bytes{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 2.74877906944e+11
 nvidia_smi_bar1_memory_total_bytes{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 2.74877906944e+11
 # HELP nvidia_smi_bar1_memory_used_bytes Used BAR1 aperture memory of the GPU in bytes.
 # TYPE nvidia_smi_bar1_memory_used_bytes gauge
-nvidia_smi_bar1_memory_used_bytes{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 2.5323522256e+10
-nvidia_smi_bar1_memory_used_bytes{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 3.5783476788e+10
+nvidia_smi_bar1_memory_used_bytes{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 2.7602508518e+10
+nvidia_smi_bar1_memory_used_bytes{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 2.324030268e+10
 # HELP nvidia_smi_c2c_mode c2c.mode
 # TYPE nvidia_smi_c2c_mode gauge
 nvidia_smi_c2c_mode{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
@@ -138,6 +138,14 @@ nvidia_smi_compute_app_info{compute_instance_id="",container_id="6a26475f62dd358
 nvidia_smi_compute_app_info{compute_instance_id="0",container_id="644fbf91b12c586d8f3d33a02907162e68621c4da561f93a65e4cefb65dff9f9",gpu_instance_id="7",pid="10291",process_name="/root/tools/memhog",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1
 nvidia_smi_compute_app_info{compute_instance_id="1",container_id="",gpu_instance_id="2",pid="10309",process_name="./gpu_burn",systemd_unit="gpu-workload.service",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1
 nvidia_smi_compute_app_info{compute_instance_id="1",container_id="6a26475f62dd358e9cd7c3405b4edbac418f3c08a5076366da7c32dc8c410b9e",gpu_instance_id="2",pid="10293",process_name="/root/tools/memhog",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1
+# HELP nvidia_smi_compute_app_jpeg_utilization_ratio Fraction of time the process used the GPU's JPEG engine during the most recent sample period (0 to 1).
+# TYPE nvidia_smi_compute_app_jpeg_utilization_ratio gauge
+nvidia_smi_compute_app_jpeg_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="10309",process_name="./gpu_burn",systemd_unit="gpu-workload.service",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
+nvidia_smi_compute_app_jpeg_utilization_ratio{compute_instance_id="",container_id="644fbf91b12c586d8f3d33a02907162e68621c4da561f93a65e4cefb65dff9f9",gpu_instance_id="",pid="10291",process_name="/root/tools/memhog",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
+nvidia_smi_compute_app_jpeg_utilization_ratio{compute_instance_id="",container_id="6a26475f62dd358e9cd7c3405b4edbac418f3c08a5076366da7c32dc8c410b9e",gpu_instance_id="",pid="10293",process_name="/root/tools/memhog",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
+nvidia_smi_compute_app_jpeg_utilization_ratio{compute_instance_id="0",container_id="644fbf91b12c586d8f3d33a02907162e68621c4da561f93a65e4cefb65dff9f9",gpu_instance_id="7",pid="10291",process_name="/root/tools/memhog",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_compute_app_jpeg_utilization_ratio{compute_instance_id="1",container_id="",gpu_instance_id="2",pid="10309",process_name="./gpu_burn",systemd_unit="gpu-workload.service",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_compute_app_jpeg_utilization_ratio{compute_instance_id="1",container_id="6a26475f62dd358e9cd7c3405b4edbac418f3c08a5076366da7c32dc8c410b9e",gpu_instance_id="2",pid="10293",process_name="/root/tools/memhog",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
 # HELP nvidia_smi_compute_app_memory_utilization_ratio Fraction of time the process accessed the GPU's framebuffer memory during the most recent sample period (0 to 1).
 # TYPE nvidia_smi_compute_app_memory_utilization_ratio gauge
 nvidia_smi_compute_app_memory_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="10309",process_name="./gpu_burn",systemd_unit="gpu-workload.service",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.7472724864383762
@@ -146,6 +154,14 @@ nvidia_smi_compute_app_memory_utilization_ratio{compute_instance_id="",container
 nvidia_smi_compute_app_memory_utilization_ratio{compute_instance_id="0",container_id="644fbf91b12c586d8f3d33a02907162e68621c4da561f93a65e4cefb65dff9f9",gpu_instance_id="7",pid="10291",process_name="/root/tools/memhog",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.540755667995557
 nvidia_smi_compute_app_memory_utilization_ratio{compute_instance_id="1",container_id="",gpu_instance_id="2",pid="10309",process_name="./gpu_burn",systemd_unit="gpu-workload.service",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.46743532596604986
 nvidia_smi_compute_app_memory_utilization_ratio{compute_instance_id="1",container_id="6a26475f62dd358e9cd7c3405b4edbac418f3c08a5076366da7c32dc8c410b9e",gpu_instance_id="2",pid="10293",process_name="/root/tools/memhog",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.5617101080484639
+# HELP nvidia_smi_compute_app_ofa_utilization_ratio Fraction of time the process used the GPU's Optical Flow Accelerator during the most recent sample period (0 to 1).
+# TYPE nvidia_smi_compute_app_ofa_utilization_ratio gauge
+nvidia_smi_compute_app_ofa_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="10309",process_name="./gpu_burn",systemd_unit="gpu-workload.service",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
+nvidia_smi_compute_app_ofa_utilization_ratio{compute_instance_id="",container_id="644fbf91b12c586d8f3d33a02907162e68621c4da561f93a65e4cefb65dff9f9",gpu_instance_id="",pid="10291",process_name="/root/tools/memhog",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
+nvidia_smi_compute_app_ofa_utilization_ratio{compute_instance_id="",container_id="6a26475f62dd358e9cd7c3405b4edbac418f3c08a5076366da7c32dc8c410b9e",gpu_instance_id="",pid="10293",process_name="/root/tools/memhog",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
+nvidia_smi_compute_app_ofa_utilization_ratio{compute_instance_id="0",container_id="644fbf91b12c586d8f3d33a02907162e68621c4da561f93a65e4cefb65dff9f9",gpu_instance_id="7",pid="10291",process_name="/root/tools/memhog",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_compute_app_ofa_utilization_ratio{compute_instance_id="1",container_id="",gpu_instance_id="2",pid="10309",process_name="./gpu_burn",systemd_unit="gpu-workload.service",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_compute_app_ofa_utilization_ratio{compute_instance_id="1",container_id="6a26475f62dd358e9cd7c3405b4edbac418f3c08a5076366da7c32dc8c410b9e",gpu_instance_id="2",pid="10293",process_name="/root/tools/memhog",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
 # HELP nvidia_smi_compute_app_sm_utilization_ratio Fraction of time the process used the GPU's SMs (3D/compute) during the most recent sample period (0 to 1).
 # TYPE nvidia_smi_compute_app_sm_utilization_ratio gauge
 nvidia_smi_compute_app_sm_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="10309",process_name="./gpu_burn",systemd_unit="gpu-workload.service",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.41698926943064796
@@ -342,22 +358,22 @@ nvidia_smi_fabric_status{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
 nvidia_smi_failed_scrapes_total 0
 # HELP nvidia_smi_fan_speed_current_ratio Intended operating speed of a GPU fan as a fraction of its maximum speed (0 to 1), as reported by the fan controller.
 # TYPE nvidia_smi_fan_speed_current_ratio gauge
-nvidia_smi_fan_speed_current_ratio{fan="0",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.4155097728651867
-nvidia_smi_fan_speed_current_ratio{fan="0",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.3382745529586264
-nvidia_smi_fan_speed_current_ratio{fan="1",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.5520803842308171
-nvidia_smi_fan_speed_current_ratio{fan="1",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.5635524172244343
+nvidia_smi_fan_speed_current_ratio{fan="0",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.3382745529586264
+nvidia_smi_fan_speed_current_ratio{fan="0",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.35941092119740836
+nvidia_smi_fan_speed_current_ratio{fan="1",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.5635524172244343
+nvidia_smi_fan_speed_current_ratio{fan="1",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.5132342262993848
 # HELP nvidia_smi_fan_speed_rpm Intended operating speed of a GPU fan in revolutions per minute, as reported by the fan controller.
 # TYPE nvidia_smi_fan_speed_rpm gauge
-nvidia_smi_fan_speed_rpm{fan="0",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1814
-nvidia_smi_fan_speed_rpm{fan="0",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1644
-nvidia_smi_fan_speed_rpm{fan="1",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 2114
-nvidia_smi_fan_speed_rpm{fan="1",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 2139
+nvidia_smi_fan_speed_rpm{fan="0",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1644
+nvidia_smi_fan_speed_rpm{fan="0",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1690
+nvidia_smi_fan_speed_rpm{fan="1",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 2139
+nvidia_smi_fan_speed_rpm{fan="1",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 2029
 # HELP nvidia_smi_fan_speed_target_ratio Target speed of a GPU fan as a fraction of its maximum speed (0 to 1).
 # TYPE nvidia_smi_fan_speed_target_ratio gauge
-nvidia_smi_fan_speed_target_ratio{fan="0",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.515993801108945
-nvidia_smi_fan_speed_target_ratio{fan="0",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.5739003911210011
-nvidia_smi_fan_speed_target_ratio{fan="1",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.5793840517850806
-nvidia_smi_fan_speed_target_ratio{fan="1",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.546853413543467
+nvidia_smi_fan_speed_target_ratio{fan="0",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.5739003911210011
+nvidia_smi_fan_speed_target_ratio{fan="0",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.4942661493261263
+nvidia_smi_fan_speed_target_ratio{fan="1",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.546853413543467
+nvidia_smi_fan_speed_target_ratio{fan="1",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.5238705481632432
 # HELP nvidia_smi_gpu_info A metric with a constant '1' value labeled by gpu uuid, name, driver_model_current, driver_model_pending, vbios_version, driver_version, pci_bus_id, serial, compute_cap, pci_sub_device_id, index, cuda_version.
 # TYPE nvidia_smi_gpu_info gauge
 nvidia_smi_gpu_info{compute_cap="9.0",cuda_version="13.1",driver_model_current="[N/A]",driver_model_pending="[N/A]",driver_version="590.48.01",index="0",name="NVIDIA H200",pci_bus_id="00000000:01:00.0",pci_sub_device_id="0x18BE10DE",serial="0000000000000",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64",vbios_version="96.00.A5.00.03"} 1
@@ -369,13 +385,13 @@ nvidia_smi_gpu_recovery_action{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
 # HELP nvidia_smi_graphics_app_decoder_utilization_ratio Fraction of time the process used the GPU's video decoder during the most recent sample period (0 to 1).
 # TYPE nvidia_smi_graphics_app_decoder_utilization_ratio gauge
 nvidia_smi_graphics_app_decoder_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.09766244949098536
-nvidia_smi_graphics_app_decoder_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.023358232297156296
+nvidia_smi_graphics_app_decoder_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.03039694694590259
 nvidia_smi_graphics_app_decoder_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
 nvidia_smi_graphics_app_decoder_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
 # HELP nvidia_smi_graphics_app_encoder_utilization_ratio Fraction of time the process used the GPU's video encoder during the most recent sample period (0 to 1).
 # TYPE nvidia_smi_graphics_app_encoder_utilization_ratio gauge
 nvidia_smi_graphics_app_encoder_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.09533369716418495
-nvidia_smi_graphics_app_encoder_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.0722049719113778
+nvidia_smi_graphics_app_encoder_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.09414307452850504
 nvidia_smi_graphics_app_encoder_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
 nvidia_smi_graphics_app_encoder_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
 # HELP nvidia_smi_graphics_app_info A metric with a constant '1' value labeled by the identity of a process with a graphics context on a GPU.
@@ -384,18 +400,30 @@ nvidia_smi_graphics_app_info{compute_instance_id="",container_id="",gpu_instance
 nvidia_smi_graphics_app_info{compute_instance_id="",container_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1
 nvidia_smi_graphics_app_info{compute_instance_id="",container_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1
 nvidia_smi_graphics_app_info{compute_instance_id="",container_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1
+# HELP nvidia_smi_graphics_app_jpeg_utilization_ratio Fraction of time the process used the GPU's JPEG engine during the most recent sample period (0 to 1).
+# TYPE nvidia_smi_graphics_app_jpeg_utilization_ratio gauge
+nvidia_smi_graphics_app_jpeg_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.01357995390291199
+nvidia_smi_graphics_app_jpeg_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.023522754991723113
+nvidia_smi_graphics_app_jpeg_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_graphics_app_jpeg_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
 # HELP nvidia_smi_graphics_app_memory_utilization_ratio Fraction of time the process accessed the GPU's framebuffer memory during the most recent sample period (0 to 1).
 # TYPE nvidia_smi_graphics_app_memory_utilization_ratio gauge
-nvidia_smi_graphics_app_memory_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.05680333873280269
-nvidia_smi_graphics_app_memory_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.05259923673647565
-nvidia_smi_graphics_app_memory_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.054542444602480034
-nvidia_smi_graphics_app_memory_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.03422195232816878
+nvidia_smi_graphics_app_memory_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.054542444602480034
+nvidia_smi_graphics_app_memory_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.06443424357469088
+nvidia_smi_graphics_app_memory_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.050839558074289075
+nvidia_smi_graphics_app_memory_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.049946439285659186
+# HELP nvidia_smi_graphics_app_ofa_utilization_ratio Fraction of time the process used the GPU's Optical Flow Accelerator during the most recent sample period (0 to 1).
+# TYPE nvidia_smi_graphics_app_ofa_utilization_ratio gauge
+nvidia_smi_graphics_app_ofa_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.01680333873280268
+nvidia_smi_graphics_app_ofa_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.014221952328168776
+nvidia_smi_graphics_app_ofa_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_graphics_app_ofa_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
 # HELP nvidia_smi_graphics_app_sm_utilization_ratio Fraction of time the process used the GPU's SMs (3D/compute) during the most recent sample period (0 to 1).
 # TYPE nvidia_smi_graphics_app_sm_utilization_ratio gauge
-nvidia_smi_graphics_app_sm_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.083579953902912
-nvidia_smi_graphics_app_sm_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.0678036529481894
-nvidia_smi_graphics_app_sm_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.02859767354247489
-nvidia_smi_graphics_app_sm_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.07352275499172312
+nvidia_smi_graphics_app_sm_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.08859767354247489
+nvidia_smi_graphics_app_sm_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.051020358407521546
+nvidia_smi_graphics_app_sm_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.03957686446676668
+nvidia_smi_graphics_app_sm_utilization_ratio{compute_instance_id="",container_id="",gpu_instance_id="",pid="2620",process_name="/usr/bin/Xwayland",systemd_unit="",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.0867785058727866
 # HELP nvidia_smi_graphics_app_used_memory_bytes GPU memory used by the process. Absent when the driver cannot report it (e.g. Windows WDDM).
 # TYPE nvidia_smi_graphics_app_used_memory_bytes gauge
 nvidia_smi_graphics_app_used_memory_bytes{compute_instance_id="",container_id="",gpu_instance_id="",pid="2165",process_name="/usr/bin/kwin_wayland",systemd_unit="",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 6.7108864e+07

@@ -3,13 +3,18 @@ package app
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"os/exec"
+	"slices"
 	"testing"
 	"testing/fstest"
 	"time"
 
+	"github.com/neilotoole/slogt/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -198,9 +203,8 @@ func TestValidateBackendFlags(t *testing.T) {
 			},
 		},
 		{
-			name:    "exec rejects graphics apps",
-			flags:   backendFlagSet{backend: backendExec, nvidiaSmiCommand: "nvidia-smi", graphicsApps: true},
-			wantErr: "--collect.graphics-apps requires --collect.backend=nvml or demo",
+			name:  "exec with graphics apps",
+			flags: backendFlagSet{backend: backendExec, nvidiaSmiCommand: "nvidia-smi", graphicsApps: true},
 		},
 		{
 			name:    "nvml rejects custom command",
@@ -213,12 +217,11 @@ func TestValidateBackendFlags(t *testing.T) {
 			wantErr: "--collect.pcie-throughput requires --collect.backend=nvml",
 		},
 		{
-			name: "exec rejects compute apps mig",
+			name: "exec with compute apps mig",
 			flags: backendFlagSet{
 				backend: backendExec, nvidiaSmiCommand: "nvidia-smi",
 				computeApps: true, computeAppsMIG: true,
 			},
-			wantErr: "--collect.compute-apps-mig requires --collect.backend=nvml",
 		},
 		{
 			name: "compute apps mig requires compute apps",
@@ -504,4 +507,100 @@ func TestGPUHealthHandler(t *testing.T) {
 			assert.Equal(t, testCase.wantBody, rec.Body.String())
 		})
 	}
+}
+
+func TestBuildQueryFuncRefreshesCudaVersionOnDriverChange(t *testing.T) {
+	t.Parallel()
+
+	var (
+		driverVer    = "615.71.09"
+		cudaVer      = "13.4"
+		failVersion  bool
+		versionCalls int
+	)
+
+	runFunc := func(cmd *exec.Cmd) error {
+		if slices.Contains(cmd.Args, "--version") || slices.Contains(cmd.Args, "-q") {
+			versionCalls++
+
+			if failVersion {
+				return errors.New("transient ssh failure")
+			}
+
+			_, _ = fmt.Fprintf(cmd.Stdout, "CUDA UMD version    : %s\n", cudaVer)
+
+			return nil
+		}
+
+		_, _ = fmt.Fprintf(cmd.Stdout, "uuid, driver_version\nGPU-abc, %s\n", driverVer)
+
+		return nil
+	}
+
+	query := buildQueryFunc(
+		collectConfig{backend: backendExec, nvidiaSmiCommand: "nvidia-smi"},
+		nvidiasmi.ResolvedFields{Query: []nvidiasmi.QField{nvidiasmi.UUIDQField, driverVersionField}},
+		"13.4",
+		runFunc,
+		slogt.New(t),
+	)
+
+	assertCUDA := func(wantCUDA string, wantCalls int) {
+		t.Helper()
+
+		reading, code, err := query(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, 0, code)
+		assert.Equal(t, wantCUDA, reading.Extras.CUDAVersion)
+		assert.Equal(t, wantCalls, versionCalls)
+	}
+
+	assertCUDA("13.4", 0)
+	assertCUDA("13.4", 0)
+
+	driverVer, cudaVer, failVersion = "620.70.06", "13.5", true
+
+	assertCUDA("13.4", 1)
+
+	failVersion = false
+
+	assertCUDA("13.5", 2)
+	assertCUDA("13.5", 2)
+}
+
+func TestBuildQueryFuncRecoversEmptyStartupCudaVersion(t *testing.T) {
+	t.Parallel()
+
+	var versionCalls int
+
+	runFunc := func(cmd *exec.Cmd) error {
+		if slices.Contains(cmd.Args, "--version") {
+			versionCalls++
+			_, _ = fmt.Fprint(cmd.Stdout, "CUDA Version    : 13.5\n")
+
+			return nil
+		}
+
+		_, _ = fmt.Fprint(cmd.Stdout, "uuid, driver_version\nGPU-abc, 620.70.06\n")
+
+		return nil
+	}
+
+	query := buildQueryFunc(
+		collectConfig{backend: backendExec, nvidiaSmiCommand: "nvidia-smi"},
+		nvidiasmi.ResolvedFields{Query: []nvidiasmi.QField{nvidiasmi.UUIDQField, driverVersionField}},
+		"",
+		runFunc,
+		slogt.New(t),
+	)
+
+	reading, _, err := query(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "13.5", reading.Extras.CUDAVersion)
+	assert.Equal(t, 1, versionCalls)
+
+	reading, _, err = query(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "13.5", reading.Extras.CUDAVersion)
+	assert.Equal(t, 1, versionCalls)
 }

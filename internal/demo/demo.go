@@ -212,7 +212,7 @@ func (b *Backend) MIGXIDCounts() []collect.MIGXIDCounter {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	var counters []collect.MIGXIDCounter
+	counters := make([]collect.MIGXIDCounter, 0, len(b.migXIDs))
 
 	for key, stat := range b.migXIDs {
 		counters = append(counters, collect.MIGXIDCounter{

@@ -4,6 +4,7 @@ package integration_test
 
 import (
 	"context"
+	"log/slog"
 	"math"
 	"regexp"
 	"runtime"
@@ -53,25 +54,58 @@ func TestBackendParityOnRealGPU(t *testing.T) {
 	require.NoError(t, err)
 
 	// bracketed sampling: exec, native, exec
-	execBefore := queryExec(ctx, t, resolved)
-	appsBefore, err := nvidiasmi.QueryComputeApps(ctx, nvidiasmi.DefaultCommand, nvidiasmi.DefaultRunFunc, logger)
+	execBefore, procsBefore := sampleExecWithProcesses(ctx, t, resolved, logger)
+
+	nativeReading, _, err := backend.QueryFunc(nativeResolved, nvmlnative.CollectOptions{
+		ComputeApps:  true,
+		GraphicsApps: true,
+	})(ctx)
 	require.NoError(t, err)
 
-	nativeReading, _, err := backend.QueryFunc(nativeResolved, nvmlnative.CollectOptions{ComputeApps: true})(ctx)
-	require.NoError(t, err)
-
-	execAfter := queryExec(ctx, t, resolved)
-	appsAfter, err := nvidiasmi.QueryComputeApps(ctx, nvidiasmi.DefaultCommand, nvidiasmi.DefaultRunFunc, logger)
-	require.NoError(t, err)
+	execAfter, procsAfter := sampleExecWithProcesses(ctx, t, resolved, logger)
 
 	native := nativeReading.Table
 	require.NotNil(t, native)
 	require.Len(t, native.Rows, len(execBefore.Rows),
 		"the two backends see a different number of GPUs")
 
+	compareAllFields(t, resolved, execBefore, native, execAfter)
+
+	require.True(t, nativeReading.AppsSuccess, "native compute apps collection failed: %v", nativeReading.AppsErr)
+	require.True(
+		t, nativeReading.GraphicsAppsSuccess,
+		"native graphics apps collection failed: %v", nativeReading.GraphicsAppsErr,
+	)
+	compareApps(t, "compute", procsBefore.Compute, nativeReading.Apps, procsAfter.Compute)
+	compareApps(t, "graphics", procsBefore.Graphics, nativeReading.GraphicsApps, procsAfter.Graphics)
+}
+
+func sampleExecWithProcesses(
+	ctx context.Context,
+	t *testing.T,
+	resolved nvidiasmi.ResolvedFields,
+	logger *slog.Logger,
+) (*nvidiasmi.Table, nvidiasmi.ProcessList) {
+	t.Helper()
+
+	table := queryExec(ctx, t, resolved)
+	procs, err := nvidiasmi.QueryProcesses(
+		ctx, nvidiasmi.DefaultCommand, table, nvidiasmi.DefaultRunFunc, logger,
+	)
+	require.NoError(t, err)
+
+	return table, procs
+}
+
+func compareAllFields(
+	t *testing.T,
+	resolved nvidiasmi.ResolvedFields,
+	execBefore, native, execAfter *nvidiasmi.Table,
+) {
+	t.Helper()
+
 	nativeByUUID := rowsByUUID(t, native)
 	execAfterByUUID := rowsByUUID(t, execAfter)
-
 	failures := 0
 
 	for uuid, beforeRow := range rowsByUUID(t, execBefore) {
@@ -88,9 +122,6 @@ func TestBackendParityOnRealGPU(t *testing.T) {
 			}
 		}
 	}
-
-	require.True(t, nativeReading.AppsSuccess, "native compute apps collection failed: %v", nativeReading.AppsErr)
-	compareComputeApps(t, appsBefore, nativeReading.Apps, appsAfter)
 }
 
 const maxReportedMismatches = 25
@@ -104,6 +135,7 @@ var volatileFieldPrefixes = []string{
 	"memory.used", "memory.free", "fan.speed", "pstate", "encoder.stats.",
 	"clocks_event_reasons", "clocks_throttle_reasons", "ecc.errors.",
 	"gpu_uptime", "bbx.time_run",
+	"pcie.link.gen.current", "pcie.link.gen.gpucurrent", "pcie.link.width.current",
 }
 
 func isVolatileField(q nvidiasmi.QField) bool {
@@ -415,12 +447,13 @@ func rowsByUUID(t *testing.T, table *nvidiasmi.Table) map[string]nvidiasmi.Row {
 	return rows
 }
 
-// compareComputeApps checks every compute process present in both exec brackets:
-// it must appear in the native reading with a matching process name, and when its
-// used_gpu_memory is unchanged across the bracket the native value must lie
-// within [execMiB, execMiB+1). Processes that start, exit, or resize between the
-// brackets are skipped so live background activity cannot flake the check.
-func compareComputeApps(t *testing.T, before, native, after []nvidiasmi.ComputeApp) {
+// compareApps checks every process present in both exec brackets: it must
+// appear in the native reading with a matching process name and MIG
+// attribution, and when its used_gpu_memory is unchanged across the bracket the
+// native value must lie within [execMiB, execMiB+1). Processes that start,
+// exit, or resize between the brackets are skipped so live background activity
+// cannot flake the check.
+func compareApps(t *testing.T, kind string, before, native, after []nvidiasmi.ComputeApp) {
 	t.Helper()
 
 	nativeByKey := appsByUUIDAndPID(native)
@@ -434,26 +467,40 @@ func compareComputeApps(t *testing.T, before, native, after []nvidiasmi.ComputeA
 
 		nativeApp, ok := nativeByKey[key]
 		if !ok {
-			t.Errorf("compute app %s (%s) present in both exec brackets is missing from the native backend",
-				key, beforeApp.ProcessName)
+			t.Errorf("%s app %s (%s) present in both exec brackets is missing from the native backend",
+				kind, key, beforeApp.ProcessName)
 
 			continue
 		}
 
-		// nvidia-smi replaces "," with "?" in --format=csv output so commas in
-		// arguments do not split unquoted CSV columns, while nvml preserves the
-		// real process name.
-		nativeCSVName := strings.ReplaceAll(nativeApp.ProcessName, ",", "?")
-		if nativeCSVName != beforeApp.ProcessName && nativeCSVName != afterApp.ProcessName {
-			t.Errorf("compute app %s process_name mismatch: exec before=%q after=%q, native=%q",
-				key, beforeApp.ProcessName, afterApp.ProcessName, nativeApp.ProcessName)
-		}
+		compareAppEntry(t, kind, key, beforeApp, nativeApp, afterApp)
+	}
+}
 
-		if beforeApp.UsedMemory == afterApp.UsedMemory &&
-			!matchesExecAppMemory(beforeApp.UsedMemory, nativeApp.UsedMemory) {
-			t.Errorf("compute app %s (%s) used_gpu_memory mismatch: exec=%q, native=%q",
-				key, beforeApp.ProcessName, beforeApp.UsedMemory, nativeApp.UsedMemory)
-		}
+func compareAppEntry(t *testing.T, kind, key string, beforeApp, nativeApp, afterApp nvidiasmi.ComputeApp) {
+	t.Helper()
+
+	if nativeApp.ProcessName != beforeApp.ProcessName && nativeApp.ProcessName != afterApp.ProcessName {
+		t.Errorf("%s app %s process_name mismatch: exec before=%q after=%q, native=%q",
+			kind, key, beforeApp.ProcessName, afterApp.ProcessName, nativeApp.ProcessName)
+	}
+
+	if beforeApp.GPUInstanceID == afterApp.GPUInstanceID &&
+		nativeApp.GPUInstanceID != beforeApp.GPUInstanceID {
+		t.Errorf("%s app %s gpu_instance_id mismatch: exec=%q, native=%q",
+			kind, key, beforeApp.GPUInstanceID, nativeApp.GPUInstanceID)
+	}
+
+	if beforeApp.ComputeInstanceID == afterApp.ComputeInstanceID &&
+		nativeApp.ComputeInstanceID != beforeApp.ComputeInstanceID {
+		t.Errorf("%s app %s compute_instance_id mismatch: exec=%q, native=%q",
+			kind, key, beforeApp.ComputeInstanceID, nativeApp.ComputeInstanceID)
+	}
+
+	if beforeApp.UsedMemory == afterApp.UsedMemory &&
+		!matchesExecAppMemory(beforeApp.UsedMemory, nativeApp.UsedMemory) {
+		t.Errorf("%s app %s (%s) used_gpu_memory mismatch: exec=%q, native=%q",
+			kind, key, beforeApp.ProcessName, beforeApp.UsedMemory, nativeApp.UsedMemory)
 	}
 }
 
@@ -540,7 +587,17 @@ func TestBackendMetricFamilyParityOnRealGPU(t *testing.T) {
 	require.Equal(t, execCuda, cudaVersionValues(nativeFamilies),
 		"the two backends disagree on the cuda_version label")
 
-	// the opt-in PCIe throughput family is exercised under its flag
+	assertOptInPCIeAndAppFamilies(t)
+
+	deferred := deferredFamilies(t)
+
+	compareFamiliesExecToNVML(t, execFamilies, nativeFamilies, deferred)
+	compareFamiliesNVMLToExec(t, execFamilies, nativeFamilies)
+}
+
+func assertOptInPCIeAndAppFamilies(t *testing.T) {
+	t.Helper()
+
 	pcieFamilies := scrapeBackend(t, "nvml", "--collect.pcie-throughput")
 	for _, family := range []string{
 		"nvidia_smi_pcie_throughput_tx_bytes_per_second",
@@ -551,23 +608,23 @@ func TestBackendMetricFamilyParityOnRealGPU(t *testing.T) {
 		}
 	}
 
-	// the opt-in per-process families are exercised under their flags
-	appFamilies := scrapeBackend(t, "nvml", "--collect.compute-apps", "--collect.graphics-apps")
-	for _, family := range []string{
-		"nvidia_smi_compute_apps",
-		"nvidia_smi_compute_apps_last_collect_success",
-		"nvidia_smi_graphics_apps",
-		"nvidia_smi_graphics_apps_last_collect_success",
-	} {
-		if _, ok := appFamilies[family]; !ok {
-			t.Errorf("metric family missing with --collect.compute-apps --collect.graphics-apps: %s", family)
+	for _, backendName := range []string{"exec", "nvml"} {
+		appFamilies := scrapeBackend(
+			t, backendName,
+			"--collect.compute-apps", "--collect.graphics-apps", "--collect.compute-apps-mig",
+		)
+		for _, family := range []string{
+			"nvidia_smi_compute_apps",
+			"nvidia_smi_compute_apps_last_collect_success",
+			"nvidia_smi_graphics_apps",
+			"nvidia_smi_graphics_apps_last_collect_success",
+		} {
+			if _, ok := appFamilies[family]; !ok {
+				t.Errorf("metric family missing on %s with --collect.compute-apps --collect.graphics-apps: %s",
+					backendName, family)
+			}
 		}
 	}
-
-	deferred := deferredFamilies(t)
-
-	compareFamiliesExecToNVML(t, execFamilies, nativeFamilies, deferred)
-	compareFamiliesNVMLToExec(t, execFamilies, nativeFamilies)
 }
 
 // deferredFamilies returns the metric family names derived from fields the
@@ -693,14 +750,6 @@ var nvmlOnlyFamilyPrefixes = []string{
 	"nvidia_smi_bar1_memory_",
 	"nvidia_smi_temperature_threshold_",
 	"nvidia_smi_power_source",
-	"nvidia_smi_compute_app_sm_utilization_ratio",
-	"nvidia_smi_compute_app_memory_utilization_ratio",
-	"nvidia_smi_compute_app_encoder_utilization_ratio",
-	"nvidia_smi_compute_app_decoder_utilization_ratio",
-	"nvidia_smi_graphics_app_sm_utilization_ratio",
-	"nvidia_smi_graphics_app_memory_utilization_ratio",
-	"nvidia_smi_graphics_app_encoder_utilization_ratio",
-	"nvidia_smi_graphics_app_decoder_utilization_ratio",
 	// xid series appear only after an event is observed, so their presence
 	// is asserted by the GPU-box runbook (which triggers a real XID), not
 	// here

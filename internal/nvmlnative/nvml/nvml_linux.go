@@ -7,6 +7,7 @@ package nvml
 /*
 #cgo linux LDFLAGS: -Wl,--export-dynamic -Wl,--unresolved-symbols=ignore-in-object-files
 #include <stdint.h>
+#include <stdlib.h>
 
 extern int nvmlSystemGetProcessName(unsigned int pid, char *name, unsigned int length);
 extern int nvmlDeviceGetGpuUptime_v1(void *device, uint32_t *uptimeTimeSeconds);
@@ -26,6 +27,87 @@ typedef struct {
 } exporterNvmlFanSpeedInfoV1;
 
 extern int nvmlDeviceGetFanSpeedRPM(void *device, exporterNvmlFanSpeedInfoV1 *fanSpeed);
+
+typedef struct {
+	int ret;
+	uint32_t value;
+} exporterUint32Result;
+
+typedef struct {
+	int ret;
+	int32_t value;
+} exporterInt32Result;
+
+static exporterUint32Result exporterGetGpuUptimeV1(uintptr_t device) {
+	exporterUint32Result out = {0, 0};
+	out.ret = nvmlDeviceGetGpuUptime_v1((void *)device, &out.value);
+	return out;
+}
+
+static exporterInt32Result exporterGetTemperatureV(uintptr_t device, uint32_t sensor) {
+	exporterNvmlTemperatureV1 temp = {0, 0, 0};
+	temp.version = (uint32_t)(sizeof(exporterNvmlTemperatureV1) | (1U << 24U));
+	temp.sensorType = sensor;
+	exporterInt32Result out = {0, 0};
+	out.ret = nvmlDeviceGetTemperatureV((void *)device, &temp);
+	out.value = temp.temperature;
+	return out;
+}
+
+static exporterUint32Result exporterGetFanSpeedRPM(uintptr_t device, uint32_t fan) {
+	exporterNvmlFanSpeedInfoV1 info = {0, 0, 0};
+	info.version = (uint32_t)(sizeof(exporterNvmlFanSpeedInfoV1) | (1U << 24U));
+	info.fan = fan;
+	exporterUint32Result out = {0, 0};
+	out.ret = nvmlDeviceGetFanSpeedRPM((void *)device, &info);
+	out.value = info.speed;
+	return out;
+}
+
+typedef struct {
+	uint64_t timeStamp;
+	uint32_t pid;
+	uint32_t smUtil;
+	uint32_t memUtil;
+	uint32_t encUtil;
+	uint32_t decUtil;
+	uint32_t jpgUtil;
+	uint32_t ofaUtil;
+} exporterNvmlProcessUtilizationInfoV1;
+
+typedef struct {
+	uint32_t version;
+	uint32_t processSamplesCount;
+	uint64_t lastSeenTimeStamp;
+	exporterNvmlProcessUtilizationInfoV1 *procUtilArray;
+} exporterNvmlProcessesUtilizationInfoV1;
+
+extern int nvmlDeviceGetProcessesUtilizationInfo(
+	void *device,
+	exporterNvmlProcessesUtilizationInfoV1 *procesesUtilInfo
+);
+
+typedef struct {
+	int ret;
+	uint32_t count;
+} exporterProcUtilCall;
+
+static exporterProcUtilCall exporterCallProcessesUtilizationInfo(
+	uintptr_t device,
+	uint64_t lastSeenTimeStamp,
+	uintptr_t procUtilArray,
+	uint32_t countIn
+) {
+	exporterNvmlProcessesUtilizationInfoV1 info = {0, 0, 0, NULL};
+	info.version = (uint32_t)(sizeof(exporterNvmlProcessesUtilizationInfoV1) | (1U << 24U));
+	info.processSamplesCount = countIn;
+	info.lastSeenTimeStamp = lastSeenTimeStamp;
+	info.procUtilArray = (exporterNvmlProcessUtilizationInfoV1 *)procUtilArray;
+	exporterProcUtilCall out = {0, 0};
+	out.ret = nvmlDeviceGetProcessesUtilizationInfo((void *)device, &info);
+	out.count = info.processSamplesCount;
+	return out;
+}
 */
 import "C"
 
@@ -73,6 +155,7 @@ type (
 	PlatformInfo               = gonvml.PlatformInfo
 	PowerSource                = gonvml.PowerSource
 	ProcessInfo                = gonvml.ProcessInfo
+	ProcessUtilizationInfo_v1  = gonvml.ProcessUtilizationInfo_v1
 	ProcessUtilizationSample   = gonvml.ProcessUtilizationSample
 	Pstates                    = gonvml.Pstates
 	RemappedRowsInfo_v2        = gonvml.RemappedRowsInfo_v2
@@ -242,11 +325,9 @@ func DeviceGetGpuUptimeV1(device Device) (uint32, Return) {
 		return 0, ERROR_INVALID_ARGUMENT
 	}
 
-	var seconds C.uint32_t
+	res := C.exporterGetGpuUptimeV1(C.uintptr_t(uintptr(handle)))
 
-	ret := Return(C.nvmlDeviceGetGpuUptime_v1(handle, &seconds))
-
-	return uint32(seconds), ret
+	return uint32(res.value), Return(res.ret)
 }
 
 // DeviceGetTemperatureV reads a versioned temperature sensor value. go-nvml's
@@ -258,14 +339,9 @@ func DeviceGetTemperatureV(device Device, sensor uint32) (int32, Return) {
 		return 0, ERROR_INVALID_ARGUMENT
 	}
 
-	var temp C.exporterNvmlTemperatureV1
+	res := C.exporterGetTemperatureV(C.uintptr_t(uintptr(handle)), C.uint32_t(sensor))
 
-	temp.version = C.uint32_t(uint32(unsafe.Sizeof(temp)) | (1 << 24)) //nolint:gosec // fixed C struct size
-	temp.sensorType = C.uint32_t(sensor)
-
-	ret := Return(C.nvmlDeviceGetTemperatureV(handle, &temp))
-
-	return int32(temp.temperature), ret
+	return int32(res.value), Return(res.ret)
 }
 
 // DeviceGetFanSpeedRPM reads a fan's speed in RPM. go-nvml's GetFanSpeedRPM
@@ -276,12 +352,100 @@ func DeviceGetFanSpeedRPM(device Device, fan int) (uint32, Return) {
 		return 0, ERROR_INVALID_ARGUMENT
 	}
 
-	var info C.exporterNvmlFanSpeedInfoV1
+	res := C.exporterGetFanSpeedRPM(C.uintptr_t(uintptr(handle)), C.uint32_t(fan))
 
-	info.version = C.uint32_t(uint32(unsafe.Sizeof(info)) | (1 << 24)) //nolint:gosec // fixed C struct size
-	info.fan = C.uint32_t(fan)
+	return uint32(res.value), Return(res.ret)
+}
 
-	ret := Return(C.nvmlDeviceGetFanSpeedRPM(handle, &info))
+// DeviceGetProcessesUtilizationInfo reads recent per-process utilization
+// samples including JPEG and OFA engines. go-nvml's Device method calls the C
+// entry point once with a nil buffer without allocating the returned count, so
+// the two-step count-then-read protocol is driven directly here.
+func DeviceGetProcessesUtilizationInfo(
+	device Device,
+	lastSeenTimestamp uint64,
+) ([]ProcessUtilizationInfo_v1, Return) {
+	handle, ok := rawDeviceHandle(device)
+	if !ok {
+		return nil, ERROR_INVALID_ARGUMENT
+	}
 
-	return uint32(info.speed), ret
+	devPtr := C.uintptr_t(uintptr(handle))
+	call := C.exporterCallProcessesUtilizationInfo(devPtr, C.uint64_t(lastSeenTimestamp), 0, 0)
+	ret := Return(call.ret)
+
+	if ret != ERROR_INSUFFICIENT_SIZE && ret != SUCCESS {
+		return nil, ret
+	}
+
+	const (
+		maxRetries = 4
+		headroom   = 8
+		maxSamples = 1 << 20
+	)
+
+	elemSize := C.size_t(unsafe.Sizeof(C.exporterNvmlProcessUtilizationInfoV1{}))
+
+	for range maxRetries {
+		if call.count == 0 {
+			return nil, SUCCESS
+		}
+
+		if call.count > maxSamples {
+			return nil, ERROR_MEMORY
+		}
+
+		alloc := call.count + headroom
+
+		cBuf := C.calloc(C.size_t(alloc), elemSize)
+		if cBuf == nil {
+			return nil, ERROR_MEMORY
+		}
+
+		call = C.exporterCallProcessesUtilizationInfo(
+			devPtr,
+			C.uint64_t(lastSeenTimestamp),
+			C.uintptr_t(uintptr(cBuf)),
+			alloc,
+		)
+		ret = Return(call.ret)
+
+		if ret == SUCCESS {
+			written := min(int(call.count), int(alloc))
+			raw := unsafe.Slice((*C.exporterNvmlProcessUtilizationInfoV1)(cBuf), written)
+			out := convertProcessUtilizationSamples(raw)
+			C.free(cBuf)
+
+			return out, SUCCESS
+		}
+
+		C.free(cBuf)
+
+		if ret != ERROR_INSUFFICIENT_SIZE {
+			return nil, ret
+		}
+	}
+
+	return nil, ret
+}
+
+func convertProcessUtilizationSamples(
+	raw []C.exporterNvmlProcessUtilizationInfoV1,
+) []ProcessUtilizationInfo_v1 {
+	out := make([]ProcessUtilizationInfo_v1, len(raw))
+
+	for idx, sample := range raw {
+		out[idx] = ProcessUtilizationInfo_v1{
+			TimeStamp: uint64(sample.timeStamp),
+			Pid:       uint32(sample.pid),
+			SmUtil:    uint32(sample.smUtil),
+			MemUtil:   uint32(sample.memUtil),
+			EncUtil:   uint32(sample.encUtil),
+			DecUtil:   uint32(sample.decUtil),
+			JpgUtil:   uint32(sample.jpgUtil),
+			OfaUtil:   uint32(sample.ofaUtil),
+		}
+	}
+
+	return out
 }

@@ -1,28 +1,12 @@
 package nvidiasmi
 
-import (
-	"context"
-	"fmt"
-	"log/slog"
-	"strconv"
-	"strings"
-)
-
-// computeAppsQFields is the field set queried from --query-compute-apps. It is
-// fixed: these four fields have existed for many driver generations, and they
-// are the complete per-process identity plus the one per-process measurement
-// nvidia-smi offers. No auto-detection, no configuration.
-const computeAppsQFields = "gpu_uuid,pid,process_name,used_gpu_memory"
-
-// computeAppsNumCols is the column count computeAppsQFields produces.
-const computeAppsNumCols = 4
+import "strings"
 
 // UsedMemoryMultiplier converts the used_gpu_memory value (reported in MiB,
 // per --help-query-compute-apps) to bytes.
 const UsedMemoryMultiplier = 1024 * 1024
 
-// ComputeApp is one process holding a compute context on a GPU, as reported by
-// nvidia-smi --query-compute-apps.
+// ComputeApp represents one process holding a GPU context.
 type ComputeApp struct {
 	// GPUUUID is normalized the same way as the uuid label on all GPU metrics
 	// (lowercase, "gpu-" prefix stripped), so per-process series join with
@@ -37,10 +21,8 @@ type ComputeApp struct {
 	// "[Insufficient Permissions]" in restricted containers.
 	UsedMemory string
 	// GPUInstanceID and ComputeInstanceID attribute the process to a MIG
-	// instance. The nvml backend fills them for processes on
-	// MIG-partitioned GPUs, and the demo backend for its configured
-	// topology, while they stay empty otherwise (this query's fixed field set
-	// predates MIG and is never extended, per the comment above).
+	// instance on MIG-partitioned GPUs, or to the configured MIG topology
+	// in the demo backend, and stay empty otherwise.
 	GPUInstanceID     string
 	ComputeInstanceID string
 	// ContainerID and SystemdUnit attribute the process to a container or a
@@ -50,123 +32,21 @@ type ComputeApp struct {
 	ContainerID string
 	SystemdUnit string
 	// Utilization holds per-process engine utilization ratios (0.0 to 1.0)
-	// from nvmlDeviceGetProcessUtilization in the nvml backend, or
-	// synthesized values in the demo backend. It is nil in the exec backend
-	// and on GPUs where process utilization is unsupported (such as MIG).
+	// from NVML, nvidia-smi pmon, or demo synthesis. It is nil when process
+	// utilization is unavailable or unsupported (such as MIG).
 	Utilization *ProcessUtilization
 }
 
 // ProcessUtilization holds the recent engine utilization ratios (0.0 to 1.0)
-// for a single GPU process.
+// for a single GPU process. Individual pointers stay nil when the backend
+// cannot observe or does not report a given engine.
 type ProcessUtilization struct {
-	SMRatio      float64
-	MemoryRatio  float64
-	EncoderRatio float64
-	DecoderRatio float64
-}
-
-// QueryComputeApps runs nvidia-smi --query-compute-apps and parses the CSV
-// output, returning one entry per process with a compute context.
-func QueryComputeApps(
-	ctx context.Context,
-	command string,
-	run RunFunc,
-	logger *slog.Logger,
-) ([]ComputeApp, error) {
-	stdout, _, err := execQuery(ctx, command, run,
-		"--query-compute-apps="+computeAppsQFields, "--format=csv")
-	if err != nil {
-		return nil, err
-	}
-
-	return ParseComputeApps(stdout, logger)
-}
-
-// ParseComputeApps parses --query-compute-apps CSV output. A header-only
-// output (no processes) parses to an empty result.
-//
-// Rows are parsed positionally from the outside in: gpu_uuid and pid from the
-// left, used_gpu_memory from the right, and everything in between rejoined as
-// the process name. Process names are workload-controlled and may contain
-// commas on drivers that do not sanitize them (modern drivers replace a comma
-// with "?" in CSV output, but that is not assumed here). A malformed or
-// unreadable row is skipped so that one weird process cannot take down all
-// per-process metrics.
-func ParseComputeApps(output string, logger *slog.Logger) ([]ComputeApp, error) {
-	trimmed := strings.TrimSpace(output)
-	if trimmed == "" {
-		return nil, nil
-	}
-
-	lines := strings.Split(trimmed, "\n")
-
-	if numCols := len(parseCSVLine(lines[0])); numCols != computeAppsNumCols {
-		return nil, fmt.Errorf(
-			"unexpected compute apps header: expected %d columns, got %d: %q",
-			computeAppsNumCols, numCols, strings.TrimSpace(lines[0]),
-		)
-	}
-
-	apps := make([]ComputeApp, 0, len(lines)-1)
-
-	for _, line := range lines[1:] {
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-
-		app, ok := parseComputeAppRow(line, logger)
-		if !ok {
-			continue
-		}
-
-		apps = append(apps, app)
-	}
-
-	return apps, nil
-}
-
-// parseComputeAppRow parses one data row, reporting whether the row is usable.
-func parseComputeAppRow(line string, logger *slog.Logger) (ComputeApp, bool) {
-	fields := strings.Split(line, ",")
-	if len(fields) < computeAppsNumCols {
-		logger.Warn("skipping malformed compute apps row", "row", strings.TrimSpace(line))
-
-		return ComputeApp{}, false
-	}
-
-	pid := strings.TrimSpace(fields[1])
-	if _, err := strconv.ParseUint(pid, 10, 64); err != nil {
-		// A non-numeric pid means the whole row is unreadable, most commonly
-		// "[Insufficient Permissions]" under MIG in a restricted container.
-		// That is an expected state reported for every process on every
-		// collection, so a known token is skipped without logging.
-		if !IsKnownAbsentValue(pid) {
-			logger.Warn("skipping compute apps row with unparseable pid",
-				"pid", pid, "row", strings.TrimSpace(line))
-		}
-
-		return ComputeApp{}, false
-	}
-
-	// The uuid is what joins the per-process series to their GPU. Without one
-	// the row cannot be attributed, and several such rows would collapse onto
-	// one label set and fail the whole scrape as duplicates.
-	uuid := NormalizeUUID(fields[0])
-	if uuid == "" {
-		logger.Warn("skipping compute apps row with no gpu uuid",
-			"pid", pid, "row", strings.TrimSpace(line))
-
-		return ComputeApp{}, false
-	}
-
-	name := strings.TrimSpace(strings.Join(fields[2:len(fields)-1], ","))
-
-	return ComputeApp{
-		GPUUUID:     uuid,
-		PID:         pid,
-		ProcessName: name,
-		UsedMemory:  strings.TrimSpace(fields[len(fields)-1]),
-	}, true
+	SMRatio      *float64
+	MemoryRatio  *float64
+	EncoderRatio *float64
+	DecoderRatio *float64
+	JPEGRatio    *float64
+	OFARatio     *float64
 }
 
 // NormalizeUUID normalizes a GPU uuid the way all metric labels carry it:

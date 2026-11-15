@@ -72,6 +72,7 @@ type device interface {
 	GetMemoryInfo_v2() (nvml.Memory_v2, nvml.Return)
 	GetMigDeviceHandleByIndex(index int) (device, nvml.Return)
 	GetMigMode() (int, int, nvml.Return)
+	GetMPSComputeRunningProcesses() ([]nvml.ProcessInfo, nvml.Return)
 	GetName() (string, nvml.Return)
 	GetNumFans() (int, nvml.Return)
 	GetOfaUtilization() (uint32, uint32, nvml.Return)
@@ -457,6 +458,17 @@ func (g guardedDevice) GetGraphicsRunningProcesses() ([]nvml.ProcessInfo, nvml.R
 	}
 
 	return g.dev.GetGraphicsRunningProcesses()
+}
+
+func (g guardedDevice) GetMPSComputeRunningProcesses() ([]nvml.ProcessInfo, nvml.Return) {
+	if !g.avail.hasAny("nvmlDeviceGetMPSComputeRunningProcesses",
+		"nvmlDeviceGetMPSComputeRunningProcesses_v2", "nvmlDeviceGetMPSComputeRunningProcesses_v3") {
+		var z0 []nvml.ProcessInfo
+
+		return z0, nvml.ERROR_FUNCTION_NOT_FOUND
+	}
+
+	return g.dev.GetMPSComputeRunningProcesses()
 }
 
 func (g guardedDevice) GetGspFirmwareMode() (bool, bool, nvml.Return) {

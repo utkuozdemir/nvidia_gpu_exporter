@@ -82,9 +82,27 @@ nvidia_smi_clocks_max_sm_clock_hz{uuid="00000000-0000-0000-0000-000000000000"} 2
 # HELP nvidia_smi_command_exit_code Exit code of the most recent nvidia-smi run
 # TYPE nvidia_smi_command_exit_code gauge
 nvidia_smi_command_exit_code 0
+# HELP nvidia_smi_compute_app_decoder_utilization_ratio Fraction of time the process used the GPU's video decoder during the most recent sample period (0 to 1).
+# TYPE nvidia_smi_compute_app_decoder_utilization_ratio gauge
+nvidia_smi_compute_app_decoder_utilization_ratio{pid="23747",process_name="/app/llama-server",uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_compute_app_encoder_utilization_ratio Fraction of time the process used the GPU's video encoder during the most recent sample period (0 to 1).
+# TYPE nvidia_smi_compute_app_encoder_utilization_ratio gauge
+nvidia_smi_compute_app_encoder_utilization_ratio{pid="23747",process_name="/app/llama-server",uuid="00000000-0000-0000-0000-000000000000"} 0
 # HELP nvidia_smi_compute_app_info A metric with a constant '1' value labeled by the identity of a process with a compute context on a GPU.
 # TYPE nvidia_smi_compute_app_info gauge
 nvidia_smi_compute_app_info{pid="23747",process_name="/app/llama-server",uuid="00000000-0000-0000-0000-000000000000"} 1
+# HELP nvidia_smi_compute_app_jpeg_utilization_ratio Fraction of time the process used the GPU's JPEG engine during the most recent sample period (0 to 1).
+# TYPE nvidia_smi_compute_app_jpeg_utilization_ratio gauge
+nvidia_smi_compute_app_jpeg_utilization_ratio{pid="23747",process_name="/app/llama-server",uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_compute_app_memory_utilization_ratio Fraction of time the process accessed the GPU's framebuffer memory during the most recent sample period (0 to 1).
+# TYPE nvidia_smi_compute_app_memory_utilization_ratio gauge
+nvidia_smi_compute_app_memory_utilization_ratio{pid="23747",process_name="/app/llama-server",uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_compute_app_ofa_utilization_ratio Fraction of time the process used the GPU's Optical Flow Accelerator during the most recent sample period (0 to 1).
+# TYPE nvidia_smi_compute_app_ofa_utilization_ratio gauge
+nvidia_smi_compute_app_ofa_utilization_ratio{pid="23747",process_name="/app/llama-server",uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_compute_app_sm_utilization_ratio Fraction of time the process used the GPU's SMs (3D/compute) during the most recent sample period (0 to 1).
+# TYPE nvidia_smi_compute_app_sm_utilization_ratio gauge
+nvidia_smi_compute_app_sm_utilization_ratio{pid="23747",process_name="/app/llama-server",uuid="00000000-0000-0000-0000-000000000000"} 0
 # HELP nvidia_smi_compute_app_used_memory_bytes GPU memory used by the process. Absent when the driver cannot report it (e.g. Windows WDDM).
 # TYPE nvidia_smi_compute_app_used_memory_bytes gauge
 nvidia_smi_compute_app_used_memory_bytes{pid="23747",process_name="/app/llama-server",uuid="00000000-0000-0000-0000-000000000000"} 5.114953728e+09

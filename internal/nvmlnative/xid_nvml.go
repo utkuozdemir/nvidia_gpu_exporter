@@ -3,7 +3,9 @@
 package nvmlnative
 
 import (
+	"cmp"
 	"context"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -136,7 +138,7 @@ func (a *xidAccumulator) migCounts() []collect.MIGXIDCounter {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	var counters []collect.MIGXIDCounter
+	counters := make([]collect.MIGXIDCounter, 0, len(a.migStats))
 
 	for key, stat := range a.migStats {
 		counters = append(counters, collect.MIGXIDCounter{
@@ -149,20 +151,13 @@ func (a *xidAccumulator) migCounts() []collect.MIGXIDCounter {
 		})
 	}
 
-	sort.Slice(counters, func(i, j int) bool {
-		if counters[i].UUID != counters[j].UUID {
-			return counters[i].UUID < counters[j].UUID
-		}
-
-		if counters[i].GPUInstanceID != counters[j].GPUInstanceID {
-			return counters[i].GPUInstanceID < counters[j].GPUInstanceID
-		}
-
-		if counters[i].ComputeInstanceID != counters[j].ComputeInstanceID {
-			return counters[i].ComputeInstanceID < counters[j].ComputeInstanceID
-		}
-
-		return counters[i].XID < counters[j].XID
+	slices.SortFunc(counters, func(left, right collect.MIGXIDCounter) int {
+		return cmp.Or(
+			cmp.Compare(left.UUID, right.UUID),
+			cmp.Compare(left.GPUInstanceID, right.GPUInstanceID),
+			cmp.Compare(left.ComputeInstanceID, right.ComputeInstanceID),
+			cmp.Compare(left.XID, right.XID),
+		)
 	})
 
 	return counters

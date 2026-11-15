@@ -85,6 +85,7 @@ var guardedSymbols = []string{
 	"nvmlDeviceGetPowerManagementMode",
 	"nvmlDeviceGetPowerSource",
 	"nvmlDeviceGetPowerUsage",
+	"nvmlDeviceGetProcessesUtilizationInfo",
 	"nvmlDeviceGetProcessUtilization",
 	"nvmlDeviceGetRemappedRows",
 	"nvmlDeviceGetRemappedRows_v2",
@@ -125,6 +126,9 @@ var guardedSymbols = []string{
 	"nvmlDeviceGetGraphicsRunningProcesses",
 	"nvmlDeviceGetGraphicsRunningProcesses_v2",
 	"nvmlDeviceGetGraphicsRunningProcesses_v3",
+	"nvmlDeviceGetMPSComputeRunningProcesses",
+	"nvmlDeviceGetMPSComputeRunningProcesses_v2",
+	"nvmlDeviceGetMPSComputeRunningProcesses_v3",
 	"nvmlDeviceRegisterEvents",
 	"nvmlGpmQueryDeviceSupport",
 }
