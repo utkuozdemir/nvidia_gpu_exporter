@@ -114,13 +114,29 @@ Without privileged mode (just the environment variable), the per-MIG-instance
 inventory, memory and activity metrics still work, and only the GPU-level
 memory fields go absent.
 
-By default processes are attributed to the parent GPU's UUID, not to individual
-MIG instances. Per-instance attribution labels can be added with:
+### Workload attribution
+
+Add `--collect.compute-apps-identity` to `extraArgs` to attach `container_id`
+and `systemd_unit` labels from `/proc/<pid>/cgroup` to the per-process series:
 
 ```yaml
+computeApps:
+  enabled: true
+hostPID: true
 extraArgs:
-  - --collect.compute-apps-mig
+  - --collect.compute-apps-identity
 ```
+
+Join `container_id` with `kube_pod_container_info` from `kube-state-metrics`
+to group per-process GPU memory and utilization by `namespace`, `pod` and
+`container` (see the
+[metrics reference](https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/docs/METRICS.md#workload-attribution-and-kubernetes-joins)
+for the PromQL queries).
+
+On MIG-enabled GPUs, processes are attributed to the parent GPU's UUID by
+default. Add `--collect.compute-apps-mig` to `extraArgs` (along with the
+[MIG container settings above](#per-process-gpu-metrics)) to attach
+`gpu_instance_id` and `compute_instance_id` labels.
 
 ## Scheduling on GPU nodes
 

@@ -373,12 +373,14 @@ and `nvidia_smi_graphics_apps_last_collect_success`). A process that holds
 both a compute and a graphics context appears in both families and shares the
 same PID-level utilization reading.
 
+### Workload attribution and Kubernetes joins
+
 With `--collect.compute-apps-identity` (requires `--collect.compute-apps` or
 `--collect.graphics-apps`, and Linux or the demo backend), the per-process
 `*_app_info`, `*_app_used_memory_bytes`, and `*_app_*_utilization_ratio` series
 additionally carry two best-effort workload identity labels read from
-`/proc/<pid>/cgroup` (requires host PID visibility when the exporter runs in a
-container):
+`/proc/<pid>/cgroup` on Linux (synthesized in `demo` mode, and requiring host
+PID visibility when the exporter runs in a container):
 
 - `container_id`: the lowercase 64-character hexadecimal container ID for
   processes running inside a Docker, containerd, CRI-O or Podman container, or
@@ -399,8 +401,9 @@ per-process series.
 
 On Kubernetes, join `container_id` against `kube_pod_container_info` from
 `kube-state-metrics` in the same cluster (after stripping its runtime scheme
-prefix such as `containerd://`) to attribute per-process GPU memory to a pod
-and container (returning series for matched Kubernetes containers):
+prefix such as `containerd://`) to attribute per-process GPU memory (or engine
+utilization via `nvidia_smi_compute_app_*_utilization_ratio`) to a pod and
+container (returning series for matched Kubernetes containers):
 
 ```promql
 nvidia_smi_compute_app_used_memory_bytes{container_id!=""}
@@ -463,6 +466,8 @@ Keep three constraints in mind for clean attribution:
 - Filter zero-token windows (`> 0` on the denominator) so idle periods do not
   divide idle GPU baseload power by zero or near-zero token counts.
 - `nvidia_smi_energy_joules_total` and `nvidia_smi_power_draw_watts` are
-  per-GPU, so per-pod energy attribution requires dedicated GPU assignment per
-  `vLLM` pod (no time-slicing or multi-tenant sharing on the same physical
-  GPU).
+  per-GPU, and `nvidia_smi_compute_app_info` reflects whichever pod holds a
+  CUDA context at query time. Per-pod energy attribution over a window like
+  `[1h]` requires dedicated GPU assignment where that single pod held the GPU
+  across the window (no time-slicing, pod replacement or other GPU process on
+  the same physical GPU).

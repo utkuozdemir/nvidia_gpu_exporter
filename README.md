@@ -15,6 +15,7 @@
 [![winget](https://img.shields.io/winget/v/utkuozdemir.nvidia_gpu_exporter?style=flat-square)](docs/INSTALL.md#winget)
 
 Prometheus exporter for NVIDIA GPUs, reading metrics directly from the NVIDIA driver library (NVML) or through `nvidia-smi`.
+Can also attribute per-process GPU usage to containers, systemd services and MIG instances.
 Runs on Linux, Windows and macOS, on bare metal, in Docker or on Kubernetes.
 
 ---
@@ -48,6 +49,14 @@ curl http://localhost:9835/metrics
 Use `utkuozdemir/nvidia_gpu_exporter:latest` instead if you prefer the static `nvidia-smi` subprocess backend.
 
 No GPU at hand? `nvidia_gpu_exporter --collect.backend demo` serves realistic synthetic metrics on any machine. For Windows, macOS, packages, Kubernetes and running without Docker, see [INSTALL.md](docs/INSTALL.md).
+
+## Workload attribution
+
+The exporter can report GPU memory and (on non-MIG GPUs) engine utilization per process. It can also tie each process to its container (Docker, containerd, CRI-O, Podman) or systemd service (such as `ollama.service`) on Linux, and to its MIG instance on MIG GPUs.
+
+On Kubernetes, those container IDs join with `kube-state-metrics` in PromQL to group per-process memory and utilization by namespace, pod and container, including when multiple pods time-slice a GPU.
+
+In containers this uses host PID visibility (`--pid=host` / `hostPID: true`), and needs no container runtime socket or Kubernetes API permissions. It is opt-in: see [Workload attribution in CONFIGURE.md](docs/CONFIGURE.md#workload-attribution) to enable it and [METRICS.md](docs/METRICS.md#workload-attribution-and-kubernetes-joins) for the PromQL queries.
 
 ## Use cases
 
@@ -96,7 +105,7 @@ Release artifacts, container images, and Helm charts are signed and carry GitHub
 
 ## Configuration and metrics
 
-- [CONFIGURE.md](docs/CONFIGURE.md): flags, collection backends, per-process metrics, background collection, timeouts and `/-/gpu-healthy`.
+- [CONFIGURE.md](docs/CONFIGURE.md): flags, collection backends, per-process metrics and workload attribution, background collection, timeouts and `/-/gpu-healthy`.
 - [METRICS.md](docs/METRICS.md): metric families, labels, enum mappings, MIG and XID semantics, and Kubernetes / `vLLM` PromQL joins.
 
 ## Contributing
