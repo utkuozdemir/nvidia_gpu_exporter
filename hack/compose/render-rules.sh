@@ -13,7 +13,7 @@
 set -euo pipefail
 
 # renovate: depName=alpine/helm datasource=docker
-HELM_IMAGE=alpine/helm:3.22.1
+HELM_IMAGE=alpine/helm:4.3.2
 # renovate: depName=mikefarah/yq datasource=docker
 YQ_IMAGE=mikefarah/yq:4.54.3
 DEV_FOR=30s
