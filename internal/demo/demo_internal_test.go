@@ -696,9 +696,11 @@ func TestDemoMIGXIDsAndHardwareExtras(t *testing.T) {
 				Rows: []nvidiasmi.Row{
 					{QFieldToCells: map[nvidiasmi.QField]nvidiasmi.Cell{
 						nvidiasmi.UUIDQField: {RawValue: "GPU-00000000-0000-0000-0000-000000000000"},
+						"fan.speed":          {RawValue: "45 %"},
 					}},
 					{QFieldToCells: map[nvidiasmi.QField]nvidiasmi.Cell{
 						nvidiasmi.UUIDQField: {RawValue: "GPU-11111111-1111-1111-1111-111111111111"},
+						"fan.speed":          {RawValue: "45 %"},
 					}},
 				},
 			},
@@ -719,4 +721,28 @@ func TestDemoMIGXIDsAndHardwareExtras(t *testing.T) {
 	assert.Equal(t, "0", migXIDs[0].ComputeInstanceID)
 	assert.Equal(t, uint64(31), migXIDs[0].XID)
 	assert.Equal(t, uint64(1), migXIDs[0].Count)
+}
+
+func TestSynthFansSkipsPassiveGPUs(t *testing.T) {
+	t.Parallel()
+
+	seed := int64(42)
+	backend := &Backend{rng: newDemoRand(&seed)}
+
+	var reading collect.Reading
+
+	backend.synthFans(
+		[]string{"passive", "active"},
+		map[string]float64{"active": 0.50},
+		&reading,
+	)
+
+	require.Len(t, reading.Extras.Fans, demoFansPerGPU)
+
+	for _, fan := range reading.Extras.Fans {
+		assert.Equal(t, "active", fan.UUID)
+		assert.InDelta(t, 0.50, *fan.CurrentRatio, 0.05)
+		assert.InDelta(t, 0.50, *fan.TargetRatio, 0.05)
+		assert.Positive(t, *fan.RPM)
+	}
 }

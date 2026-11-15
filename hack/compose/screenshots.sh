@@ -175,7 +175,7 @@ if height < min_height:
 url_for() {
   local uid="$1" from="$2" to="$3" height="$4" scale="$5"
   shift 5
-  local url="$grafana/render/d/$uid/x?orgId=1&kiosk&theme=dark&timeout=120"
+  local url="$grafana/render/d/$uid/x?orgId=1&kiosk=1&theme=dark&timeout=120"
   url+="&width=$width&height=$height&scale=$scale&from=$from&to=$to"
   local var
   for var in "$@"; do
