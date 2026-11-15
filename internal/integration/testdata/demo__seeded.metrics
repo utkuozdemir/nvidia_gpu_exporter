@@ -358,22 +358,26 @@ nvidia_smi_fabric_status{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
 nvidia_smi_failed_scrapes_total 0
 # HELP nvidia_smi_fan_speed_current_ratio Intended operating speed of a GPU fan as a fraction of its maximum speed (0 to 1), as reported by the fan controller.
 # TYPE nvidia_smi_fan_speed_current_ratio gauge
-nvidia_smi_fan_speed_current_ratio{fan="0",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.3382745529586264
-nvidia_smi_fan_speed_current_ratio{fan="0",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.35941092119740836
-nvidia_smi_fan_speed_current_ratio{fan="1",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.5635524172244343
-nvidia_smi_fan_speed_current_ratio{fan="1",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.5132342262993848
+nvidia_smi_fan_speed_current_ratio{fan="0",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.4221086022644569
+nvidia_smi_fan_speed_current_ratio{fan="0",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.4245474139843164
+nvidia_smi_fan_speed_current_ratio{fan="1",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.48810220198743476
+nvidia_smi_fan_speed_current_ratio{fan="1",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.48229625688069827
+# HELP nvidia_smi_fan_speed_ratio fan.speed [%]
+# TYPE nvidia_smi_fan_speed_ratio gauge
+nvidia_smi_fan_speed_ratio{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.45
+nvidia_smi_fan_speed_ratio{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.45
 # HELP nvidia_smi_fan_speed_rpm Intended operating speed of a GPU fan in revolutions per minute, as reported by the fan controller.
 # TYPE nvidia_smi_fan_speed_rpm gauge
-nvidia_smi_fan_speed_rpm{fan="0",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1644
-nvidia_smi_fan_speed_rpm{fan="0",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1690
-nvidia_smi_fan_speed_rpm{fan="1",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 2139
-nvidia_smi_fan_speed_rpm{fan="1",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 2029
+nvidia_smi_fan_speed_rpm{fan="0",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1828
+nvidia_smi_fan_speed_rpm{fan="0",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1834
+nvidia_smi_fan_speed_rpm{fan="1",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1973
+nvidia_smi_fan_speed_rpm{fan="1",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1961
 # HELP nvidia_smi_fan_speed_target_ratio Target speed of a GPU fan as a fraction of its maximum speed (0 to 1).
 # TYPE nvidia_smi_fan_speed_target_ratio gauge
-nvidia_smi_fan_speed_target_ratio{fan="0",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.5739003911210011
-nvidia_smi_fan_speed_target_ratio{fan="0",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.4942661493261263
-nvidia_smi_fan_speed_target_ratio{fan="1",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.546853413543467
-nvidia_smi_fan_speed_target_ratio{fan="1",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.5238705481632432
+nvidia_smi_fan_speed_target_ratio{fan="0",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.4689391984558263
+nvidia_smi_fan_speed_target_ratio{fan="0",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.4550897651001959
+nvidia_smi_fan_speed_target_ratio{fan="1",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.46423537626842903
+nvidia_smi_fan_speed_target_ratio{fan="1",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0.4602383562023032
 # HELP nvidia_smi_gpu_info A metric with a constant '1' value labeled by gpu uuid, name, driver_model_current, driver_model_pending, vbios_version, driver_version, pci_bus_id, serial, compute_cap, pci_sub_device_id, index, cuda_version.
 # TYPE nvidia_smi_gpu_info gauge
 nvidia_smi_gpu_info{compute_cap="9.0",cuda_version="13.1",driver_model_current="[N/A]",driver_model_pending="[N/A]",driver_version="590.48.01",index="0",name="NVIDIA H200",pci_bus_id="00000000:01:00.0",pci_sub_device_id="0x18BE10DE",serial="0000000000000",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64",vbios_version="96.00.A5.00.03"} 1

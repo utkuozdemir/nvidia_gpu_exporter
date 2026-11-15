@@ -4,6 +4,8 @@
 capture: linux-x86_64__nvidia-h200__590.48.01.txt
 state: load
 gpus: 2
+overrides:
+  fan.speed: 45
 extras:
   seed: 42
   mig:

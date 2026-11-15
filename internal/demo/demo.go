@@ -362,51 +362,55 @@ func (b *Backend) overlay(reading *collect.Reading) {
 	defer b.mu.Unlock()
 
 	snap := b.current
-	uuids, power := tableIdentity(reading.Table)
-	b.privatePower(snap, uuids, power)
+	signals := extractTableSignals(reading.Table)
+	b.fillPrivateField(snap, signals.needPower, "power.draw", 1, signals.power)
+	b.fillPrivateField(snap, signals.needFans, "fan.speed", 0.01, signals.fans)
 
 	now := b.now()
 
-	b.synthEnergy(uuids, power, snap.extras, now, reading)
-	b.synthPCIe(uuids, snap.extras, reading)
-	synthPCIeReplays(uuids, reading)
-	b.synthNVLink(uuids, now, reading)
-	b.synthMIG(uuids, snap.extras, reading)
-	b.synthGPM(uuids, snap.extras, reading)
-	synthGraphicsApps(uuids, reading)
-	attributeApps(uuids, snap.extras, reading)
+	b.synthEnergy(signals.uuids, signals.power, snap.extras, now, reading)
+	b.synthPCIe(signals.uuids, snap.extras, reading)
+	synthPCIeReplays(signals.uuids, reading)
+	b.synthNVLink(signals.uuids, now, reading)
+	b.synthMIG(signals.uuids, snap.extras, reading)
+	b.synthGPM(signals.uuids, snap.extras, reading)
+	synthGraphicsApps(signals.uuids, reading)
+	attributeApps(signals.uuids, snap.extras, reading)
 	synthAppIdentity(reading)
-	b.tickXIDs(uuids, snap.extras, now)
+	b.tickXIDs(signals.uuids, snap.extras, now)
 	b.synthAppUtilization(reading)
-	b.synthFans(uuids, reading)
-	b.synthBAR1(uuids, reading)
-	synthTemperatureThresholds(uuids, reading)
-	synthPowerSources(uuids, reading)
+	b.synthFans(signals.uuids, signals.fans, reading)
+	b.synthBAR1(signals.uuids, reading)
+	synthTemperatureThresholds(signals.uuids, reading)
+	synthPowerSources(signals.uuids, reading)
 }
 
-// privatePower fills the power draws the public query left out, from the
-// same configuration snapshot, the way the real backend reads the driver
-// independently of the query plan: excluding the power field from the
-// metrics must not change what the energy counter integrates. Rows whose
-// power is not a number keep no entry and fall back to the configured watts.
-func (b *Backend) privatePower(snap snapshot, uuids []string, power map[string]float64) {
-	missing := false
+type tableSignals struct {
+	uuids     []string
+	power     map[string]float64
+	needPower bool
+	fans      map[string]float64
+	needFans  bool
+}
 
-	for _, uuid := range uuids {
-		if _, exists := power[uuid]; !exists {
-			missing = true
-
-			break
-		}
-	}
-
+// fillPrivateField populates values the public query omitted, from the same
+// configuration snapshot, the way the real backend reads the driver
+// independently of the query plan. Rows whose cell is not a number keep no
+// entry.
+func (b *Backend) fillPrivateField(
+	snap snapshot,
+	missing bool,
+	field nvidiasmi.QField,
+	multiplier float64,
+	values map[string]float64,
+) {
 	if !missing {
 		return
 	}
 
 	var out bytes.Buffer
 
-	args := []string{"--query-gpu=uuid,power.draw", "--format=csv"}
+	args := []string{"--query-gpu=uuid," + string(field), "--format=csv"}
 	if code := fakesmi.RunWith(b.source, snap.cfg, args, &out, io.Discard); code != 0 {
 		return
 	}
@@ -424,37 +428,50 @@ func (b *Backend) privatePower(snap snapshot, uuids []string, power map[string]f
 		}
 
 		normalized := nvidiasmi.NormalizeUUID(uuid)
-		if _, exists := power[normalized]; exists {
+		if _, exists := values[normalized]; exists {
 			continue
 		}
 
-		if watts, err := nvidiasmi.TransformFieldValue("power.draw", raw, 1); err == nil {
-			power[normalized] = watts
+		if parsed, err := nvidiasmi.TransformFieldValue(field, raw, multiplier); err == nil {
+			values[normalized] = parsed
 		}
 	}
 }
 
-// tableIdentity extracts the served GPUs' identity in row order: the uuid
-// list (index-aligned with the config's GPU keying) and each GPU's power
-// draw when the field was part of the query.
-func tableIdentity(table *nvidiasmi.Table) ([]string, map[string]float64) {
+// extractTableSignals extracts the served GPUs' identity in row order, plus
+// each GPU's power draw and fan speed ratio when those fields were part of the
+// query, and whether either field was omitted from any row's query.
+func extractTableSignals(table *nvidiasmi.Table) tableSignals {
 	if table == nil {
-		return nil, nil
+		return tableSignals{}
 	}
 
-	uuids := make([]string, 0, len(table.Rows))
-	power := make(map[string]float64, len(table.Rows))
+	signals := tableSignals{
+		uuids: make([]string, 0, len(table.Rows)),
+		power: make(map[string]float64, len(table.Rows)),
+		fans:  make(map[string]float64, len(table.Rows)),
+	}
 
 	for _, row := range table.Rows {
 		uuid := nvidiasmi.NormalizeUUID(row.QFieldToCells[nvidiasmi.UUIDQField].RawValue)
-		uuids = append(uuids, uuid)
+		signals.uuids = append(signals.uuids, uuid)
 
 		if cell, ok := row.QFieldToCells["power.draw"]; ok {
 			if watts, err := nvidiasmi.TransformFieldValue("power.draw", cell.RawValue, 1); err == nil {
-				power[uuid] = watts
+				signals.power[uuid] = watts
 			}
+		} else {
+			signals.needPower = true
+		}
+
+		if cell, ok := row.QFieldToCells["fan.speed"]; ok {
+			if ratio, err := nvidiasmi.TransformFieldValue("fan.speed", cell.RawValue, 0.01); err == nil {
+				signals.fans[uuid] = ratio
+			}
+		} else {
+			signals.needFans = true
 		}
 	}
 
-	return uuids, power
+	return signals
 }

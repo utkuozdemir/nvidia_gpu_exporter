@@ -655,12 +655,36 @@ func pidSlot(pid string, slots int) int {
 
 const demoFansPerGPU = 2
 
-func (b *Backend) synthFans(uuids []string, reading *collect.Reading) {
+func clampRatio(v float64) float64 {
+	return min(max(v, 0), 1)
+}
+
+func (b *Backend) synthFans(uuids []string, fans map[string]float64, reading *collect.Reading) {
 	for _, uuid := range uuids {
+		base, ok := fans[uuid]
+		if !ok {
+			continue
+		}
+
 		for fan := range demoFansPerGPU {
-			current := b.rng.draw(rangeCfg{Min: 0.32, Max: 0.58})
-			target := b.rng.draw(rangeCfg{Min: 0.35, Max: 0.58})
-			rpm := uint32(900 + current*2200)
+			var (
+				current, target float64
+				rpm             uint32
+			)
+
+			if base > 0 {
+				delta := rangeCfg{Min: -0.03, Max: 0.00}
+				if fan > 0 {
+					delta = rangeCfg{Min: 0.01, Max: 0.04}
+				}
+
+				current = clampRatio(base + b.rng.draw(delta))
+				target = clampRatio(base + b.rng.draw(rangeCfg{Min: -0.02, Max: 0.02}))
+
+				if current > 0 {
+					rpm = uint32(900 + current*2200)
+				}
+			}
 
 			reading.Extras.Fans = append(reading.Extras.Fans, collect.FanReading{
 				UUID:         uuid,

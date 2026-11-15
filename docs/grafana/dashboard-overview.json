@@ -2820,7 +2820,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "Processes with a compute or graphics context across all selected GPUs on this node, with workload identity, engine utilization (SM, memory bandwidth, video encoder, video decoder), used memory, and share of that GPU's total VRAM. Click a GPU name to open it in the single-GPU detail dashboard. Requires --collect.compute-apps and/or --collect.graphics-apps; utilization requires the nvml or demo backend on a non-MIG GPU.",
+          "description": "Processes with a compute or graphics context across all selected GPUs on this node, with workload identity, engine utilization (SM, memory bandwidth, video encoder, video decoder), used memory, and share of that GPU's total VRAM. Click a GPU name to open it in the single-GPU detail dashboard. Requires --collect.compute-apps or --collect.graphics-apps. Engine utilization is reported on non-MIG GPUs.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3389,7 +3389,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "Per-process SM (3D/compute) utilization over time across all selected GPUs on this node. Served by the nvml and demo backends on non-MIG GPUs.",
+          "description": "Per-process SM (3D/compute) utilization over time across all selected GPUs on this node. Reported on non-MIG GPUs when --collect.compute-apps or --collect.graphics-apps is enabled.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3623,7 +3623,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "Health of the graphics process collection on the selected node. OK means the last collection succeeded, so an empty table really means no graphics processes. Failing means the exporter could not deliver graphics process data. Off means the exporter runs without --collect.graphics-apps (needs the nvml or demo backend).",
+          "description": "Health of the graphics process collection on the selected node. OK means the last collection succeeded, so an empty table really means no graphics processes. Failing means the exporter could not deliver graphics process data. Off means the exporter runs without --collect.graphics-apps.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -4023,7 +4023,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "PCIe transmit throughput per GPU, sampled by the driver over 20ms windows. Requires --collect.pcie-throughput on the nvml backend. Served only by the nvml and demo backends; absent under the default exec backend.",
+          "description": "PCIe transmit throughput per GPU. Exported by default on non-MIG GPUs with GPM support, and over 20ms driver counter windows elsewhere when --collect.pcie-throughput is enabled. Served only by the nvml and demo backends, absent under the default exec backend.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -4118,7 +4118,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "PCIe receive throughput per GPU, sampled by the driver over 20ms windows. Requires --collect.pcie-throughput on the nvml backend. Served only by the nvml and demo backends; absent under the default exec backend.",
+          "description": "PCIe receive throughput per GPU. Exported by default on non-MIG GPUs with GPM support, and over 20ms driver counter windows elsewhere when --collect.pcie-throughput is enabled. Served only by the nvml and demo backends, absent under the default exec backend.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -4554,6 +4554,76 @@
                     }
                   }
                 ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "XIDs"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 65
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "mode": "basic",
+                      "type": "color-background"
+                    }
+                  },
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "type": "value",
+                        "options": {
+                          "0": {
+                            "text": "0",
+                            "color": "#56A64B",
+                            "index": 0
+                          },
+                          "-1": {
+                            "text": "n/a",
+                            "color": "#6E7B8B",
+                            "index": 99
+                          }
+                        }
+                      },
+                      {
+                        "type": "special",
+                        "options": {
+                          "match": "null",
+                          "result": {
+                            "text": "n/a",
+                            "color": "#6E7B8B",
+                            "index": 100
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        {
+                          "color": "#6E7B8B",
+                          "value": null
+                        },
+                        {
+                          "color": "#E02F44",
+                          "value": 1
+                        }
+                      ]
+                    }
+                  }
+                ]
               }
             ]
           },
@@ -4573,7 +4643,7 @@
           "type": "table",
           "id": 29,
           "title": "MIG Instances",
-          "description": "The node's MIG partitions: one row per GPU instance (compute instances sharing it are collapsed, like the per-instance metrics). Empty when no GPU on the node is partitioned. Served only by the nvml and demo backends; absent under the default exec backend.",
+          "description": "The node's MIG partitions: one row per GPU instance (compute instances sharing it are collapsed, like the per-instance metrics), with cumulative XID errors attributed to that GPU instance since exporter start. Empty when no GPU on the node is partitioned. Served only by the nvml and demo backends, absent under the default exec backend.",
           "gridPos": {
             "h": 8,
             "w": 8,
@@ -4586,7 +4656,7 @@
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "(max by (uuid, gpu_instance_id, profile) (nvidia_smi_mig_info{instance=\"$node\", job=\"$job\"})) * on(uuid) group_left(index, name) (max by (uuid, index, name) (nvidia_smi_gpu_info{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"}))",
+              "expr": "(((max by (uuid, gpu_instance_id, profile) (nvidia_smi_mig_info{instance=\"$node\", job=\"$job\"})) * on(uuid) group_left(index, name) (max by (uuid, index, name) (nvidia_smi_gpu_info{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"}))) * on(uuid, gpu_instance_id) group_left() (sum by (uuid, gpu_instance_id) (nvidia_smi_mig_xid_errors_total{instance=\"$node\", job=\"$job\"}))) or (((((max by (uuid, gpu_instance_id, profile) (nvidia_smi_mig_info{instance=\"$node\", job=\"$job\"})) * on(uuid) group_left(index, name) (max by (uuid, index, name) (nvidia_smi_gpu_info{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"}))) * 0) and on() (max(nvidia_smi_xid_watcher_enabled{instance=\"$node\", job=\"$job\"}) == 1))) or (((max by (uuid, gpu_instance_id, profile) (nvidia_smi_mig_info{instance=\"$node\", job=\"$job\"})) * on(uuid) group_left(index, name) (max by (uuid, index, name) (nvidia_smi_gpu_info{uuid=~\"$gpu\", instance=\"$node\", job=\"$job\"}))) * 0 - 1)",
               "format": "table",
               "instant": true,
               "legendFormat": "",
@@ -4610,21 +4680,22 @@
               "id": "organize",
               "options": {
                 "excludeByName": {
-                  "Time": true,
-                  "Value": true
+                  "Time": true
                 },
                 "indexByName": {
                   "uuid": 0,
                   "index": 1,
                   "name": 2,
                   "gpu_instance_id": 3,
-                  "profile": 4
+                  "profile": 4,
+                  "Value": 5
                 },
                 "renameByName": {
                   "index": "#",
                   "name": "GPU",
                   "gpu_instance_id": "GPU instance",
-                  "profile": "Profile"
+                  "profile": "Profile",
+                  "Value": "XIDs"
                 }
               }
             }

@@ -2035,7 +2035,7 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 5,
+        "h": 6,
         "w": 6,
         "x": 0,
         "y": 23
@@ -2075,7 +2075,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Core GPU temperature. in degrees C.",
+      "description": "Core GPU die temperature in degrees Celsius. On the nvml and demo backends, dashed lines mark the card's maximum operating and hardware slowdown thresholds.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2112,31 +2112,87 @@
               "mode": "none"
             },
             "thresholdsStyle": {
-              "mode": "line"
-            }
+              "mode": "off"
+            },
+            "softMin": 0,
+            "softMax": 100
           },
           "mappings": [],
-          "max": 100,
           "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "transparent",
+                "color": "orange",
                 "value": null
-              },
-              {
-                "color": "#E02F44",
-                "value": 80
               }
             ]
           },
           "unit": "celsius"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F2CC0C"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    6,
+                    6
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "C"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E02F44"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    6,
+                    6
+                  ]
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
-        "h": 5,
+        "h": 6,
         "w": 6,
         "x": 6,
         "y": 23
@@ -2147,7 +2203,7 @@
           "calcs": [],
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": false
+          "showLegend": true
         },
         "tooltip": {
           "mode": "multi",
@@ -2164,8 +2220,30 @@
           "exemplar": true,
           "expr": "nvidia_smi_temperature_gpu{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
           "interval": "",
-          "legendFormat": "{{uuid}}",
+          "legendFormat": "GPU",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "exemplar": true,
+          "expr": "nvidia_smi_temperature_threshold_gpu_max_celsius{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+          "interval": "",
+          "legendFormat": "Max",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "exemplar": true,
+          "expr": "nvidia_smi_temperature_threshold_slowdown_celsius{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+          "interval": "",
+          "legendFormat": "Slowdown",
+          "refId": "C"
         }
       ],
       "title": "Temperature",
@@ -2232,7 +2310,7 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 5,
+        "h": 6,
         "w": 6,
         "x": 12,
         "y": 23
@@ -2272,12 +2350,11 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "The fan speed value is the percent of the product's maximum noise tolerance fan speed that the device's fan is currently intended to run at. This value may exceed 100% in certain cases. Note: The reported speed is the intended fan speed. If the fan is physically blocked and unable to spin, this output will not match the actual fan speed. Many parts do not report fan speeds because they rely on cooling via fans in the surrounding enclosure.\n",
+      "description": "Intended cooler speed. Shows per-fan speed (%) and intended RPM on the nvml and demo backends, and falls back to the single reported fan percentage on the exec backend. Both percentage and RPM reflect the speed requested by the fan controller, so a physically blocked fan can still report a non-zero speed. Passively cooled cards report no fan speed and show N/A.",
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "fixed",
-            "fixedColor": "orange"
+            "mode": "palette-classic"
           },
           "custom": {
             "axisBorderShow": false,
@@ -2313,7 +2390,6 @@
             }
           },
           "mappings": [],
-          "max": 1,
           "min": 0,
           "thresholds": {
             "mode": "absolute",
@@ -2327,10 +2403,76 @@
           "unit": "percentunit",
           "noValue": "N/A"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "max",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "max",
+                "value": 1
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "C"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "rotrpm"
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    4,
+                    4
+                  ]
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
-        "h": 5,
+        "h": 6,
         "w": 6,
         "x": 18,
         "y": 23
@@ -2341,7 +2483,7 @@
           "calcs": [],
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": false
+          "showLegend": true
         },
         "tooltip": {
           "mode": "multi",
@@ -2356,13 +2498,35 @@
             "uid": "${datasource}"
           },
           "exemplar": true,
-          "expr": "nvidia_smi_fan_speed_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+          "expr": "nvidia_smi_fan_speed_current_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
           "interval": "",
-          "legendFormat": "{{uuid}}",
+          "legendFormat": "Fan {{fan}}",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "exemplar": true,
+          "expr": "nvidia_smi_fan_speed_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"} unless on(uuid) nvidia_smi_fan_speed_current_ratio{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+          "interval": "",
+          "legendFormat": "Fan speed",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "exemplar": true,
+          "expr": "nvidia_smi_fan_speed_rpm{uuid=\"$gpu\", instance=\"$node\", job=\"$job\"}",
+          "interval": "",
+          "legendFormat": "Fan {{fan}} RPM",
+          "refId": "C"
         }
       ],
-      "title": "Fan Speed %",
+      "title": "Fan Speed",
       "type": "timeseries"
     },
     {
@@ -2430,7 +2594,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 28
+        "y": 29
       },
       "id": 71,
       "options": {
@@ -2528,7 +2692,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 28
+        "y": 29
       },
       "id": 72,
       "options": {
@@ -2566,7 +2730,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 33
+        "y": 34
       },
       "id": 46,
       "panels": [
@@ -2634,7 +2798,7 @@
             "h": 5,
             "w": 6,
             "x": 0,
-            "y": 33
+            "y": 34
           },
           "id": 12,
           "options": {
@@ -2731,7 +2895,7 @@
             "h": 5,
             "w": 6,
             "x": 6,
-            "y": 33
+            "y": 34
           },
           "id": 19,
           "options": {
@@ -2828,7 +2992,7 @@
             "h": 5,
             "w": 6,
             "x": 12,
-            "y": 33
+            "y": 34
           },
           "id": 24,
           "options": {
@@ -2925,7 +3089,7 @@
             "h": 5,
             "w": 6,
             "x": 18,
-            "y": 33
+            "y": 34
           },
           "id": 18,
           "options": {
@@ -2968,7 +3132,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 34
+        "y": 35
       },
       "id": 63,
       "panels": [
@@ -3038,7 +3202,7 @@
             "h": 5,
             "w": 5,
             "x": 0,
-            "y": 34
+            "y": 35
           },
           "id": 64,
           "options": {
@@ -3137,7 +3301,7 @@
             "h": 5,
             "w": 5,
             "x": 5,
-            "y": 34
+            "y": 35
           },
           "id": 65,
           "options": {
@@ -3236,7 +3400,7 @@
             "h": 5,
             "w": 4,
             "x": 10,
-            "y": 34
+            "y": 35
           },
           "id": 66,
           "options": {
@@ -3335,7 +3499,7 @@
             "h": 5,
             "w": 5,
             "x": 14,
-            "y": 34
+            "y": 35
           },
           "id": 67,
           "options": {
@@ -3433,7 +3597,7 @@
             "h": 5,
             "w": 5,
             "x": 19,
-            "y": 34
+            "y": 35
           },
           "id": 68,
           "options": {
@@ -3476,7 +3640,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 35
+        "y": 36
       },
       "id": 47,
       "panels": [
@@ -3485,7 +3649,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "Processes with a compute or graphics context on the selected GPU, with workload identity, engine utilization (SM, memory bandwidth, video encoder, video decoder), used memory, and share of total VRAM. Requires --collect.compute-apps and/or --collect.graphics-apps; utilization requires the nvml or demo backend on a non-MIG GPU.",
+          "description": "Processes with a compute or graphics context on the selected GPU, with workload identity, engine utilization (SM, memory bandwidth, video encoder, video decoder), used memory, and share of total VRAM. Requires --collect.compute-apps or --collect.graphics-apps. Engine utilization is reported on non-MIG GPUs.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3846,7 +4010,7 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 35,
+            "y": 36,
             "w": 24,
             "h": 7
           },
@@ -3992,7 +4156,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "Per-process SM (3D/compute) utilization over time on the selected GPU. Served by the nvml and demo backends on non-MIG GPUs.",
+          "description": "Per-process SM (3D/compute) utilization over time on the selected GPU. Reported on non-MIG GPUs when --collect.compute-apps or --collect.graphics-apps is enabled.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -4031,7 +4195,7 @@
           },
           "gridPos": {
             "x": 6,
-            "y": 42,
+            "y": 43,
             "w": 9,
             "h": 6
           },
@@ -4106,7 +4270,7 @@
           },
           "gridPos": {
             "x": 15,
-            "y": 42,
+            "y": 43,
             "w": 9,
             "h": 6
           },
@@ -4183,7 +4347,7 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 42,
+            "y": 43,
             "w": 6,
             "h": 3
           },
@@ -4226,7 +4390,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "Health of the graphics process collection on the selected node. OK means the last collection succeeded, so an empty table really means no graphics processes. Failing means the exporter could not deliver graphics process data. Off means the exporter runs without --collect.graphics-apps (needs the nvml or demo backend).",
+          "description": "Health of the graphics process collection on the selected node. OK means the last collection succeeded, so an empty table really means no graphics processes. Failing means the exporter could not deliver graphics process data. Off means the exporter runs without --collect.graphics-apps.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -4266,7 +4430,7 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 45,
+            "y": 46,
             "w": 6,
             "h": 3
           },
@@ -4314,7 +4478,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 36
+        "y": 37
       },
       "id": 48,
       "panels": [
@@ -4376,7 +4540,7 @@
             "h": 4,
             "w": 6,
             "x": 0,
-            "y": 36
+            "y": 37
           },
           "id": 37,
           "options": {
@@ -4452,7 +4616,7 @@
             "h": 8,
             "w": 18,
             "x": 6,
-            "y": 36
+            "y": 37
           },
           "id": 44,
           "options": {
@@ -4494,7 +4658,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 37
+        "y": 38
       },
       "id": 53,
       "panels": [
@@ -4545,7 +4709,7 @@
             "h": 5,
             "w": 4,
             "x": 0,
-            "y": 37
+            "y": 38
           },
           "id": 54,
           "options": {
@@ -4632,7 +4796,7 @@
             "h": 5,
             "w": 4,
             "x": 4,
-            "y": 37
+            "y": 38
           },
           "id": 61,
           "options": {
@@ -4732,7 +4896,7 @@
             "h": 5,
             "w": 8,
             "x": 8,
-            "y": 37
+            "y": 38
           },
           "id": 55,
           "options": {
@@ -4769,7 +4933,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "PCIe throughput per direction, sampled by the driver over 20ms windows. Requires --collect.pcie-throughput on the nvml backend. Served only by the nvml and demo backends; absent under the default exec backend.",
+          "description": "PCIe throughput per direction. Exported by default on non-MIG GPUs with GPM support, and over 20ms driver counter windows elsewhere when --collect.pcie-throughput is enabled. Served only by the nvml and demo backends, absent under the default exec backend.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -4827,7 +4991,7 @@
             "h": 5,
             "w": 8,
             "x": 16,
-            "y": 37
+            "y": 38
           },
           "id": 57,
           "options": {
@@ -4932,7 +5096,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 42
+            "y": 43
           },
           "id": 56,
           "options": {
@@ -5007,7 +5171,7 @@
             "h": 6,
             "w": 4,
             "x": 8,
-            "y": 42
+            "y": 43
           },
           "id": 62,
           "options": {
@@ -5106,7 +5270,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 42
+            "y": 43
           },
           "id": 60,
           "options": {
@@ -5201,7 +5365,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 48
+            "y": 49
           },
           "id": 58,
           "options": {
@@ -5307,7 +5471,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 48
+            "y": 49
           },
           "id": 59,
           "options": {

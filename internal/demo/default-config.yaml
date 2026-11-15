@@ -6,6 +6,8 @@ capture: linux-x86_64__nvidia-h200__590.48.01
 state: load
 fluctuate: true
 gpus: 2
+overrides:
+  fan.speed: {min: 38, max: 52}
 extras:
   mig:
     - gpu: 0
