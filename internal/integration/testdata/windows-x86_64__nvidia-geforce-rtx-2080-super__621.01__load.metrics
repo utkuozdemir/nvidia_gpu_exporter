@@ -79,6 +79,30 @@ nvidia_smi_clocks_max_sm_clock_hz{uuid="00000000-0000-0000-0000-000000000000"} 2
 # HELP nvidia_smi_command_exit_code Exit code of the most recent nvidia-smi run
 # TYPE nvidia_smi_command_exit_code gauge
 nvidia_smi_command_exit_code 0
+# HELP nvidia_smi_compute_app_decoder_utilization_ratio Fraction of time the process used the GPU's video decoder during the most recent sample period (0 to 1).
+# TYPE nvidia_smi_compute_app_decoder_utilization_ratio gauge
+nvidia_smi_compute_app_decoder_utilization_ratio{pid="11444",process_name="C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\CEF\\NVIDIA Overlay.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_decoder_utilization_ratio{pid="15648",process_name="C:\\Windows\\explorer.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_decoder_utilization_ratio{pid="16780",process_name="C:\\Users\\utku\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.1-full_build\\bin\\ffmpeg.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_decoder_utilization_ratio{pid="18392",process_name="C:\\Windows\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\SearchHost.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_decoder_utilization_ratio{pid="18416",process_name="C:\\Windows\\SystemApps\\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\\StartMenuExperienceHost.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_decoder_utilization_ratio{pid="18536",process_name="C:\\Users\\utku\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.1-full_build\\bin\\ffmpeg.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_decoder_utilization_ratio{pid="19484",process_name="C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\CEF\\NVIDIA Overlay.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_decoder_utilization_ratio{pid="2224",process_name="C:\\Windows\\System32\\dwm.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_decoder_utilization_ratio{pid="24148",process_name="C:\\Windows\\System32\\ApplicationFrameHost.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_decoder_utilization_ratio{pid="24536",process_name="C:\\Windows\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\TextInputHost.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_compute_app_encoder_utilization_ratio Fraction of time the process used the GPU's video encoder during the most recent sample period (0 to 1).
+# TYPE nvidia_smi_compute_app_encoder_utilization_ratio gauge
+nvidia_smi_compute_app_encoder_utilization_ratio{pid="11444",process_name="C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\CEF\\NVIDIA Overlay.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_encoder_utilization_ratio{pid="15648",process_name="C:\\Windows\\explorer.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_encoder_utilization_ratio{pid="16780",process_name="C:\\Users\\utku\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.1-full_build\\bin\\ffmpeg.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_encoder_utilization_ratio{pid="18392",process_name="C:\\Windows\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\SearchHost.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_encoder_utilization_ratio{pid="18416",process_name="C:\\Windows\\SystemApps\\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\\StartMenuExperienceHost.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_encoder_utilization_ratio{pid="18536",process_name="C:\\Users\\utku\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.1-full_build\\bin\\ffmpeg.exe",uuid="00000000-0000-0000-0000-000000000000"} 0.99
+nvidia_smi_compute_app_encoder_utilization_ratio{pid="19484",process_name="C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\CEF\\NVIDIA Overlay.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_encoder_utilization_ratio{pid="2224",process_name="C:\\Windows\\System32\\dwm.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_encoder_utilization_ratio{pid="24148",process_name="C:\\Windows\\System32\\ApplicationFrameHost.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_encoder_utilization_ratio{pid="24536",process_name="C:\\Windows\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\TextInputHost.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
 # HELP nvidia_smi_compute_app_info A metric with a constant '1' value labeled by the identity of a process with a compute context on a GPU.
 # TYPE nvidia_smi_compute_app_info gauge
 nvidia_smi_compute_app_info{pid="11444",process_name="C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\CEF\\NVIDIA Overlay.exe",uuid="00000000-0000-0000-0000-000000000000"} 1
@@ -91,6 +115,54 @@ nvidia_smi_compute_app_info{pid="19484",process_name="C:\\Program Files\\NVIDIA 
 nvidia_smi_compute_app_info{pid="2224",process_name="C:\\Windows\\System32\\dwm.exe",uuid="00000000-0000-0000-0000-000000000000"} 1
 nvidia_smi_compute_app_info{pid="24148",process_name="C:\\Windows\\System32\\ApplicationFrameHost.exe",uuid="00000000-0000-0000-0000-000000000000"} 1
 nvidia_smi_compute_app_info{pid="24536",process_name="C:\\Windows\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\TextInputHost.exe",uuid="00000000-0000-0000-0000-000000000000"} 1
+# HELP nvidia_smi_compute_app_jpeg_utilization_ratio Fraction of time the process used the GPU's JPEG engine during the most recent sample period (0 to 1).
+# TYPE nvidia_smi_compute_app_jpeg_utilization_ratio gauge
+nvidia_smi_compute_app_jpeg_utilization_ratio{pid="11444",process_name="C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\CEF\\NVIDIA Overlay.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_jpeg_utilization_ratio{pid="15648",process_name="C:\\Windows\\explorer.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_jpeg_utilization_ratio{pid="16780",process_name="C:\\Users\\utku\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.1-full_build\\bin\\ffmpeg.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_jpeg_utilization_ratio{pid="18392",process_name="C:\\Windows\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\SearchHost.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_jpeg_utilization_ratio{pid="18416",process_name="C:\\Windows\\SystemApps\\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\\StartMenuExperienceHost.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_jpeg_utilization_ratio{pid="18536",process_name="C:\\Users\\utku\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.1-full_build\\bin\\ffmpeg.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_jpeg_utilization_ratio{pid="19484",process_name="C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\CEF\\NVIDIA Overlay.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_jpeg_utilization_ratio{pid="2224",process_name="C:\\Windows\\System32\\dwm.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_jpeg_utilization_ratio{pid="24148",process_name="C:\\Windows\\System32\\ApplicationFrameHost.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_jpeg_utilization_ratio{pid="24536",process_name="C:\\Windows\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\TextInputHost.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_compute_app_memory_utilization_ratio Fraction of time the process accessed the GPU's framebuffer memory during the most recent sample period (0 to 1).
+# TYPE nvidia_smi_compute_app_memory_utilization_ratio gauge
+nvidia_smi_compute_app_memory_utilization_ratio{pid="11444",process_name="C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\CEF\\NVIDIA Overlay.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_memory_utilization_ratio{pid="15648",process_name="C:\\Windows\\explorer.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_memory_utilization_ratio{pid="16780",process_name="C:\\Users\\utku\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.1-full_build\\bin\\ffmpeg.exe",uuid="00000000-0000-0000-0000-000000000000"} 0.03
+nvidia_smi_compute_app_memory_utilization_ratio{pid="18392",process_name="C:\\Windows\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\SearchHost.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_memory_utilization_ratio{pid="18416",process_name="C:\\Windows\\SystemApps\\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\\StartMenuExperienceHost.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_memory_utilization_ratio{pid="18536",process_name="C:\\Users\\utku\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.1-full_build\\bin\\ffmpeg.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_memory_utilization_ratio{pid="19484",process_name="C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\CEF\\NVIDIA Overlay.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_memory_utilization_ratio{pid="2224",process_name="C:\\Windows\\System32\\dwm.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_memory_utilization_ratio{pid="24148",process_name="C:\\Windows\\System32\\ApplicationFrameHost.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_memory_utilization_ratio{pid="24536",process_name="C:\\Windows\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\TextInputHost.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_compute_app_ofa_utilization_ratio Fraction of time the process used the GPU's Optical Flow Accelerator during the most recent sample period (0 to 1).
+# TYPE nvidia_smi_compute_app_ofa_utilization_ratio gauge
+nvidia_smi_compute_app_ofa_utilization_ratio{pid="11444",process_name="C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\CEF\\NVIDIA Overlay.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_ofa_utilization_ratio{pid="15648",process_name="C:\\Windows\\explorer.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_ofa_utilization_ratio{pid="16780",process_name="C:\\Users\\utku\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.1-full_build\\bin\\ffmpeg.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_ofa_utilization_ratio{pid="18392",process_name="C:\\Windows\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\SearchHost.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_ofa_utilization_ratio{pid="18416",process_name="C:\\Windows\\SystemApps\\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\\StartMenuExperienceHost.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_ofa_utilization_ratio{pid="18536",process_name="C:\\Users\\utku\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.1-full_build\\bin\\ffmpeg.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_ofa_utilization_ratio{pid="19484",process_name="C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\CEF\\NVIDIA Overlay.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_ofa_utilization_ratio{pid="2224",process_name="C:\\Windows\\System32\\dwm.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_ofa_utilization_ratio{pid="24148",process_name="C:\\Windows\\System32\\ApplicationFrameHost.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_ofa_utilization_ratio{pid="24536",process_name="C:\\Windows\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\TextInputHost.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+# HELP nvidia_smi_compute_app_sm_utilization_ratio Fraction of time the process used the GPU's SMs (3D/compute) during the most recent sample period (0 to 1).
+# TYPE nvidia_smi_compute_app_sm_utilization_ratio gauge
+nvidia_smi_compute_app_sm_utilization_ratio{pid="11444",process_name="C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\CEF\\NVIDIA Overlay.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_sm_utilization_ratio{pid="15648",process_name="C:\\Windows\\explorer.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_sm_utilization_ratio{pid="16780",process_name="C:\\Users\\utku\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.1-full_build\\bin\\ffmpeg.exe",uuid="00000000-0000-0000-0000-000000000000"} 0.07
+nvidia_smi_compute_app_sm_utilization_ratio{pid="18392",process_name="C:\\Windows\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\SearchHost.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_sm_utilization_ratio{pid="18416",process_name="C:\\Windows\\SystemApps\\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\\StartMenuExperienceHost.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_sm_utilization_ratio{pid="18536",process_name="C:\\Users\\utku\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.1-full_build\\bin\\ffmpeg.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_sm_utilization_ratio{pid="19484",process_name="C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\CEF\\NVIDIA Overlay.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_sm_utilization_ratio{pid="2224",process_name="C:\\Windows\\System32\\dwm.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_sm_utilization_ratio{pid="24148",process_name="C:\\Windows\\System32\\ApplicationFrameHost.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
+nvidia_smi_compute_app_sm_utilization_ratio{pid="24536",process_name="C:\\Windows\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\TextInputHost.exe",uuid="00000000-0000-0000-0000-000000000000"} 0
 # HELP nvidia_smi_compute_apps Number of processes with a compute context on the GPU.
 # TYPE nvidia_smi_compute_apps gauge
 nvidia_smi_compute_apps{uuid="00000000-0000-0000-0000-000000000000"} 10

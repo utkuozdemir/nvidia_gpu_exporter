@@ -641,6 +641,14 @@ func answer(capt *capture.Capture, cfg *config, args []string, stdout, stderr io
 		return answerQuery(capt, cfg, request, sectionLabel, stdout, stderr)
 	}
 
+	if isPIDSQuery(args) {
+		return answerPIDS(capt, cfg, stdout, stderr)
+	}
+
+	if isPmonQuery(args) {
+		return answerPmon(capt, cfg, args, stdout, stderr)
+	}
+
 	if section := findVerbatim(capt, cfg.state, args); section != nil {
 		body, code := splitRecordedExitCode(section.Body)
 		if body != "" || code == 0 {
@@ -654,6 +662,415 @@ func answer(capt *capture.Capture, cfg *config, args []string, stdout, stderr io
 		strings.Join(args, " "), cfg.state)
 
 	return usageExitCode
+}
+
+func isPIDSQuery(args []string) bool {
+	return len(args) == 1 && args[0] == "-q" ||
+		len(args) == 3 && args[0] == "-q" && args[1] == "-d" && args[2] == "PIDS"
+}
+
+func isPmonQuery(args []string) bool {
+	if len(args) == 3 && args[0] == "pmon" && args[1] == "-c" && args[2] == "1" {
+		return true
+	}
+
+	return len(args) == 5 && args[0] == "pmon" && args[1] == "-c" && args[2] == "1" && args[3] == "-i"
+}
+
+// answerPIDS serves nvidia-smi -q and nvidia-smi -q -d PIDS from the recorded
+// -q section, replicating the GPU block with per-GPU bus IDs and UUIDs when
+// multi-GPU simulation is active.
+func answerPIDS(capt *capture.Capture, cfg *config, stdout, stderr io.Writer) int {
+	if len(cfg.gpus) > 0 {
+		if err := validateReplicableCapture(capt, cfg.state); err != nil {
+			fmt.Fprintf(stderr, "fake-nvidia-smi: %v\n", err)
+
+			return usageExitCode
+		}
+	}
+
+	section := findVerbatim(capt, cfg.state, []string{"-q"})
+	if section == nil {
+		section = capt.Find(cfg.state, "query (-q")
+	}
+
+	if section == nil {
+		fmt.Fprintf(stderr, "fake-nvidia-smi: capture has no -q section for state %q\n", cfg.state)
+
+		return usageExitCode
+	}
+
+	body, code := splitRecordedExitCode(section.Body)
+	if code != 0 {
+		if body != "" {
+			fmt.Fprintln(stdout, body)
+		}
+
+		return code
+	}
+
+	if len(cfg.gpus) > 0 || cfg.fluct != nil || hasUsedMemoryOverride(cfg) {
+		body = transformQueryOutput(body, cfg)
+	}
+
+	fmt.Fprintln(stdout, body)
+
+	return 0
+}
+
+func hasUsedMemoryOverride(cfg *config) bool {
+	for _, m := range cfg.overrides {
+		if _, ok := m["used_gpu_memory"]; ok {
+			return true
+		}
+	}
+
+	return false
+}
+
+func transformQueryOutput(body string, cfg *config) string {
+	preamble, gpuBlock := splitQueryPreambleAndGPUBlock(body, len(cfg.gpus))
+	if len(gpuBlock) == 0 {
+		return body
+	}
+
+	replicas := max(len(cfg.gpus), 1)
+	capturedBus := strings.TrimSpace(strings.TrimPrefix(gpuBlock[0], "GPU "))
+	blocks := make([]string, 0, replicas)
+
+	for idx := range replicas {
+		blocks = append(blocks, rewriteQueryGPUBlock(gpuBlock, capturedBus, idx, cfg))
+	}
+
+	out := strings.Join(preamble, "\n")
+	if out != "" && !strings.HasSuffix(out, "\n") {
+		out += "\n"
+	}
+
+	return out + strings.Join(blocks, "\n\n")
+}
+
+func splitQueryPreambleAndGPUBlock(body string, gpuCount int) ([]string, []string) {
+	var (
+		preamble []string
+		gpuBlock []string
+		inGPU    bool
+	)
+
+	for line := range strings.SplitSeq(body, "\n") {
+		if !inGPU && strings.HasPrefix(line, "GPU ") {
+			inGPU = true
+		}
+
+		if inGPU {
+			gpuBlock = append(gpuBlock, line)
+
+			continue
+		}
+
+		if gpuCount > 0 {
+			if key, _, ok := strings.Cut(line, ":"); ok && strings.TrimSpace(key) == "Attached GPUs" {
+				line = fmt.Sprintf("%-34s: %d", "Attached GPUs", gpuCount)
+			}
+		}
+
+		preamble = append(preamble, line)
+	}
+
+	return preamble, gpuBlock
+}
+
+func rewriteQueryGPUBlock(gpuBlock []string, capturedBus string, idx int, cfg *config) string {
+	rewritten := make([]string, len(gpuBlock))
+	rewritten[0] = gpuBlock[0]
+
+	var id gpuIdentity
+	if len(cfg.gpus) > 0 {
+		id = cfg.gpus[idx]
+		rewritten[0] = "GPU " + rewriteBusID(capturedBus, idx+1)
+	}
+
+	var overrides map[string]valueGen
+	if idx < len(cfg.overrides) {
+		overrides = cfg.overrides[idx]
+	}
+
+	inProcesses := false
+
+	for lineIdx := 1; lineIdx < len(gpuBlock); lineIdx++ {
+		line := gpuBlock[lineIdx]
+		inProcesses = updateProcessesSectionState(line, inProcesses)
+		rewritten[lineIdx] = rewriteQueryGPULine(line, id, len(cfg.gpus) > 0, inProcesses, overrides, cfg.fluct)
+	}
+
+	return strings.Join(rewritten, "\n")
+}
+
+func rewriteQueryGPULine(
+	line string,
+	id gpuIdentity,
+	hasCustomGPUs, inProcesses bool,
+	overrides map[string]valueGen,
+	fluct *fluctuator,
+) string {
+	key, val, hasColon := strings.Cut(line, ":")
+	if !hasColon {
+		return line
+	}
+
+	trimmedKey := strings.TrimSpace(key)
+
+	if hasCustomGPUs && strings.EqualFold(trimmedKey, "GPU UUID") {
+		return key + ": " + id.uuid
+	}
+
+	if hasCustomGPUs && id.serial != "" && strings.EqualFold(trimmedKey, "Serial Number") {
+		return key + ": " + id.serial
+	}
+
+	if inProcesses && strings.EqualFold(trimmedKey, "Used GPU Memory") {
+		return key + ": " + transformPIDSMemory(strings.TrimSpace(val), overrides, fluct)
+	}
+
+	return line
+}
+
+func updateProcessesSectionState(line string, current bool) bool {
+	trimmed := strings.TrimSpace(line)
+	indent := len(line) - len(strings.TrimLeft(line, " "))
+
+	if trimmed == "" || indent > 4 {
+		return current
+	}
+
+	if key, val, ok := strings.Cut(trimmed, ":"); ok {
+		return strings.EqualFold(strings.TrimSpace(key), "Processes") &&
+			!strings.EqualFold(strings.TrimSpace(val), "None")
+	}
+
+	return strings.EqualFold(trimmed, "Processes")
+}
+
+func transformPIDSMemory(val string, overrides map[string]valueGen, fluct *fluctuator) string {
+	if gen, ok := overrides["used_gpu_memory"]; ok {
+		return gen()
+	}
+
+	if fluct != nil {
+		if cell, ok := parseNumericCell(val); ok {
+			return cell.format(fluct.jitter("used_gpu_memory", cell))
+		}
+	}
+
+	return val
+}
+
+const pmonMaxDevices = 4
+
+// answerPmon serves nvidia-smi pmon -c 1 (with optional -i GPU list) by
+// projecting the first sample pass out of the capture's pmon section.
+func answerPmon(capt *capture.Capture, cfg *config, args []string, stdout, stderr io.Writer) int {
+	if len(cfg.gpus) > 0 {
+		if err := validateReplicableCapture(capt, cfg.state); err != nil {
+			fmt.Fprintf(stderr, "fake-nvidia-smi: %v\n", err)
+
+			return usageExitCode
+		}
+	}
+
+	requestedGPUs, hasFilter, err := parsePmonTargets(args)
+	if err != nil {
+		fmt.Fprintln(stdout, err)
+
+		return errorExitCode
+	}
+
+	section := findVerbatim(capt, cfg.state, []string{"pmon", "-c", "5"})
+	if section == nil {
+		section = capt.Find(cfg.state, "pmon")
+	}
+
+	if section == nil {
+		fmt.Fprintf(stderr, "fake-nvidia-smi: capture has no pmon section for state %q\n", cfg.state)
+
+		return usageExitCode
+	}
+
+	body, code := splitRecordedExitCode(section.Body)
+	if code != 0 {
+		if body != "" {
+			fmt.Fprintln(stdout, body)
+		}
+
+		return code
+	}
+
+	headers, passRows := extractFirstPmonPass(body)
+
+	outLines, renderErr := renderPmonLines(headers, passRows, cfg.gpus, requestedGPUs, hasFilter)
+	if renderErr != nil {
+		fmt.Fprintln(stdout, renderErr)
+
+		return errorExitCode
+	}
+
+	fmt.Fprintln(stdout, strings.Join(outLines, "\n"))
+
+	return 0
+}
+
+func parsePmonTargets(args []string) ([]int, bool, error) {
+	if len(args) == 3 {
+		return nil, false, nil
+	}
+
+	parts := strings.Split(args[4], ",")
+	if len(parts) == 0 || len(parts) > pmonMaxDevices {
+		return nil, true, fmt.Errorf("monitoring is only supported for up to %d devices", pmonMaxDevices)
+	}
+
+	targets := make([]int, 0, len(parts))
+	for _, raw := range parts {
+		idx, err := strconv.Atoi(strings.TrimSpace(raw))
+		if err != nil || idx < 0 {
+			return nil, true, fmt.Errorf("invalid pmon device index %q", raw)
+		}
+
+		targets = append(targets, idx)
+	}
+
+	return targets, true, nil
+}
+
+func extractFirstPmonPass(body string) ([]string, []string) {
+	var (
+		headers  []string
+		passRows []string
+		seen     = map[string]bool{}
+	)
+
+	for line := range strings.SplitSeq(body, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+
+		if strings.HasPrefix(trimmed, "#") {
+			if len(passRows) == 0 {
+				headers = append(headers, line)
+			}
+
+			continue
+		}
+
+		fields := strings.Fields(trimmed)
+		if len(fields) < 2 {
+			continue
+		}
+
+		key := fields[0] + ":" + fields[1]
+		if seen[key] {
+			break
+		}
+
+		seen[key] = true
+
+		passRows = append(passRows, line)
+	}
+
+	return headers, passRows
+}
+
+func renderPmonLines(
+	headers, passRows []string,
+	gpus []gpuIdentity,
+	requested []int,
+	hasFilter bool,
+) ([]string, error) {
+	totalGPUs := max(len(gpus), 1)
+	if !hasFilter && totalGPUs > pmonMaxDevices {
+		return nil, fmt.Errorf("monitoring is only supported for up to %d devices", pmonMaxDevices)
+	}
+
+	if !hasFilter && len(gpus) == 0 {
+		out := make([]string, 0, len(headers)+len(passRows))
+		out = append(out, headers...)
+		out = append(out, passRows...)
+
+		return out, nil
+	}
+
+	targets := pmonTargetIndices(requested, hasFilter, totalGPUs)
+	out := make([]string, 0, len(headers)+len(targets)*max(len(passRows), 1))
+	out = append(out, headers...)
+
+	for _, target := range targets {
+		rows, err := rowsForPmonTarget(passRows, gpus, target)
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, rows...)
+	}
+
+	return out, nil
+}
+
+func pmonTargetIndices(requested []int, hasFilter bool, totalGPUs int) []int {
+	if hasFilter {
+		return requested
+	}
+
+	targets := make([]int, totalGPUs)
+	for idx := range targets {
+		targets[idx] = idx
+	}
+
+	return targets
+}
+
+func rowsForPmonTarget(passRows []string, gpus []gpuIdentity, target int) ([]string, error) {
+	if len(gpus) > 0 {
+		if target >= len(gpus) {
+			return nil, fmt.Errorf("device index %d is out of range", target)
+		}
+
+		out := make([]string, 0, len(passRows))
+		for _, row := range passRows {
+			out = append(out, rewritePmonGPUIndex(row, target))
+		}
+
+		return out, nil
+	}
+
+	targetStr := strconv.Itoa(target)
+
+	var out []string
+
+	for _, row := range passRows {
+		fields := strings.Fields(row)
+		if len(fields) > 0 && fields[0] == targetStr {
+			out = append(out, row)
+		}
+	}
+
+	if len(out) == 0 {
+		return nil, fmt.Errorf("device index %d is out of range", target)
+	}
+
+	return out, nil
+}
+
+func rewritePmonGPUIndex(row string, gpuIdx int) string {
+	trimmedLeft := strings.TrimLeft(row, " ")
+	leadingSpaces := row[:len(row)-len(trimmedLeft)]
+
+	_, rest, ok := strings.Cut(trimmedLeft, " ")
+	if !ok {
+		return row
+	}
+
+	return leadingSpaces + strconv.Itoa(gpuIdx) + " " + rest
 }
 
 // splitRecordedExitCode strips a trailing "# (exit code: N)" marker that

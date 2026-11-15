@@ -6,21 +6,22 @@ package nvml
 
 import (
 	"fmt"
+	"runtime"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
 
 type (
-	ClockType           int32
-	ComputeMode         int32
-	DriverModel         int32
-	EccCounterType      int32
-	EnableState         int32
-	GpuOperationMode    int32
-	InforomObject       int32
-	MemoryErrorType     int32
-	MemoryLocation      int32
+	ClockType             int32
+	ComputeMode           int32
+	DriverModel           int32
+	EccCounterType        int32
+	EnableState           int32
+	GpuOperationMode      int32
+	InforomObject         int32
+	MemoryErrorType       int32
+	MemoryLocation        int32
 	PageRetirementCause   int32
 	PcieUtilCounter       int32
 	PowerSource           uint32
@@ -127,8 +128,9 @@ const (
 	CLOCK_MEM      ClockType = 2
 	CLOCK_VIDEO    ClockType = 3
 
-	TEMPERATURE_GPU     TemperatureSensors = 0
-	TEMPERATURE_GPU_MAX uint32             = 1
+	TEMPERATURE_GPU TemperatureSensors = 0
+	// TEMPERATURE_GPU_MAX postdates go-nvml v0.13.3-1's nvml.h (checked against nvidia-smi 620.70.06).
+	TEMPERATURE_GPU_MAX uint32 = 1
 
 	TEMPERATURE_THRESHOLD_SHUTDOWN      TemperatureThresholds = 0
 	TEMPERATURE_THRESHOLD_SLOWDOWN      TemperatureThresholds = 1
@@ -247,6 +249,25 @@ type ProcessUtilizationSample struct {
 	MemUtil   uint32
 	EncUtil   uint32
 	DecUtil   uint32
+}
+
+type ProcessUtilizationInfo_v1 struct {
+	TimeStamp uint64
+	Pid       uint32
+	SmUtil    uint32
+	MemUtil   uint32
+	EncUtil   uint32
+	DecUtil   uint32
+	JpgUtil   uint32
+	OfaUtil   uint32
+	_         [4]byte
+}
+
+type processesUtilizationInfoV1 struct {
+	Version             uint32
+	ProcessSamplesCount uint32
+	LastSeenTimeStamp   uint64
+	ProcUtilArray       uintptr
 }
 
 type processInfoV1 struct {
@@ -436,6 +457,8 @@ const (
 	_ = uint(12-unsafe.Sizeof(temperatureV1{})) + uint(unsafe.Sizeof(temperatureV1{})-12)
 	_ = uint(24-unsafe.Sizeof(ProcessInfo{})) + uint(unsafe.Sizeof(ProcessInfo{})-24)
 	_ = uint(32-unsafe.Sizeof(ProcessUtilizationSample{})) + uint(unsafe.Sizeof(ProcessUtilizationSample{})-32)
+	_ = uint(40-unsafe.Sizeof(ProcessUtilizationInfo_v1{})) + uint(unsafe.Sizeof(ProcessUtilizationInfo_v1{})-40)
+	_ = uint(24-unsafe.Sizeof(processesUtilizationInfoV1{})) + uint(unsafe.Sizeof(processesUtilizationInfoV1{})-24)
 	_ = uint(16-unsafe.Sizeof(processInfoV1{})) + uint(unsafe.Sizeof(processInfoV1{})-16)
 	_ = uint(24-unsafe.Sizeof(Memory{})) + uint(unsafe.Sizeof(Memory{})-24)
 	_ = uint(40-unsafe.Sizeof(Memory_v2{})) + uint(unsafe.Sizeof(Memory_v2{})-40)
@@ -567,6 +590,7 @@ type Device interface {
 	GetMemoryInfo_v2() (Memory_v2, Return)
 	GetMigDeviceHandleByIndex(index int) (Device, Return)
 	GetMigMode() (int, int, Return)
+	GetMPSComputeRunningProcesses() ([]ProcessInfo, Return)
 	GetName() (string, Return)
 	GetNumFans() (int, Return)
 	GetOfaUtilization() (uint32, uint32, Return)
@@ -826,6 +850,89 @@ func DeviceGetFanSpeedRPM(device Device, fan int) (uint32, Return) {
 	return info.Speed, toReturn(r1)
 }
 
+// DeviceGetProcessesUtilizationInfo reads recent per-process utilization
+// samples including JPEG and OFA engines.
+func DeviceGetProcessesUtilizationInfo(
+	device Device,
+	lastSeenTimestamp uint64,
+) ([]ProcessUtilizationInfo_v1, Return) {
+	dev, ok := device.(winDevice)
+	if !ok {
+		return nil, ERROR_INVALID_ARGUMENT
+	}
+
+	proc, ok := findProc("nvmlDeviceGetProcessesUtilizationInfo")
+	if !ok {
+		return nil, ERROR_FUNCTION_NOT_FOUND
+	}
+
+	info := processesUtilizationInfoV1{
+		Version:           structVersion[processesUtilizationInfoV1](1),
+		LastSeenTimeStamp: lastSeenTimestamp,
+	}
+
+	r1, _, _ := proc.Call(dev.handle, uintptr(unsafe.Pointer(&info)))
+
+	ret := toReturn(r1)
+	if ret != ERROR_INSUFFICIENT_SIZE && ret != SUCCESS {
+		return nil, ret
+	}
+
+	return readProcessesUtilizationSamples(proc, dev.handle, &info)
+}
+
+func readProcessesUtilizationSamples(
+	proc *windows.LazyProc,
+	handle uintptr,
+	info *processesUtilizationInfoV1,
+) ([]ProcessUtilizationInfo_v1, Return) {
+	const (
+		maxRetries = 4
+		headroom   = 8
+		maxSamples = 1 << 20
+	)
+
+	var (
+		samples []ProcessUtilizationInfo_v1
+		pinner  runtime.Pinner
+		ret     Return
+	)
+
+	defer pinner.Unpin()
+
+	for range maxRetries {
+		if info.ProcessSamplesCount == 0 {
+			return nil, SUCCESS
+		}
+
+		if info.ProcessSamplesCount > maxSamples {
+			return nil, ERROR_MEMORY
+		}
+
+		alloc := info.ProcessSamplesCount + headroom
+		samples = make([]ProcessUtilizationInfo_v1, int(alloc))
+		pinner.Pin(&samples[0])
+
+		info.ProcessSamplesCount = alloc
+		info.ProcUtilArray = uintptr(unsafe.Pointer(&samples[0]))
+
+		r1, _, _ := proc.Call(handle, uintptr(unsafe.Pointer(info)))
+
+		pinner.Unpin()
+
+		ret = toReturn(r1)
+		if ret != ERROR_INSUFFICIENT_SIZE {
+			break
+		}
+	}
+
+	if ret != SUCCESS {
+		return nil, ret
+	}
+
+	return samples[:min(int(info.ProcessSamplesCount), len(samples))], SUCCESS
+}
+
 type winGpmSample struct {
 	handle uintptr
 }
@@ -1052,7 +1159,6 @@ func (d winDevice) GetBAR1MemoryInfo() (BAR1Memory, Return) {
 	return mem, toReturn(r1)
 }
 
-//nolint:revive // matches go-nvml Device method name
 func (d winDevice) GetBBXTimeData_v1() (BBXTimeData_v1, Return) {
 	var info BBXTimeData_v1
 
@@ -1243,7 +1349,6 @@ func (d winDevice) GetFanSpeed() (uint32, Return) {
 	return d.getUint32("nvmlDeviceGetFanSpeed")
 }
 
-//nolint:revive // matches go-nvml Device method name
 func (d winDevice) GetFanSpeed_v2(fan int) (uint32, Return) {
 	if fan < 0 {
 		return 0, ERROR_INVALID_ARGUMENT
@@ -1256,7 +1361,7 @@ func (d winDevice) GetFanSpeed_v2(fan int) (uint32, Return) {
 
 	var speed uint32
 
-	r1, _, _ := proc.Call(d.handle, uintptr(uint32(fan)), uintptr(unsafe.Pointer(&speed)))
+	r1, _, _ := proc.Call(d.handle, uintptr(fan), uintptr(unsafe.Pointer(&speed)))
 
 	return speed, toReturn(r1)
 }
@@ -1303,6 +1408,14 @@ func (d winDevice) GetGraphicsRunningProcesses() ([]ProcessInfo, Return) {
 		"nvmlDeviceGetGraphicsRunningProcesses_v3",
 		"nvmlDeviceGetGraphicsRunningProcesses_v2",
 		"nvmlDeviceGetGraphicsRunningProcesses",
+	)
+}
+
+func (d winDevice) GetMPSComputeRunningProcesses() ([]ProcessInfo, Return) {
+	return d.getRunningProcesses(
+		"nvmlDeviceGetMPSComputeRunningProcesses_v3",
+		"nvmlDeviceGetMPSComputeRunningProcesses_v2",
+		"nvmlDeviceGetMPSComputeRunningProcesses",
 	)
 }
 
@@ -1600,7 +1713,7 @@ func (d winDevice) GetProcessUtilization(lastSeenTimestamp uint64) ([]ProcessUti
 	)
 
 	ret := toReturn(r1)
-	if ret != ERROR_INSUFFICIENT_SIZE {
+	if ret != ERROR_INSUFFICIENT_SIZE && ret != SUCCESS {
 		return nil, ret
 	}
 
@@ -1746,7 +1859,7 @@ func (d winDevice) GetTargetFanSpeed(fan int) (int, Return) {
 
 	var target uint32
 
-	r1, _, _ := proc.Call(d.handle, uintptr(uint32(fan)), uintptr(unsafe.Pointer(&target)))
+	r1, _, _ := proc.Call(d.handle, uintptr(fan), uintptr(unsafe.Pointer(&target)))
 
 	return int(target), toReturn(r1)
 }
@@ -1765,6 +1878,10 @@ func (d winDevice) GetTemperature(sensor TemperatureSensors) (uint32, Return) {
 }
 
 func (d winDevice) GetTemperatureThreshold(thresholdType TemperatureThresholds) (uint32, Return) {
+	if thresholdType < 0 {
+		return 0, ERROR_INVALID_ARGUMENT
+	}
+
 	proc, ok := findProc("nvmlDeviceGetTemperatureThreshold")
 	if !ok {
 		return 0, ERROR_FUNCTION_NOT_FOUND
@@ -1772,7 +1889,11 @@ func (d winDevice) GetTemperatureThreshold(thresholdType TemperatureThresholds) 
 
 	var temp uint32
 
-	r1, _, _ := proc.Call(d.handle, uintptr(uint32(thresholdType)), uintptr(unsafe.Pointer(&temp))) //nolint:gosec // enum
+	r1, _, _ := proc.Call(
+		d.handle,
+		uintptr(uint32(thresholdType)),
+		uintptr(unsafe.Pointer(&temp)),
+	)
 
 	return temp, toReturn(r1)
 }

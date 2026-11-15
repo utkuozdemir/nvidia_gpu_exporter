@@ -144,6 +144,11 @@ var nvmlSymbolRequirements = []symbolRequirement{
 	{goCall: "deviceGetGpuUptimeV1", anyOf: []string{"nvmlDeviceGetGpuUptime_v1"}, serves: "gpu_uptime"},
 	{goCall: "deviceGetTemperatureV", anyOf: []string{"nvmlDeviceGetTemperatureV"}, serves: "temperature.gpu_max"},
 	{goCall: "deviceGetFanSpeedRPM", anyOf: []string{"nvmlDeviceGetFanSpeedRPM"}, serves: "fan_speed_rpm"},
+	{
+		goCall: "deviceGetProcessesUtilizationInfo",
+		anyOf:  []string{"nvmlDeviceGetProcessesUtilizationInfo"},
+		serves: "per-process utilization metrics (including jpeg and ofa)",
+	},
 	{goCall: "GetNumFans", anyOf: []string{"nvmlDeviceGetNumFans"}, serves: "fan_speed_*"},
 	{goCall: "GetFanSpeed_v2", anyOf: []string{"nvmlDeviceGetFanSpeed_v2"}, serves: "fan_speed_current_ratio"},
 	{goCall: "GetTargetFanSpeed", anyOf: []string{"nvmlDeviceGetTargetFanSpeed"}, serves: "fan_speed_target_ratio"},
@@ -661,6 +666,15 @@ var nvmlSymbolRequirements = []symbolRequirement{
 			"nvmlDeviceGetGraphicsRunningProcesses_v3",
 		},
 		serves: "per-process metrics",
+	},
+	{
+		goCall: "GetMPSComputeRunningProcesses",
+		anyOf: []string{
+			"nvmlDeviceGetMPSComputeRunningProcesses",
+			"nvmlDeviceGetMPSComputeRunningProcesses_v2",
+			"nvmlDeviceGetMPSComputeRunningProcesses_v3",
+		},
+		serves: "per-process metrics (CUDA MPS)",
 	},
 	{
 		goCall: "GetProcessUtilization",

@@ -1,7 +1,6 @@
 package fakesmi
 
 import (
-	"log/slog"
 	"math"
 	"strings"
 	"testing"
@@ -159,10 +158,8 @@ func trimmedNames(raw string) []string {
 	return names
 }
 
-// FuzzProjectComputeAppsQuery is the same property for the per-process query,
-// whose recorded field set the exporter always requests in full. Its process
-// name column may carry commas of its own, which is the one place the fake's
-// CSV shape and the exporter's parser have to agree on something non-trivial.
+// FuzzProjectComputeAppsQuery checks the fake's --query-compute-apps CSV
+// projection, whose process_name column may carry unquoted commas.
 func FuzzProjectComputeAppsQuery(f *testing.F) {
 	f.Add("gpu_uuid, pid, process_name, used_gpu_memory\nGPU-abc, 1, python, 4 MiB", 1)
 	f.Add("gpu_uuid, pid, process_name, used_gpu_memory\nGPU-abc, 1, a,b, 4 MiB", 2)
@@ -185,10 +182,31 @@ func FuzzProjectComputeAppsQuery(f *testing.F) {
 			return
 		}
 
-		if _, parseErr := nvidiasmi.ParseComputeApps(output, discardLogger); parseErr != nil {
-			t.Fatalf("projected output the exporter cannot parse: %v\noutput:\n%q", parseErr, output)
-		}
+		assertProjectedComputeAppsCSV(t, output)
 	})
+}
+
+func assertProjectedComputeAppsCSV(t *testing.T, output string) {
+	t.Helper()
+
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) == 0 {
+		return
+	}
+
+	if got := len(strings.Split(lines[0], ",")); got != 4 {
+		t.Fatalf("projected header has %d columns, want 4: %q", got, lines[0])
+	}
+
+	for _, line := range lines[1:] {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+
+		if got := len(strings.Split(line, ",")); got < 4 {
+			t.Fatalf("projected row has %d cells, want >= 4: %q", got, line)
+		}
+	}
 }
 
 // newFuzzConfig builds the fullest replay configuration: multi-GPU identity
@@ -239,8 +257,6 @@ func allCellsNonEmpty(body string) bool {
 
 	return true
 }
-
-var discardLogger = slog.New(slog.DiscardHandler)
 
 func toQFields(names []string) []nvidiasmi.QField {
 	out := make([]nvidiasmi.QField, len(names))

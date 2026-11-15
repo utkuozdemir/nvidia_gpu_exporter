@@ -731,10 +731,11 @@ func TestCollectAppUtilizationAndWDDMAbsentMemory(t *testing.T) {
 			ProcessName: "python",
 			UsedMemory:  "[N/A]",
 			Utilization: &nvidiasmi.ProcessUtilization{
-				SMRatio:      0.75,
-				MemoryRatio:  0.40,
-				EncoderRatio: 0.10,
-				DecoderRatio: 0.05,
+				SMRatio:      new(0.75),
+				MemoryRatio:  new(0.40),
+				EncoderRatio: new(0.10),
+				DecoderRatio: new(0.05),
+				JPEGRatio:    new(0.02),
 			},
 		},
 		{
@@ -755,13 +756,14 @@ func TestCollectAppUtilizationAndWDDMAbsentMemory(t *testing.T) {
 	require.Len(t, memory.GetMetric(), 1)
 	assert.Equal(t, "99", labelValue(t, memory.GetMetric()[0], "pid"))
 
-	// pid 42 still emits utilization despite absent memory; pid 99 has nil
-	// utilization and emits none
+	// pid 42 emits every non-nil utilization ratio while leaving nil OFA
+	// absent, and pid 99 has nil utilization and emits none
 	for name, want := range map[string]float64{
 		"aaa_compute_app_sm_utilization_ratio":      0.75,
 		"aaa_compute_app_memory_utilization_ratio":  0.40,
 		"aaa_compute_app_encoder_utilization_ratio": 0.10,
 		"aaa_compute_app_decoder_utilization_ratio": 0.05,
+		"aaa_compute_app_jpeg_utilization_ratio":    0.02,
 	} {
 		fam, exists := families[name]
 		require.True(t, exists, "missing family %s", name)
@@ -769,6 +771,9 @@ func TestCollectAppUtilizationAndWDDMAbsentMemory(t *testing.T) {
 		assert.Equal(t, "42", labelValue(t, fam.GetMetric()[0], "pid"))
 		assertFloat(t, want, fam.GetMetric()[0].GetGauge().GetValue())
 	}
+
+	_, hasOFA := families["aaa_compute_app_ofa_utilization_ratio"]
+	assert.False(t, hasOFA, "nil engine ratio must not emit a series")
 }
 
 // extrasSnapshot builds a successful snapshot carrying the given extras.
@@ -1164,7 +1169,7 @@ func TestXIDsSuppressedWhenOff(t *testing.T) {
 	assert.NotContains(t, families, "aaa_xid_last_timestamp_seconds")
 }
 
-func TestHardwareExtrasAndMIGXIDRendering(t *testing.T) {
+func TestHardwareExtrasRendering(t *testing.T) {
 	t.Parallel()
 
 	curRatio := 0.38
@@ -1195,6 +1200,45 @@ func TestHardwareExtrasAndMIGXIDRendering(t *testing.T) {
 		t.Context(), "bbb", "fan.speed", "", 0, nvidiasmi.DefaultRunFunc, logger)
 	require.NoError(t, err)
 
+	exp := exporter.New(
+		t.Context(),
+		"aaa",
+		resolved,
+		&staticSource{snapshot: extrasSnapshot(gpuTable("GPU-ABC"), extras)},
+		exporter.Features{Fans: true, BAR1: true, TemperatureThresholds: true, PowerSource: true},
+		nil,
+		exporter.ExecExitCodeMetric,
+		logger,
+	)
+
+	families := gatherFamilies(t, exp)
+
+	fanCur := families["aaa_fan_speed_current_ratio"]
+	require.NotNil(t, fanCur)
+	assertFloat(t, 0.38, fanCur.GetMetric()[0].GetGauge().GetValue())
+	assert.Equal(t, "0", labelValue(t, fanCur.GetMetric()[0], "fan"))
+
+	assertFloat(t, 0.40, families["aaa_fan_speed_target_ratio"].GetMetric()[0].GetGauge().GetValue())
+	assertFloat(t, 1051, families["aaa_fan_speed_rpm"].GetMetric()[0].GetGauge().GetValue())
+	assertFloat(t, float64(256<<20), families["aaa_bar1_memory_total_bytes"].GetMetric()[0].GetGauge().GetValue())
+	assertFloat(t, float64(38<<20), families["aaa_bar1_memory_used_bytes"].GetMetric()[0].GetGauge().GetValue())
+	assertFloat(t, float64(218<<20), families["aaa_bar1_memory_free_bytes"].GetMetric()[0].GetGauge().GetValue())
+	assertFloat(t, 100, families["aaa_temperature_threshold_shutdown_celsius"].GetMetric()[0].GetGauge().GetValue())
+	assertFloat(t, 97, families["aaa_temperature_threshold_slowdown_celsius"].GetMetric()[0].GetGauge().GetValue())
+	assert.NotContains(t, families, "aaa_temperature_threshold_memory_max_celsius")
+	assertFloat(t, 89, families["aaa_temperature_threshold_gpu_max_celsius"].GetMetric()[0].GetGauge().GetValue())
+	assertFloat(t, 84, families["aaa_temperature_threshold_acoustic_celsius"].GetMetric()[0].GetGauge().GetValue())
+	assertFloat(t, 0, families["aaa_power_source"].GetMetric()[0].GetGauge().GetValue())
+}
+
+func TestMIGXIDRendering(t *testing.T) {
+	t.Parallel()
+
+	logger := slogt.New(t)
+	resolved, err := nvidiasmi.ResolveFields(
+		t.Context(), "bbb", "fan.speed", "", 0, nvidiasmi.DefaultRunFunc, logger)
+	require.NoError(t, err)
+
 	xids := &staticXIDs{
 		migCounters: []collect.MIGXIDCounter{
 			{
@@ -1209,41 +1253,14 @@ func TestHardwareExtrasAndMIGXIDRendering(t *testing.T) {
 		t.Context(),
 		"aaa",
 		resolved,
-		&staticSource{snapshot: extrasSnapshot(gpuTable("GPU-ABC"), extras)},
-		exporter.Features{
-			Fans: true, BAR1: true, TemperatureThresholds: true, PowerSource: true, XIDEvents: true,
-		},
+		&staticSource{snapshot: extrasSnapshot(gpuTable("GPU-ABC"), collect.Extras{})},
+		exporter.Features{XIDEvents: true},
 		xids,
 		exporter.ExecExitCodeMetric,
 		logger,
 	)
 
 	families := gatherFamilies(t, exp)
-
-	fanCur := families["aaa_fan_speed_current_ratio"]
-	require.NotNil(t, fanCur)
-	assertFloat(t, 0.38, fanCur.GetMetric()[0].GetGauge().GetValue())
-	assert.Equal(t, "0", labelValue(t, fanCur.GetMetric()[0], "fan"))
-
-	fanTgt := families["aaa_fan_speed_target_ratio"]
-	require.NotNil(t, fanTgt)
-	assertFloat(t, 0.40, fanTgt.GetMetric()[0].GetGauge().GetValue())
-
-	fanRPM := families["aaa_fan_speed_rpm"]
-	require.NotNil(t, fanRPM)
-	assertFloat(t, 1051, fanRPM.GetMetric()[0].GetGauge().GetValue())
-
-	assertFloat(t, float64(256<<20), families["aaa_bar1_memory_total_bytes"].GetMetric()[0].GetGauge().GetValue())
-	assertFloat(t, float64(38<<20), families["aaa_bar1_memory_used_bytes"].GetMetric()[0].GetGauge().GetValue())
-	assertFloat(t, float64(218<<20), families["aaa_bar1_memory_free_bytes"].GetMetric()[0].GetGauge().GetValue())
-
-	assertFloat(t, 100, families["aaa_temperature_threshold_shutdown_celsius"].GetMetric()[0].GetGauge().GetValue())
-	assertFloat(t, 97, families["aaa_temperature_threshold_slowdown_celsius"].GetMetric()[0].GetGauge().GetValue())
-	assert.NotContains(t, families, "aaa_temperature_threshold_memory_max_celsius")
-	assertFloat(t, 89, families["aaa_temperature_threshold_gpu_max_celsius"].GetMetric()[0].GetGauge().GetValue())
-	assertFloat(t, 84, families["aaa_temperature_threshold_acoustic_celsius"].GetMetric()[0].GetGauge().GetValue())
-
-	assertFloat(t, 0, families["aaa_power_source"].GetMetric()[0].GetGauge().GetValue())
 
 	migXID := families["aaa_mig_xid_errors_total"]
 	require.NotNil(t, migXID)

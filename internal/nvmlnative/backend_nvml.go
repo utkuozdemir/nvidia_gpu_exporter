@@ -26,17 +26,18 @@ const Available = true
 // the lifecycle and collection logic is testable with the go-nvml mock
 // device. Device-level getters are already behind the nvml.Device interface.
 type nvmlAPI struct {
-	init              func() nvml.Return
-	shutdown          func() nvml.Return
-	deviceCount       func() (int, nvml.Return)
-	deviceByIndex     func(int) (nvml.Device, nvml.Return)
-	driverVersion     func() (string, nvml.Return)
-	cudaDriverVersion     func() (int, nvml.Return)
-	processName           func(int) (string, nvml.Return)
-	validateInforom       func(nvml.Device) nvml.Return
-	deviceGetGpuUptimeV1  func(nvml.Device) (uint32, nvml.Return)
-	deviceGetTemperatureV func(nvml.Device, uint32) (int32, nvml.Return)
-	deviceGetFanSpeedRPM  func(nvml.Device, int) (uint32, nvml.Return)
+	init                              func() nvml.Return
+	shutdown                          func() nvml.Return
+	deviceCount                       func() (int, nvml.Return)
+	deviceByIndex                     func(int) (nvml.Device, nvml.Return)
+	driverVersion                     func() (string, nvml.Return)
+	cudaDriverVersion                 func() (int, nvml.Return)
+	processName                       func(int) (string, nvml.Return)
+	validateInforom                   func(nvml.Device) nvml.Return
+	deviceGetGpuUptimeV1              func(nvml.Device) (uint32, nvml.Return)
+	deviceGetTemperatureV             func(nvml.Device, uint32) (int32, nvml.Return)
+	deviceGetFanSpeedRPM              func(nvml.Device, int) (uint32, nvml.Return)
+	deviceGetProcessesUtilizationInfo func(nvml.Device, uint64) ([]nvml.ProcessUtilizationInfo_v1, nvml.Return)
 	// the GPM entry points are package-level in go-nvml AND its sample
 	// mock cannot pass through the real metrics call (a private concrete
 	// type assertion), so they must live on the seam
@@ -67,19 +68,20 @@ func realNVML() nvmlAPI {
 		// libcuda and fails without it, while this one falls back to the
 		// driver's known supported version. The utility-only container
 		// capability (the documented deployment) injects no libcuda.
-		cudaDriverVersion:     nvml.SystemGetCudaDriverVersion,
-		processName:           nvml.SystemGetProcessName,
-		validateInforom:       nvml.DeviceValidateInforom,
-		deviceGetGpuUptimeV1:  nvml.DeviceGetGpuUptimeV1,
-		deviceGetTemperatureV: nvml.DeviceGetTemperatureV,
-		deviceGetFanSpeedRPM:  nvml.DeviceGetFanSpeedRPM,
-		gpmSampleAlloc:        nvml.GpmSampleAlloc,
-		gpmSampleFree:     nvml.GpmSampleFree,
-		gpmSampleGet:      nvml.GpmSampleGet,
-		gpmMigSampleGet:   nvml.GpmMigSampleGet,
-		gpmMetricsGet:     nvml.GpmMetricsGet,
-		eventSetCreate:    nvml.EventSetCreate,
-		lookupSymbol:      func(name string) error { return nvml.Extensions().LookupSymbol(name) },
+		cudaDriverVersion:                 nvml.SystemGetCudaDriverVersion,
+		processName:                       nvml.SystemGetProcessName,
+		validateInforom:                   nvml.DeviceValidateInforom,
+		deviceGetGpuUptimeV1:              nvml.DeviceGetGpuUptimeV1,
+		deviceGetTemperatureV:             nvml.DeviceGetTemperatureV,
+		deviceGetFanSpeedRPM:              nvml.DeviceGetFanSpeedRPM,
+		deviceGetProcessesUtilizationInfo: nvml.DeviceGetProcessesUtilizationInfo,
+		gpmSampleAlloc:                    nvml.GpmSampleAlloc,
+		gpmSampleFree:                     nvml.GpmSampleFree,
+		gpmSampleGet:                      nvml.GpmSampleGet,
+		gpmMigSampleGet:                   nvml.GpmMigSampleGet,
+		gpmMetricsGet:                     nvml.GpmMetricsGet,
+		eventSetCreate:                    nvml.EventSetCreate,
+		lookupSymbol:                      func(name string) error { return nvml.Extensions().LookupSymbol(name) },
 	}
 }
 
@@ -321,9 +323,7 @@ func (b *Backend) collectCycle(
 	if opts.ComputeApps {
 		reading.AppsAttempted = true
 
-		apps, appsErr := b.collectProcesses(ctx, func(dev device) ([]nvml.ProcessInfo, nvml.Return) {
-			return dev.GetComputeRunningProcesses()
-		}, utilCache)
+		apps, appsErr := b.collectProcesses(ctx, b.listComputeProcesses, utilCache)
 		if appsErr != nil {
 			reading.AppsErr = appsErr
 		} else {
@@ -1081,10 +1081,10 @@ func (b *Backend) collectDevice(
 		)
 	}
 
-	if reqs.want("temperature.gpu") {
-		if _, ok := coll.values["temperature.gpu"]; !ok {
+	if reqs.want(gpuTemperatureField) {
+		if _, ok := coll.values[gpuTemperatureField]; !ok {
 			temp, ret := dev.GetTemperature(nvml.TEMPERATURE_GPU)
-			coll.set("temperature.gpu", ret, func() string { return strconv.FormatUint(uint64(temp), 10) })
+			coll.set(gpuTemperatureField, ret, func() string { return strconv.FormatUint(uint64(temp), 10) })
 		}
 	}
 
@@ -1297,7 +1297,7 @@ func (b *Backend) collectFieldValues(dev device, coll *devCollector, reqs plan) 
 			func(v float64) string { return strconv.FormatFloat(v/1000.0, 'f', -1, 64) + " W" },
 		},
 		{
-			"temperature.gpu", gpuTempFieldID, false, true,
+			gpuTemperatureField, gpuTempFieldID, false, true,
 			func(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) },
 		},
 		{
@@ -1573,8 +1573,79 @@ func collectPlatform(dev device, coll *devCollector, reqs plan) {
 // collection queries the driver at most once per device and gives dual-context
 // PIDs identical utilization values.
 type deviceUtil struct {
-	byPID     map[uint32]nvml.ProcessUtilizationSample
+	byPID     map[uint32]*nvidiasmi.ProcessUtilization
+	idle      *nvidiasmi.ProcessUtilization
 	supported bool
+}
+
+type procInfoKey struct {
+	pid uint32
+	gi  uint32
+	ci  uint32
+}
+
+func (b *Backend) listComputeProcesses(dev device) ([]nvml.ProcessInfo, nvml.Return) {
+	procs, ret := dev.GetComputeRunningProcesses()
+	if ret != nvml.SUCCESS {
+		return nil, ret
+	}
+
+	mpsProcs, mpsRet := dev.GetMPSComputeRunningProcesses()
+
+	//nolint:exhaustive // all other codes are unexpected failures
+	switch mpsRet {
+	case nvml.SUCCESS:
+		return mergeProcessInfos(procs, mpsProcs), nvml.SUCCESS
+	case nvml.ERROR_NOT_SUPPORTED, nvml.ERROR_FUNCTION_NOT_FOUND, nvml.ERROR_NO_PERMISSION:
+		return procs, nvml.SUCCESS
+	default:
+		if isLifecycleError(mpsRet) {
+			return nil, mpsRet
+		}
+
+		b.extrasFailure("mps-processes", "cannot list MPS compute processes", mpsRet)
+
+		return procs, nvml.SUCCESS
+	}
+}
+
+func mergeProcessInfos(primary, extra []nvml.ProcessInfo) []nvml.ProcessInfo {
+	if len(extra) == 0 {
+		return primary
+	}
+
+	out := make([]nvml.ProcessInfo, 0, len(primary)+len(extra))
+	seen := make(map[procInfoKey]int, len(primary)+len(extra))
+
+	for _, proc := range primary {
+		key := procInfoKey{pid: proc.Pid, gi: proc.GpuInstanceId, ci: proc.ComputeInstanceId}
+		seen[key] = len(out)
+		out = append(out, proc)
+	}
+
+	for _, proc := range extra {
+		key := procInfoKey{pid: proc.Pid, gi: proc.GpuInstanceId, ci: proc.ComputeInstanceId}
+		if idx, exists := seen[key]; exists {
+			out[idx] = preferProcessInfoMemory(out[idx], proc)
+		} else {
+			seen[key] = len(out)
+			out = append(out, proc)
+		}
+	}
+
+	return out
+}
+
+func preferProcessInfoMemory(existing, candidate nvml.ProcessInfo) nvml.ProcessInfo {
+	if candidate.UsedGpuMemory == math.MaxUint64 {
+		return existing
+	}
+
+	if existing.UsedGpuMemory == math.MaxUint64 || candidate.UsedGpuMemory > existing.UsedGpuMemory {
+		existing.UsedGpuMemory = candidate.UsedGpuMemory
+	}
+
+	return existing
 }
 
 // collectProcesses lists running processes on each device using the given
@@ -1655,73 +1726,165 @@ func (b *Backend) collectDeviceProcesses(
 
 	util, cached := utilCache[deviceIdx]
 	if !cached {
-		byPID, supported := b.collectProcessUtilization(dev)
-		util = deviceUtil{byPID: byPID, supported: supported}
+		util = b.collectProcessUtilization(dev)
 		utilCache[deviceIdx] = util
 	}
 
-	if util.supported {
-		for i, proc := range procs {
-			sample, found := util.byPID[proc.Pid]
-			apps[i].Utilization = toProcessUtilization(sample, found)
-		}
-	}
+	applyProcessUtilization(apps, procs, util)
 
 	return apps, nil
 }
 
+func applyProcessUtilization(apps []nvidiasmi.ComputeApp, procs []nvml.ProcessInfo, util deviceUtil) {
+	if !util.supported {
+		return
+	}
+
+	for i, proc := range procs {
+		if sample, found := util.byPID[proc.Pid]; found {
+			apps[i].Utilization = sample
+		} else {
+			apps[i].Utilization = util.idle
+		}
+	}
+}
+
 // processUtilLookback is the stateless lookback window passed to
-// nvmlDeviceGetProcessUtilization. Three seconds spans several internal
-// driver sampling periods so an active process always has a recent sample,
-// while bounding how long a recently-idle process takes to decay to 0.
+// nvmlDeviceGetProcessesUtilizationInfo and nvmlDeviceGetProcessUtilization.
+// Three seconds spans several internal driver sampling periods so an active
+// process always has a recent sample, while bounding how long a recently-idle
+// process takes to decay to 0.
 const processUtilLookback = 3 * time.Second
 
 // collectProcessUtilization reads recent per-process utilization samples for
-// dev and indexes the newest sample per PID. The boolean reports whether the
-// device supports per-process utilization at all: when true, processes absent
-// from the returned map were idle during the lookback window and should report
-// zero ratios; when false, the utilization metric families are omitted.
-func (b *Backend) collectProcessUtilization(
-	dev device,
-) (map[uint32]nvml.ProcessUtilizationSample, bool) {
+// dev and indexes the newest sample per PID. On R550+ drivers it prefers
+// nvmlDeviceGetProcessesUtilizationInfo so JPEG and OFA engine utilization are
+// included alongside SM, memory, encoder, and decoder. Older drivers fall back
+// to nvmlDeviceGetProcessUtilization with JPEG and OFA left nil.
+func (b *Backend) collectProcessUtilization(dev device) deviceUtil {
 	lastSeen := uint64(max(0, b.now().Add(-processUtilLookback).UnixMicro()))
+
+	if b.avail.Load().has("nvmlDeviceGetProcessesUtilizationInfo") {
+		samples, ret := b.api.deviceGetProcessesUtilizationInfo(dev.raw(), lastSeen)
+
+		//nolint:exhaustive // all other codes are unexpected failures
+		switch ret {
+		case nvml.SUCCESS, nvml.ERROR_NOT_FOUND:
+			return buildProcessUtilization6(samples)
+		case nvml.ERROR_FUNCTION_NOT_FOUND:
+			// fall back to GetProcessUtilization
+		case nvml.ERROR_NOT_SUPPORTED, nvml.ERROR_NO_PERMISSION:
+			return deviceUtil{}
+		default:
+			b.extrasFailure("process-utilization", "cannot read per-process utilization", ret)
+
+			return deviceUtil{}
+		}
+	}
 
 	samples, ret := dev.GetProcessUtilization(lastSeen)
 
 	//nolint:exhaustive // all other codes are unexpected failures
 	switch ret {
 	case nvml.SUCCESS, nvml.ERROR_NOT_FOUND:
-		byPID := make(map[uint32]nvml.ProcessUtilizationSample, len(samples))
-		for _, sample := range samples {
-			if prev, ok := byPID[sample.Pid]; !ok || sample.TimeStamp >= prev.TimeStamp {
-				byPID[sample.Pid] = sample
-			}
-		}
-
-		return byPID, true
+		return buildProcessUtilization4(samples)
 	case nvml.ERROR_NOT_SUPPORTED, nvml.ERROR_FUNCTION_NOT_FOUND, nvml.ERROR_NO_PERMISSION:
-		return nil, false
+		return deviceUtil{}
 	default:
 		b.extrasFailure("process-utilization", "cannot read per-process utilization", ret)
 
-		return nil, false
+		return deviceUtil{}
 	}
 }
 
-func toProcessUtilization(
-	sample nvml.ProcessUtilizationSample,
-	found bool,
-) *nvidiasmi.ProcessUtilization {
-	if !found {
-		return &nvidiasmi.ProcessUtilization{}
+func buildProcessUtilization6(samples []nvml.ProcessUtilizationInfo_v1) deviceUtil {
+	converted := make([]procUtilSample, len(samples))
+	for idx, sample := range samples {
+		converted[idx] = procUtilSample{
+			timeStamp: sample.TimeStamp,
+			pid:       sample.Pid,
+			sm:        sample.SmUtil,
+			mem:       sample.MemUtil,
+			enc:       sample.EncUtil,
+			dec:       sample.DecUtil,
+			jpg:       sample.JpgUtil,
+			ofa:       sample.OfaUtil,
+		}
 	}
 
-	return &nvidiasmi.ProcessUtilization{
-		SMRatio:      float64(sample.SmUtil) / 100.0,
-		MemoryRatio:  float64(sample.MemUtil) / 100.0,
-		EncoderRatio: float64(sample.EncUtil) / 100.0,
-		DecoderRatio: float64(sample.DecUtil) / 100.0,
+	return indexProcessUtilization(converted, true)
+}
+
+func buildProcessUtilization4(samples []nvml.ProcessUtilizationSample) deviceUtil {
+	converted := make([]procUtilSample, len(samples))
+	for idx, sample := range samples {
+		converted[idx] = procUtilSample{
+			timeStamp: sample.TimeStamp,
+			pid:       sample.Pid,
+			sm:        sample.SmUtil,
+			mem:       sample.MemUtil,
+			enc:       sample.EncUtil,
+			dec:       sample.DecUtil,
+		}
 	}
+
+	return indexProcessUtilization(converted, false)
+}
+
+type procUtilSample struct {
+	timeStamp                   uint64
+	pid                         uint32
+	sm, mem, enc, dec, jpg, ofa uint32
+}
+
+func indexProcessUtilization(samples []procUtilSample, includeJPEGOFA bool) deviceUtil {
+	latest := make(map[uint32]procUtilSample, len(samples))
+	for _, sample := range samples {
+		if prev, ok := latest[sample.pid]; !ok || sample.timeStamp >= prev.timeStamp {
+			latest[sample.pid] = sample
+		}
+	}
+
+	byPID := make(map[uint32]*nvidiasmi.ProcessUtilization, len(latest))
+	for pid, sample := range latest {
+		util := &nvidiasmi.ProcessUtilization{
+			SMRatio:      nvmlUtilRatio(sample.sm),
+			MemoryRatio:  nvmlUtilRatio(sample.mem),
+			EncoderRatio: nvmlUtilRatio(sample.enc),
+			DecoderRatio: nvmlUtilRatio(sample.dec),
+		}
+		if includeJPEGOFA {
+			util.JPEGRatio = nvmlUtilRatio(sample.jpg)
+			util.OFARatio = nvmlUtilRatio(sample.ofa)
+		}
+
+		byPID[pid] = util
+	}
+
+	zero := 0.0
+	idle := &nvidiasmi.ProcessUtilization{
+		SMRatio:      &zero,
+		MemoryRatio:  &zero,
+		EncoderRatio: &zero,
+		DecoderRatio: &zero,
+	}
+
+	if includeJPEGOFA {
+		idle.JPEGRatio = &zero
+		idle.OFARatio = &zero
+	}
+
+	return deviceUtil{byPID: byPID, idle: idle, supported: true}
+}
+
+func nvmlUtilRatio(pct uint32) *float64 {
+	if pct > 100 {
+		return nil
+	}
+
+	val := float64(pct) / 100.0
+
+	return &val
 }
 
 // toComputeApp formats an NVML process entry into the exporter's per-process record.

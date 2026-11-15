@@ -473,3 +473,60 @@ func TestConfigStripFailureInjection(t *testing.T) {
 	assert.Less(t, time.Since(start), 2*time.Second, "the delay must be gone")
 	assert.NotEmpty(t, stdout.String())
 }
+
+func TestPIDSAndPmonReplay(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(capturesDir, "linux-x86_64__nvidia-l40s__595.80.txt")
+
+	code, stdout, stderr := runFake(t, "--capture", path, "--state", "load", "-q", "-d", "PIDS")
+	require.Zero(t, code, stderr)
+	assert.Contains(t, stdout, "Processes")
+	assert.Contains(t, stdout, "ffmpeg")
+
+	code, stdout, stderr = runFake(t, "--capture", path, "--state", "load", "--gpus", "2", "-q", "-d", "PIDS")
+	require.Zero(t, code, stderr)
+	assert.Contains(t, stdout, "GPU 00000000:01:00.0")
+	assert.Contains(t, stdout, "GPU 00000000:02:00.0")
+
+	code, stdout, stderr = runFake(t, "--capture", path, "--state", "load", "pmon", "-c", "1")
+	require.Zero(t, code, stderr)
+
+	dataLines := 0
+
+	for line := range strings.SplitSeq(strings.TrimSpace(stdout), "\n") {
+		if !strings.HasPrefix(strings.TrimSpace(line), "#") {
+			dataLines++
+		}
+	}
+
+	assert.Equal(t, 2, dataLines, "pmon -c 1 must emit only the first pass")
+
+	// 5 GPUs exceed pmon's 4-device limit unless -i selects at most 4 devices
+	code, _, _ = runFake(t, "--capture", path, "--state", "load", "--gpus", "5", "pmon", "-c", "1")
+	assert.Equal(t, 1, code)
+
+	code, stdout, stderr = runFake(
+		t,
+		"--capture",
+		path,
+		"--state",
+		"load",
+		"--gpus",
+		"5",
+		"pmon",
+		"-c",
+		"1",
+		"-i",
+		"0,4",
+	)
+	require.Zero(t, code, stderr)
+	assert.Contains(t, stdout, "    0 ")
+	assert.Contains(t, stdout, "    4 ")
+
+	code, stdout, stderr = runFake(
+		t, "--capture", path, "--state", "load", "--set", "used_gpu_memory=9999 MiB", "-q", "-d", "PIDS",
+	)
+	require.Zero(t, code, stderr)
+	assert.Contains(t, stdout, "9999 MiB")
+}

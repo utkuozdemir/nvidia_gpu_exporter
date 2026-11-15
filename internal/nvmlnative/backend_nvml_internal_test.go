@@ -52,14 +52,17 @@ func (f *fakeAPI) api() nvmlAPI {
 
 			return f.devices[i], nvml.SUCCESS
 		},
-		driverVersion:     func() (string, nvml.Return) { return "590.48.01", nvml.SUCCESS },
-		cudaDriverVersion: func() (int, nvml.Return) { return 13010, nvml.SUCCESS },
-		processName:       func(int) (string, nvml.Return) { return "/usr/bin/burn", nvml.SUCCESS },
+		driverVersion:         func() (string, nvml.Return) { return "590.48.01", nvml.SUCCESS },
+		cudaDriverVersion:     func() (int, nvml.Return) { return 13010, nvml.SUCCESS },
+		processName:           func(int) (string, nvml.Return) { return "/usr/bin/burn", nvml.SUCCESS },
 		lookupSymbol:          func(string) error { return nil },
 		validateInforom:       func(nvml.Device) nvml.Return { return nvml.SUCCESS },
 		deviceGetGpuUptimeV1:  func(nvml.Device) (uint32, nvml.Return) { return 0, nvml.ERROR_NOT_SUPPORTED },
 		deviceGetTemperatureV: func(nvml.Device, uint32) (int32, nvml.Return) { return 0, nvml.ERROR_NOT_SUPPORTED },
 		deviceGetFanSpeedRPM:  func(nvml.Device, int) (uint32, nvml.Return) { return 0, nvml.ERROR_NOT_SUPPORTED },
+		deviceGetProcessesUtilizationInfo: func(nvml.Device, uint64) ([]nvml.ProcessUtilizationInfo_v1, nvml.Return) {
+			return nil, nvml.ERROR_FUNCTION_NOT_FOUND
+		},
 	}
 }
 
@@ -82,6 +85,9 @@ func identityDevice() *mock.Device {
 		GetVbiosVersionFunc: func() (string, nvml.Return) { return "96.00.A5.00.03", nvml.SUCCESS },
 		GetCudaComputeCapabilityFunc: func() (int, int, nvml.Return) {
 			return 9, 0, nvml.SUCCESS
+		},
+		GetMPSComputeRunningProcessesFunc: func() ([]nvml.ProcessInfo, nvml.Return) {
+			return nil, nvml.ERROR_NOT_SUPPORTED
 		},
 	}
 }
@@ -314,15 +320,19 @@ func TestComputeAppsHappyPath(t *testing.T) {
 	assert.Equal(t, "2048 MiB", reading.Apps[0].UsedMemory)
 	assert.Equal(t, "11111111-2222-3333-4444-555555555555", reading.Apps[0].GPUUUID)
 	require.NotNil(t, reading.Apps[0].Utilization, "newest sample per PID must win")
-	assert.InDelta(t, 0.85, reading.Apps[0].Utilization.SMRatio, 1e-9)
-	assert.InDelta(t, 0.40, reading.Apps[0].Utilization.MemoryRatio, 1e-9)
-	assert.Zero(t, reading.Apps[0].Utilization.EncoderRatio)
-	assert.Zero(t, reading.Apps[0].Utilization.DecoderRatio)
+	require.NotNil(t, reading.Apps[0].Utilization.SMRatio)
+	assert.InDelta(t, 0.85, *reading.Apps[0].Utilization.SMRatio, 1e-9)
+	assert.InDelta(t, 0.40, *reading.Apps[0].Utilization.MemoryRatio, 1e-9)
+	assert.Zero(t, *reading.Apps[0].Utilization.EncoderRatio)
+	assert.Zero(t, *reading.Apps[0].Utilization.DecoderRatio)
+	assert.Nil(t, reading.Apps[0].Utilization.JPEGRatio)
+	assert.Nil(t, reading.Apps[0].Utilization.OFARatio)
 
 	assert.Equal(t, "15.9921875 MiB", reading.Apps[1].UsedMemory)
 	require.NotNil(t, reading.Apps[1].Utilization, "an active process absent from the sample list must report 0")
-	assert.Zero(t, reading.Apps[1].Utilization.SMRatio)
-	assert.Zero(t, reading.Apps[1].Utilization.MemoryRatio)
+	assert.Zero(t, *reading.Apps[1].Utilization.SMRatio)
+	assert.Zero(t, *reading.Apps[1].Utilization.MemoryRatio)
+	assert.Nil(t, reading.Apps[1].Utilization.JPEGRatio)
 }
 
 func TestComputeAppsProcessNameNotFound(t *testing.T) {
@@ -351,7 +361,7 @@ func TestComputeAppsProcessNameNotFound(t *testing.T) {
 	assert.Equal(t, "[Not Found]", reading.Apps[0].ProcessName)
 	assert.Equal(t, "24859 MiB", reading.Apps[0].UsedMemory)
 	require.NotNil(t, reading.Apps[0].Utilization, "ERROR_NOT_FOUND means all active processes were idle (0)")
-	assert.Zero(t, reading.Apps[0].Utilization.SMRatio)
+	assert.Zero(t, *reading.Apps[0].Utilization.SMRatio)
 }
 
 func TestGraphicsAppsHappyPath(t *testing.T) {
@@ -386,9 +396,87 @@ func TestGraphicsAppsHappyPath(t *testing.T) {
 	assert.Equal(t, "128 MiB", reading.GraphicsApps[0].UsedMemory)
 	assert.Equal(t, "11111111-2222-3333-4444-555555555555", reading.GraphicsApps[0].GPUUUID)
 	require.NotNil(t, reading.GraphicsApps[0].Utilization)
-	assert.InDelta(t, 0.12, reading.GraphicsApps[0].Utilization.SMRatio, 1e-9)
-	assert.InDelta(t, 0.08, reading.GraphicsApps[0].Utilization.EncoderRatio, 1e-9)
-	assert.InDelta(t, 0.04, reading.GraphicsApps[0].Utilization.DecoderRatio, 1e-9)
+	assert.InDelta(t, 0.12, *reading.GraphicsApps[0].Utilization.SMRatio, 1e-9)
+	assert.InDelta(t, 0.08, *reading.GraphicsApps[0].Utilization.EncoderRatio, 1e-9)
+	assert.InDelta(t, 0.04, *reading.GraphicsApps[0].Utilization.DecoderRatio, 1e-9)
+}
+
+func TestComputeAppsMergesMPSProcesses(t *testing.T) {
+	t.Parallel()
+
+	dev := identityDevice()
+	dev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 100000, nvml.SUCCESS }
+	dev.GetComputeRunningProcessesFunc = func() ([]nvml.ProcessInfo, nvml.Return) {
+		return []nvml.ProcessInfo{
+			{Pid: 1000, UsedGpuMemory: 512 * 1024 * 1024},
+		}, nvml.SUCCESS
+	}
+	dev.GetMPSComputeRunningProcessesFunc = func() ([]nvml.ProcessInfo, nvml.Return) {
+		return []nvml.ProcessInfo{
+			{Pid: 1000, UsedGpuMemory: 768 * 1024 * 1024},
+			{Pid: 2000, UsedGpuMemory: 256 * 1024 * 1024},
+		}, nvml.SUCCESS
+	}
+	dev.GetProcessUtilizationFunc = func(uint64) ([]nvml.ProcessUtilizationSample, nvml.Return) {
+		return nil, nvml.ERROR_NOT_FOUND
+	}
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
+
+	reading, _, err := backend.QueryFunc(resolveFields(t, "power.draw"), CollectOptions{ComputeApps: true})(t.Context())
+	require.NoError(t, err)
+	require.Len(t, reading.Apps, 2)
+	assert.Equal(t, "1000", reading.Apps[0].PID)
+	assert.Equal(t, "768 MiB", reading.Apps[0].UsedMemory)
+	assert.Equal(t, "2000", reading.Apps[1].PID)
+	assert.Equal(t, "256 MiB", reading.Apps[1].UsedMemory)
+}
+
+func TestProcessesUtilizationInfoJPEGOFA(t *testing.T) {
+	t.Parallel()
+
+	dev := identityDevice()
+	dev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 100000, nvml.SUCCESS }
+	dev.GetComputeRunningProcessesFunc = func() ([]nvml.ProcessInfo, nvml.Return) {
+		return []nvml.ProcessInfo{
+			{Pid: 4242, UsedGpuMemory: 128 * 1024 * 1024},
+			{Pid: 4243, UsedGpuMemory: 64 * 1024 * 1024},
+		}, nvml.SUCCESS
+	}
+	// GetProcessUtilizationFunc is left unstubbed: when the 6-engine call
+	// succeeds, the legacy 4-engine entry point must not be called.
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	api := fake.api()
+	api.deviceGetProcessesUtilizationInfo = func(_ nvml.Device, _ uint64) ([]nvml.ProcessUtilizationInfo_v1, nvml.Return) {
+		return []nvml.ProcessUtilizationInfo_v1{
+			{Pid: 4242, TimeStamp: 10, SmUtil: 10, MemUtil: 5, EncUtil: 0, DecUtil: 0, JpgUtil: 1, OfaUtil: 1},
+			{Pid: 4242, TimeStamp: 20, SmUtil: 55, MemUtil: 25, EncUtil: 15, DecUtil: 10, JpgUtil: 12, OfaUtil: 8},
+		}, nvml.SUCCESS
+	}
+
+	backend, err := newWithAPI(api, slogt.New(t))
+	require.NoError(t, err)
+
+	reading, _, err := backend.QueryFunc(resolveFields(t, "power.draw"), CollectOptions{ComputeApps: true})(t.Context())
+	require.NoError(t, err)
+	require.Len(t, reading.Apps, 2)
+
+	u0 := reading.Apps[0].Utilization
+	require.NotNil(t, u0)
+	assert.InDelta(t, 0.55, *u0.SMRatio, 1e-9)
+	assert.InDelta(t, 0.25, *u0.MemoryRatio, 1e-9)
+	assert.InDelta(t, 0.15, *u0.EncoderRatio, 1e-9)
+	assert.InDelta(t, 0.10, *u0.DecoderRatio, 1e-9)
+	assert.InDelta(t, 0.12, *u0.JPEGRatio, 1e-9)
+	assert.InDelta(t, 0.08, *u0.OFARatio, 1e-9)
+
+	u1 := reading.Apps[1].Utilization
+	require.NotNil(t, u1)
+	assert.Zero(t, *u1.SMRatio)
+	assert.Zero(t, *u1.JPEGRatio)
+	assert.Zero(t, *u1.OFARatio)
 }
 
 func TestComputeAppsUtilizationSkipsIdleDevice(t *testing.T) {
@@ -1312,62 +1400,27 @@ func TestFabricStatusRequiresCompletedState(t *testing.T) {
 	assert.Equal(t, "27", coll.values["fabric.status"])
 }
 
-func TestCatalogAdditionsAndSubDegreeTemp(t *testing.T) {
+func TestCatalogAdditions(t *testing.T) {
 	t.Parallel()
 
-	subDegreeSupported := true
 	inforomRet := nvml.SUCCESS
 
 	dev := identityDevice()
 	dev.GetBBXTimeData_v1Func = func() (nvml.BBXTimeData_v1, nvml.Return) {
 		return nvml.BBXTimeData_v1{TimeRun: 13572765}, nvml.SUCCESS
 	}
-	dev.GetTemperatureFunc = func(sensor nvml.TemperatureSensors) (uint32, nvml.Return) {
-		assert.Equal(t, nvml.TEMPERATURE_GPU, sensor)
-
-		return 41, nvml.SUCCESS
-	}
-	dev.GetFieldValuesFunc = func(values []nvml.FieldValue) nvml.Return {
-		for idx := range values {
-			switch values[idx].FieldId {
-			case gpuTempFieldID:
-				if !subDegreeSupported {
-					values[idx].NvmlReturn = uint32(nvml.ERROR_INVALID_ARGUMENT)
-
-					continue
-				}
-
-				values[idx].NvmlReturn = uint32(nvml.SUCCESS)
-				values[idx].ValueType = uint32(nvml.VALUE_TYPE_DOUBLE)
-				binary.LittleEndian.PutUint64(values[idx].Value[:], 0x403df00000000000) // 29.9375
-			case nvml.FI_DEV_RESET_STATUS:
-				values[idx].NvmlReturn = uint32(nvml.SUCCESS)
-				values[idx].ValueType = uint32(nvml.VALUE_TYPE_UNSIGNED_INT)
-				binary.LittleEndian.PutUint32(values[idx].Value[:], 1)
-			case nvml.FI_DEV_DRAIN_AND_RESET_STATUS:
-				values[idx].NvmlReturn = uint32(nvml.SUCCESS)
-				values[idx].ValueType = uint32(nvml.VALUE_TYPE_UNSIGNED_INT)
-				binary.LittleEndian.PutUint32(values[idx].Value[:], 0)
-			}
-		}
-
-		return nvml.SUCCESS
-	}
+	dev.GetFieldValuesFunc = resetStatusFieldValues
 
 	fake := &fakeAPI{devices: []nvml.Device{dev}}
 	api := fake.api()
 	api.validateInforom = func(nvml.Device) nvml.Return { return inforomRet }
 	api.deviceGetGpuUptimeV1 = func(nvml.Device) (uint32, nvml.Return) { return 2847, nvml.SUCCESS }
-	api.deviceGetTemperatureV = func(_ nvml.Device, sensor uint32) (int32, nvml.Return) {
-		assert.Equal(t, uint32(1), sensor)
-
-		return 52, nvml.SUCCESS
-	}
+	api.deviceGetTemperatureV = func(nvml.Device, uint32) (int32, nvml.Return) { return 52, nvml.SUCCESS }
 
 	backend, err := newWithAPI(api, slogt.New(t))
 	require.NoError(t, err)
 
-	fields := resolveFields(t, "gpu_uptime,bbx.time_run,temperature.gpu,temperature.gpu_max,"+
+	fields := resolveFields(t, "gpu_uptime,bbx.time_run,temperature.gpu_max,"+
 		"reset_status.reset_required,reset_status.drain_and_reset_recommended,inforom.checksum_validation")
 	query := backend.QueryFunc(fields, CollectOptions{})
 
@@ -1375,18 +1428,77 @@ func TestCatalogAdditionsAndSubDegreeTemp(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "2847 seconds", cellValue(t, reading.Table, "gpu_uptime"))
 	assert.Equal(t, "13572765 seconds", cellValue(t, reading.Table, "bbx.time_run"))
-	assert.Equal(t, "29.9375", cellValue(t, reading.Table, "temperature.gpu"))
 	assert.Equal(t, "52", cellValue(t, reading.Table, "temperature.gpu_max"))
 	assert.Equal(t, "Yes", cellValue(t, reading.Table, "reset_status.reset_required"))
 	assert.Equal(t, "No", cellValue(t, reading.Table, "reset_status.drain_and_reset_recommended"))
 	assert.Equal(t, "valid", cellValue(t, reading.Table, "inforom.checksum_validation"))
 
-	// pre-R620 fallback for temperature.gpu and corrupted InfoROM mapping
-	subDegreeSupported = false
 	inforomRet = nvml.ERROR_CORRUPTED_INFOROM
 
 	reading, _, err = query(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, "41", cellValue(t, reading.Table, "temperature.gpu"))
 	assert.Equal(t, "invalid", cellValue(t, reading.Table, "inforom.checksum_validation"))
+}
+
+func resetStatusFieldValues(values []nvml.FieldValue) nvml.Return {
+	for idx := range values {
+		switch values[idx].FieldId {
+		case nvml.FI_DEV_RESET_STATUS:
+			values[idx].NvmlReturn = uint32(nvml.SUCCESS)
+			values[idx].ValueType = uint32(nvml.VALUE_TYPE_UNSIGNED_INT)
+			binary.LittleEndian.PutUint32(values[idx].Value[:], 1)
+		case nvml.FI_DEV_DRAIN_AND_RESET_STATUS:
+			values[idx].NvmlReturn = uint32(nvml.SUCCESS)
+			values[idx].ValueType = uint32(nvml.VALUE_TYPE_UNSIGNED_INT)
+			binary.LittleEndian.PutUint32(values[idx].Value[:], 0)
+		}
+	}
+
+	return nvml.SUCCESS
+}
+
+func TestSubDegreeGPUTemperature(t *testing.T) {
+	t.Parallel()
+
+	subDegreeSupported := true
+
+	dev := identityDevice()
+	dev.GetTemperatureFunc = func(sensor nvml.TemperatureSensors) (uint32, nvml.Return) {
+		assert.Equal(t, nvml.TEMPERATURE_GPU, sensor)
+
+		return 41, nvml.SUCCESS
+	}
+	dev.GetFieldValuesFunc = func(values []nvml.FieldValue) nvml.Return {
+		for idx := range values {
+			if values[idx].FieldId != gpuTempFieldID {
+				continue
+			}
+
+			if !subDegreeSupported {
+				values[idx].NvmlReturn = uint32(nvml.ERROR_INVALID_ARGUMENT)
+
+				continue
+			}
+
+			values[idx].NvmlReturn = uint32(nvml.SUCCESS)
+			values[idx].ValueType = uint32(nvml.VALUE_TYPE_DOUBLE)
+			binary.LittleEndian.PutUint64(values[idx].Value[:], 0x403df00000000000) // 29.9375
+		}
+
+		return nvml.SUCCESS
+	}
+
+	fake := &fakeAPI{devices: []nvml.Device{dev}}
+	backend := newTestBackend(t, fake)
+	query := backend.QueryFunc(resolveFields(t, string(gpuTemperatureField)), CollectOptions{})
+
+	reading, _, err := query(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "29.9375", cellValue(t, reading.Table, gpuTemperatureField))
+
+	subDegreeSupported = false
+
+	reading, _, err = query(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "41", cellValue(t, reading.Table, gpuTemperatureField))
 }

@@ -14,6 +14,8 @@ import (
 	"github.com/neilotoole/slogt/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/collect"
 )
 
 // gpmFake tracks the seam-level GPM calls: sample lifecycle accounting
@@ -247,38 +249,28 @@ func TestMIGGPMCrossCycle(t *testing.T) {
 
 	util := reading.Extras.MIG[0].Utilization
 	require.NotNil(t, util)
-	require.NotNil(t, util.GraphicsActivityRatio)
-	assert.InDelta(t, 0.999992, *util.GraphicsActivityRatio, 1e-9, "GPM percentages must become ratios")
-	require.NotNil(t, util.SMActivityRatio)
-	assert.InDelta(t, 0.90668, *util.SMActivityRatio, 1e-9)
-	require.NotNil(t, util.TensorActivityRatio)
-	assert.InDelta(t, 0.227059, *util.TensorActivityRatio, 1e-9)
-	require.NotNil(t, util.DRAMBandwidthUtilizationRatio)
-	assert.InDelta(t, 0.655, *util.DRAMBandwidthUtilizationRatio, 1e-9)
+	assertGPMRatios(t, util, 0.999992, 0.90668, 0.5, 0.227059, 0.655)
 	require.NotNil(t, util.PCIeTXBytesPerSecond)
 	assert.InDelta(t, 100*1048576, *util.PCIeTXBytesPerSecond, 1e-9, "GPM PCIe is MiB/s, not KB/s")
 	assert.Equal(t, 1, gpm.live(), "exactly one retained sample per GPU instance")
 
-	// a rapid follow-up scrape must not rotate the anchored sample and must
-	// serve the same values again
+	// a rapid follow-up scrape reuses the retained values without rotating
 	current = current.Add(100 * time.Millisecond)
 	allocsBefore := gpm.allocs
 
 	reading, _, err = query(t.Context())
 	require.NoError(t, err)
-	require.NotNil(t, reading.Extras.MIG[0].Utilization)
 	assert.InDelta(t, 0.999992, *reading.Extras.MIG[0].Utilization.GraphicsActivityRatio, 1e-9)
-	assert.Equal(t, allocsBefore, gpm.allocs, "the min-window guard must not take a new sample")
+	assert.Equal(t, allocsBefore, gpm.allocs)
 
-	// once the >100ms GPM window (150ms) elapses, sub-second scrapes rotate cleanly
+	// once the >100ms GPM window (150ms) elapses, sub-second scrapes rotate
 	current = current.Add(100 * time.Millisecond)
 	gpm.values[gpmMetricGraphicsUtil] = 42.5
 
 	reading, _, err = query(t.Context())
 	require.NoError(t, err)
-	require.NotNil(t, reading.Extras.MIG[0].Utilization)
 	assert.InDelta(t, 0.425, *reading.Extras.MIG[0].Utilization.GraphicsActivityRatio, 1e-9)
-	assert.Equal(t, allocsBefore+1, gpm.allocs, "200ms since seed sample must rotate the GPM sample")
+	assert.Equal(t, allocsBefore+1, gpm.allocs)
 }
 
 func TestMIGGPMFingerprintInvalidation(t *testing.T) {
@@ -692,13 +684,10 @@ func TestWholeGPUGPMCrossCycle(t *testing.T) {
 	assert.Equal(t, 1, gpm.live())
 
 	// second cycle diffs against the retained sample and skips GetPcieThroughput
-	// even when PCIeThroughput is also requested (no GetPcieThroughputFunc stub)
 	current = current.Add(5 * time.Second)
-	queryWithPCIe := backend.QueryFunc(
-		resolveFields(t, "power.draw"), CollectOptions{GPM: true, PCIeThroughput: true},
-	)
+	opts := CollectOptions{GPM: true, PCIeThroughput: true}
 
-	reading, _, err = queryWithPCIe(t.Context())
+	reading, _, err = backend.QueryFunc(resolveFields(t, "power.draw"), opts)(t.Context())
 	require.NoError(t, err)
 	require.Len(t, reading.Extras.GPM, 1)
 	require.Len(t, reading.Extras.PCIe, 1)
@@ -707,16 +696,7 @@ func TestWholeGPUGPMCrossCycle(t *testing.T) {
 
 	util := reading.Extras.GPM[0]
 	assert.Equal(t, "11111111-2222-3333-4444-555555555555", util.UUID)
-	require.NotNil(t, util.GraphicsActivityRatio)
-	assert.InDelta(t, 0.885, *util.GraphicsActivityRatio, 1e-9)
-	require.NotNil(t, util.SMActivityRatio)
-	assert.InDelta(t, 0.75, *util.SMActivityRatio, 1e-9)
-	require.NotNil(t, util.SMOccupancyRatio)
-	assert.InDelta(t, 0.45, *util.SMOccupancyRatio, 1e-9)
-	require.NotNil(t, util.TensorActivityRatio)
-	assert.InDelta(t, 0.30, *util.TensorActivityRatio, 1e-9)
-	require.NotNil(t, util.DRAMBandwidthUtilizationRatio)
-	assert.InDelta(t, 0.52, *util.DRAMBandwidthUtilizationRatio, 1e-9)
+	assertWholeGPUGPMRatios(t, util, 0.885, 0.75, 0.45, 0.30, 0.52)
 	assert.Equal(t, 1, gpm.live())
 }
 
@@ -756,4 +736,39 @@ func TestMIGMissingGPMExportsContinuesToRemainingGPUs(t *testing.T) {
 	assert.Equal(t, "11111111-2222-3333-4444-555555555555", reading.Extras.MIG[0].ParentUUID)
 	assert.Equal(t, "22222222-2222-2222-2222-222222222222", reading.Extras.MIG[1].ParentUUID)
 	require.Len(t, reading.Extras.Energy, 2, "missing GPM exports on GPU 0 must not drop energy metrics for GPU 1")
+}
+
+func assertWholeGPUGPMRatios(
+	t *testing.T,
+	util collect.GPUUtilization,
+	graphics, sm, occupancy, tensor, dram float64,
+) {
+	t.Helper()
+
+	assertGPMRatios(t, &collect.MIGUtilization{
+		GraphicsActivityRatio:         util.GraphicsActivityRatio,
+		SMActivityRatio:               util.SMActivityRatio,
+		SMOccupancyRatio:              util.SMOccupancyRatio,
+		TensorActivityRatio:           util.TensorActivityRatio,
+		DRAMBandwidthUtilizationRatio: util.DRAMBandwidthUtilizationRatio,
+	}, graphics, sm, occupancy, tensor, dram)
+}
+
+func assertGPMRatios(
+	t *testing.T,
+	util *collect.MIGUtilization,
+	graphics, sm, occupancy, tensor, dram float64,
+) {
+	t.Helper()
+
+	require.NotNil(t, util.GraphicsActivityRatio)
+	assert.InDelta(t, graphics, *util.GraphicsActivityRatio, 1e-9)
+	require.NotNil(t, util.SMActivityRatio)
+	assert.InDelta(t, sm, *util.SMActivityRatio, 1e-9)
+	require.NotNil(t, util.SMOccupancyRatio)
+	assert.InDelta(t, occupancy, *util.SMOccupancyRatio, 1e-9)
+	require.NotNil(t, util.TensorActivityRatio)
+	assert.InDelta(t, tensor, *util.TensorActivityRatio, 1e-9)
+	require.NotNil(t, util.DRAMBandwidthUtilizationRatio)
+	assert.InDelta(t, dram, *util.DRAMBandwidthUtilizationRatio, 1e-9)
 }

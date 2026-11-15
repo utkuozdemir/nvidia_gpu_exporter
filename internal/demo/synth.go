@@ -1,10 +1,12 @@
 package demo
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"math/rand"
+	"slices"
 	"sort"
 	"strconv"
 	"time"
@@ -340,9 +342,9 @@ func (b *Backend) tickXIDs(uuids []string, extras *extrasConfig, now time.Time) 
 		b.bumpXID(uuid, code, 1, b.nextXIDAt)
 
 		if instances := migByGPU[gpuIdx]; len(instances) > 0 {
-			inst := instances[int(code)%len(instances)]
-			ci := int(code) % max(inst.CIs, 1)
-			b.bumpMIGXID(uuid, strconv.Itoa(inst.GI), strconv.Itoa(ci), code, 1, b.nextXIDAt)
+			inst := instances[code%uint64(len(instances))]
+			ci := strconv.FormatUint(code%uint64(max(inst.CIs, 1)), 10)
+			b.bumpMIGXID(uuid, strconv.Itoa(inst.GI), ci, code, 1, b.nextXIDAt)
 		}
 
 		b.nextXIDAt = b.nextXIDAt.Add(b.jitteredInterval(interval))
@@ -458,27 +460,19 @@ func sortXIDCounters(counters []collect.XIDCounter) {
 }
 
 func sortMIGXIDCounters(counters []collect.MIGXIDCounter) {
-	sort.Slice(counters, func(i, j int) bool {
-		if counters[i].UUID != counters[j].UUID {
-			return counters[i].UUID < counters[j].UUID
-		}
-
-		if counters[i].GPUInstanceID != counters[j].GPUInstanceID {
-			return counters[i].GPUInstanceID < counters[j].GPUInstanceID
-		}
-
-		if counters[i].ComputeInstanceID != counters[j].ComputeInstanceID {
-			return counters[i].ComputeInstanceID < counters[j].ComputeInstanceID
-		}
-
-		return counters[i].XID < counters[j].XID
+	slices.SortFunc(counters, func(left, right collect.MIGXIDCounter) int {
+		return cmp.Or(
+			cmp.Compare(left.UUID, right.UUID),
+			cmp.Compare(left.GPUInstanceID, right.GPUInstanceID),
+			cmp.Compare(left.ComputeInstanceID, right.ComputeInstanceID),
+			cmp.Compare(left.XID, right.XID),
+		)
 	})
 }
 
 // defaultGraphicsApps is the synthetic graphics-process list served on each
-// simulated GPU. The exec pipeline has no --query-graphics-apps switch to
-// replay from a capture, so the demo backend synthesizes a desktop-style set
-// directly.
+// simulated GPU so headless datacenter captures still expose desktop-style
+// graphics processes in demo mode.
 //
 //nolint:gochecknoglobals // static synthetic process table
 var defaultGraphicsApps = []struct {
@@ -490,10 +484,10 @@ var defaultGraphicsApps = []struct {
 	{pid: "2620", name: "/usr/bin/Xwayland", usedMemory: "128 MiB"},
 }
 
-// synthGraphicsApps populates the graphics per-process list for each simulated
-// GPU. Unlike compute apps (which come from the capture via --query-compute-apps),
-// graphics apps are an NVML-only family and are synthesized here.
+// synthGraphicsApps populates the steady synthetic desktop graphics-process
+// list for each simulated GPU, replacing any capture-replayed graphics entries.
 func synthGraphicsApps(uuids []string, reading *collect.Reading) {
+	reading.GraphicsApps = nil
 	reading.GraphicsAppsAttempted = true
 	reading.GraphicsAppsSuccess = true
 
@@ -605,29 +599,40 @@ func (b *Backend) drawAppUtilization(key, pid string, compute bool) *nvidiasmi.P
 	if compute {
 		smBase := float64(18+pidSlot(key, 12)*6) / 100
 		memBase := float64(15+pidSlot("mem:"+key, 10)*6) / 100
+		sm := b.rng.draw(rangeCfg{Min: smBase, Max: float64(26+pidSlot(key, 12)*6) / 100})
+		mem := b.rng.draw(rangeCfg{Min: memBase, Max: float64(23+pidSlot("mem:"+key, 10)*6) / 100})
+		zero := 0.0
 
 		return &nvidiasmi.ProcessUtilization{
-			SMRatio:      b.rng.draw(rangeCfg{Min: smBase, Max: float64(26+pidSlot(key, 12)*6) / 100}),
-			MemoryRatio:  b.rng.draw(rangeCfg{Min: memBase, Max: float64(23+pidSlot("mem:"+key, 10)*6) / 100}),
-			EncoderRatio: 0,
-			DecoderRatio: 0,
+			SMRatio:      &sm,
+			MemoryRatio:  &mem,
+			EncoderRatio: new(zero),
+			DecoderRatio: new(zero),
+			JPEGRatio:    new(zero),
+			OFARatio:     new(zero),
 		}
 	}
 
-	var enc, dec float64
+	var enc, dec, jpg, ofa float64
 	if pid == defaultGraphicsApps[0].pid {
 		enc = b.rng.draw(rangeCfg{Min: 0.02, Max: 0.10})
 		dec = b.rng.draw(rangeCfg{Min: 0.02, Max: 0.10})
+		jpg = b.rng.draw(rangeCfg{Min: 0.01, Max: 0.04})
+		ofa = b.rng.draw(rangeCfg{Min: 0.01, Max: 0.03})
 	}
 
 	smSlot := pidSlot(key, 4)
 	memSlot := pidSlot("mem:"+key, 3)
+	sm := b.rng.draw(rangeCfg{Min: float64(2+smSlot*2) / 100, Max: float64(5+smSlot*2) / 100})
+	mem := b.rng.draw(rangeCfg{Min: float64(1+memSlot*2) / 100, Max: float64(3+memSlot*2) / 100})
 
 	return &nvidiasmi.ProcessUtilization{
-		SMRatio:      b.rng.draw(rangeCfg{Min: float64(2+smSlot*2) / 100, Max: float64(5+smSlot*2) / 100}),
-		MemoryRatio:  b.rng.draw(rangeCfg{Min: float64(1+memSlot*2) / 100, Max: float64(3+memSlot*2) / 100}),
-		EncoderRatio: enc,
-		DecoderRatio: dec,
+		SMRatio:      &sm,
+		MemoryRatio:  &mem,
+		EncoderRatio: &enc,
+		DecoderRatio: &dec,
+		JPEGRatio:    &jpg,
+		OFARatio:     &ofa,
 	}
 }
 

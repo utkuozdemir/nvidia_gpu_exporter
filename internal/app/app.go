@@ -18,6 +18,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -156,16 +157,16 @@ func Run(ctx context.Context, args []string, opts Options) error {
 				"the bound.").
 			Default("10s").Duration()
 		collectComputeApps = app.Flag("collect.compute-apps",
-			"Also export per-process GPU metrics (from `nvidia-smi --query-compute-apps`, "+
-				"or the equivalent NVML calls in nvml mode). When the exporter runs in a "+
-				"container, seeing other workloads' processes requires sharing the host PID "+
-				"namespace (hostPID in Kubernetes, --pid=host in Docker).").
+			"Also export per-process GPU metrics (from `nvidia-smi -q -d PIDS` and "+
+				"`nvidia-smi pmon -c 1` in exec mode, or the compute and MPS NVML calls "+
+				"in nvml mode). When the exporter runs in a container, seeing other "+
+				"workloads' processes requires sharing the host PID namespace (hostPID "+
+				"in Kubernetes, --pid=host in Docker).").
 			Default("false").Bool()
 		collectGraphicsApps = app.Flag("collect.graphics-apps",
-			"Also export per-process metrics for graphics contexts on a GPU "+
-				"(requires --collect.backend=nvml or demo). When the exporter runs in a "+
-				"container, seeing other workloads' processes requires sharing the host PID "+
-				"namespace (hostPID in Kubernetes, --pid=host in Docker).").
+			"Also export per-process metrics for graphics contexts on a GPU. "+
+				"When the exporter runs in a container, seeing other workloads' processes "+
+				"requires sharing the host PID namespace (hostPID in Kubernetes, --pid=host in Docker).").
 			Default("false").Bool()
 		demoConfig = app.Flag("demo-config",
 			"Path to the demo backend's config file (the fake-nvidia-smi YAML plus an "+
@@ -175,8 +176,8 @@ func Run(ctx context.Context, args []string, opts Options) error {
 		collectComputeAppsMIG = app.Flag("collect.compute-apps-mig",
 			"Add MIG attribution labels (gpu_instance_id, compute_instance_id) to the "+
 				"per-process metrics (requires --collect.compute-apps or "+
-				"--collect.graphics-apps, and the nvml or demo backend). Opt-in because "+
-				"it changes the label set of the per-process series.").
+				"--collect.graphics-apps). Opt-in because it changes the label set of "+
+				"the per-process series.").
 			Default("false").Bool()
 		collectComputeAppsIdentity = app.Flag("collect.compute-apps-identity",
 			"Add workload identity labels (container_id, systemd_unit) from /proc/<pid>/cgroup "+
@@ -185,8 +186,9 @@ func Run(ctx context.Context, args []string, opts Options) error {
 				"it changes the label set of the per-process series.").
 			Default("false").Bool()
 		collectPcieThroughput = app.Flag("collect.pcie-throughput",
-			"Also export the PCIe TX/RX throughput per GPU (requires --collect.backend=nvml, "+
-				"the demo backend serves the family regardless). "+
+			"Also export the PCIe TX/RX throughput per GPU on GPUs without whole-GPU GPM "+
+				"(requires --collect.backend=nvml, the demo backend and Hopper or newer "+
+				"non-MIG GPUs with GPM serve the family regardless). "+
 				"Each direction is sampled over a separate 20ms driver counter window, adding "+
 				"roughly 40ms per GPU to every collection cycle (~320ms on an 8-GPU node). "+
 				"Pairing it with --collect.interval keeps scrapes unaffected.").
@@ -382,16 +384,6 @@ func validateBackendFlags(flags backendFlagSet) error {
 		// demo backend serves the family regardless and accepts the flag
 		// as a no-op)
 		return errors.New("--collect.pcie-throughput requires --collect.backend=nvml")
-	}
-
-	if flags.graphicsApps && flags.backend == backendExec {
-		// nvidia-smi has no query switch for graphics processes
-		return errors.New("--collect.graphics-apps requires --collect.backend=nvml or demo")
-	}
-
-	if flags.computeAppsMIG && flags.backend == backendExec {
-		// the per-process query output has no MIG attribution to parse
-		return errors.New("--collect.compute-apps-mig requires --collect.backend=nvml or demo")
 	}
 
 	if flags.computeAppsMIG && !flags.computeApps && !flags.graphicsApps {
@@ -685,9 +677,8 @@ func setupBackend(
 			fmt.Errorf("failed to resolve query fields: %w", err)
 	}
 
-	// the CUDA version is not a query field and is effectively constant for
-	// the process lifetime (it changes with the driver, which requires the
-	// GPUs to be idle), so it is read once at startup, never per scrape
+	// Read the CUDA version at startup and refresh it only when the table's
+	// driver_version changes across an online driver upgrade.
 	cudaVersion := nvidiasmi.QueryCudaVersion(
 		ctx, cfg.nvidiaSmiCommand, cfg.timeout, nvidiasmi.DefaultRunFunc, logger)
 
@@ -787,6 +778,7 @@ func setupDemoBackend(
 
 	demoCfg := cfg
 	demoCfg.nvidiaSmiCommand = demoCommand
+	demoCfg.graphicsApps = false
 
 	query := backend.WrapQueryFunc(buildQueryFunc(demoCfg, resolved, cudaVersion, runFunc, logger))
 
@@ -829,17 +821,21 @@ func superviseXIDWatcher(
 	})
 }
 
+const driverVersionField nvidiasmi.QField = "driver_version"
+
 // buildQueryFunc builds the collection cycle: the GPU query, plus the
 // per-process query when enabled. The returned error and exit code describe
-// the GPU query alone; the per-process query fails softly inside the Reading,
+// the GPU query alone. The per-process query fails softly inside the Reading,
 // per the contract on collect.QueryFunc.
 func buildQueryFunc(
 	cfg collectConfig,
 	resolved nvidiasmi.ResolvedFields,
-	cudaVersion string,
+	initialCudaVersion string,
 	runFunc nvidiasmi.RunFunc,
 	logger *slog.Logger,
 ) collect.QueryFunc {
+	cudaCache := &cudaVersionCache{version: initialCudaVersion}
+
 	return func(queryCtx context.Context) (collect.Reading, int, error) {
 		table, exitCode, err := nvidiasmi.Query(
 			queryCtx, cfg.nvidiaSmiCommand, resolved.Query, runFunc)
@@ -848,22 +844,134 @@ func buildQueryFunc(
 		}
 
 		reading := collect.Reading{Table: table}
-		reading.Extras.CUDAVersion = cudaVersion
+		reading.Extras.CUDAVersion = cudaCache.resolve(
+			queryCtx, cfg.nvidiaSmiCommand, table, runFunc, logger,
+		)
 
-		if cfg.computeApps {
-			reading.AppsAttempted = true
-
-			apps, appsErr := nvidiasmi.QueryComputeApps(
-				queryCtx, cfg.nvidiaSmiCommand, runFunc, logger)
-			if appsErr != nil {
-				reading.AppsErr = appsErr
-			} else {
-				reading.Apps = apps
-				reading.AppsSuccess = true
-			}
-		}
+		collectExecApps(queryCtx, cfg, table, &reading, runFunc, logger)
 
 		return reading, exitCode, nil
+	}
+}
+
+type cudaVersionCache struct {
+	mu      sync.Mutex
+	version string
+	driver  string
+}
+
+func (c *cudaVersionCache) resolve(
+	ctx context.Context,
+	command string,
+	table *nvidiasmi.Table,
+	runFunc nvidiasmi.RunFunc,
+	logger *slog.Logger,
+) string {
+	driverVer := tableDriverVersion(table)
+
+	c.mu.Lock()
+	curVersion := c.version
+	curDriver := c.driver
+
+	if driverVer == "" {
+		c.mu.Unlock()
+
+		return curVersion
+	}
+
+	if curDriver == "" && curVersion != "" {
+		c.driver = driverVer
+		c.mu.Unlock()
+
+		return curVersion
+	}
+
+	if driverVer == curDriver {
+		c.mu.Unlock()
+
+		return curVersion
+	}
+	c.mu.Unlock()
+
+	refreshed := nvidiasmi.QueryCudaVersion(ctx, command, 0, runFunc, logger)
+
+	c.mu.Lock()
+	if refreshed != "" {
+		c.version = refreshed
+		c.driver = driverVer
+	}
+
+	res := c.version
+	c.mu.Unlock()
+
+	return res
+}
+
+func tableDriverVersion(table *nvidiasmi.Table) string {
+	if table == nil {
+		return ""
+	}
+
+	for _, row := range table.Rows {
+		raw := strings.TrimSpace(row.QFieldToCells[driverVersionField].RawValue)
+		if raw != "" && !nvidiasmi.IsKnownAbsentValue(raw) {
+			return raw
+		}
+	}
+
+	return ""
+}
+
+func collectExecApps(
+	ctx context.Context,
+	cfg collectConfig,
+	table *nvidiasmi.Table,
+	reading *collect.Reading,
+	runFunc nvidiasmi.RunFunc,
+	logger *slog.Logger,
+) {
+	if !cfg.computeApps && !cfg.graphicsApps {
+		return
+	}
+
+	reading.AppsAttempted = cfg.computeApps
+	reading.GraphicsAppsAttempted = cfg.graphicsApps
+
+	procs, err := nvidiasmi.QueryProcesses(ctx, cfg.nvidiaSmiCommand, table, runFunc, logger)
+	if err != nil {
+		applyExecAppsError(cfg, reading, err)
+
+		return
+	}
+
+	applyExecAppsResult(cfg, reading, procs)
+
+	if cfg.backend != backendDemo && (len(reading.Apps) > 0 || len(reading.GraphicsApps) > 0) {
+		nvidiasmi.AttachPmonUtilization(
+			ctx, cfg.nvidiaSmiCommand, table, reading.Apps, reading.GraphicsApps, runFunc, logger,
+		)
+	}
+}
+
+func applyExecAppsError(cfg collectConfig, reading *collect.Reading, err error) {
+	if cfg.computeApps {
+		reading.AppsErr = err
+	}
+
+	if cfg.graphicsApps {
+		reading.GraphicsAppsErr = err
+	}
+}
+
+func applyExecAppsResult(cfg collectConfig, reading *collect.Reading, procs nvidiasmi.ProcessList) {
+	if cfg.computeApps {
+		reading.Apps = procs.Compute
+		reading.AppsSuccess = true
+	}
+
+	if cfg.graphicsApps {
+		reading.GraphicsApps = procs.Graphics
+		reading.GraphicsAppsSuccess = true
 	}
 }
 

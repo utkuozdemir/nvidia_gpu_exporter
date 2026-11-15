@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"math"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -186,77 +187,6 @@ func FuzzTransformRawValue(f *testing.F) {
 	})
 }
 
-// FuzzParseComputeApps covers the per-process query, whose process name column
-// carries workload-controlled text that drivers do not always sanitize.
-func FuzzParseComputeApps(f *testing.F) {
-	f.Add("gpu_uuid, pid, process_name, used_gpu_memory [MiB]\nGPU-abc, 123, python, 40960 MiB\n")
-	f.Add("gpu_uuid, pid, process_name, used_gpu_memory [MiB]\nGPU-abc, 123, a,b,c, [N/A]\n")
-	// a row with no uuid to attribute it to
-	f.Add("gpu_uuid, pid, process_name, used_gpu_memory [MiB]\n, 123, python, 40960 MiB\n")
-	// two rows differing only in a uuid neither of them has
-	f.Add("gpu_uuid, pid, process_name, used_gpu_memory [MiB]\n" +
-		", 1, python, 1 MiB\n, 1, python, 2 MiB\n")
-	f.Fuzz(func(t *testing.T, output string) {
-		apps, err := nvidiasmi.ParseComputeApps(output, discard)
-		if err != nil {
-			return
-		}
-
-		for _, app := range apps {
-			// the pid becomes a metric label; a row whose pid is unusable is
-			// meant to be skipped, not exported
-			if app.PID == "" || strings.ContainsAny(app.PID, "\n\r") {
-				t.Fatalf("kept a row with an unusable pid %q", app.PID)
-			}
-
-			// the uuid is what joins a process to its GPU; without one the
-			// series cannot be attributed, and several such rows collapse
-			// onto the same label set
-			if app.GPUUUID == "" {
-				t.Fatalf("kept a row with no gpu uuid: pid %q", app.PID)
-			}
-
-			// The row is parsed from the outside in, with the process name
-			// rejoined from whatever is left in the middle. Reassembling the
-			// four fields must reproduce some input line's cells, or a column
-			// shifted and the memory reading is being labelled as a process
-			// name.
-			rejoined := strings.Join([]string{
-				app.GPUUUID, app.PID, app.ProcessName, app.UsedMemory,
-			}, ",")
-
-			if !containsRejoinedRow(output, rejoined) {
-				t.Fatalf("parsed a row to %q, which is not in the input", rejoined)
-			}
-		}
-	})
-}
-
-// containsRejoinedRow reports whether any data line of output reassembles to
-// row, with the cells trimmed and the uuid normalized the way the parser does.
-func containsRejoinedRow(output, row string) bool {
-	for line := range strings.SplitSeq(strings.TrimSpace(output), "\n") {
-		cells := strings.Split(line, ",")
-		if len(cells) < 4 {
-			continue
-		}
-
-		// the free-text process name keeps the commas between the fixed cells
-		rejoined := strings.Join([]string{
-			nvidiasmi.NormalizeUUID(cells[0]),
-			strings.TrimSpace(cells[1]),
-			strings.TrimSpace(strings.Join(cells[2:len(cells)-1], ",")),
-			strings.TrimSpace(cells[len(cells)-1]),
-		}, ",")
-
-		if rejoined == row {
-			return true
-		}
-	}
-
-	return false
-}
-
 // FuzzSplitCommand covers the --nvidia-smi-command value, the one input a user
 // writes by hand. Its result is handed straight to exec, so an accepted command
 // must produce a usable argument vector.
@@ -344,4 +274,127 @@ func validFuzzSystemdUnit(unit string) bool {
 	return utf8.ValidString(unit) &&
 		strings.HasSuffix(unit, ".service") &&
 		!strings.ContainsAny(unit, "/\r\n")
+}
+
+// FuzzParseProcesses covers nvidia-smi -q -d PIDS parsing. Every kept entry
+// must carry a numeric PID, a non-empty GPU UUID, a non-empty process name, and
+// must never duplicate (uuid, pid, gi, ci) within either slice.
+func FuzzParseProcesses(f *testing.F) {
+	f.Add("GPU 00000000:01:00.0\n    Processes\n        Process ID : 123\n" +
+		"            Type : C+G\n            Name : python\n            Used GPU Memory : 128 MiB\n")
+	f.Add("==============NVSMI LOG==============\nGPU 0000:02:00.0\n    Processes : None\n")
+	f.Add("GPU 00000000:01:00.0\n    Processes\n        GPU instance ID : 2\n" +
+		"        Compute instance ID : 0\n        Process ID : 42\n            Type : M+C\n" +
+		"            Name :\n            Used GPU Memory : Not available in WDDM driver model\n")
+
+	table := &nvidiasmi.Table{
+		Rows: []nvidiasmi.Row{
+			{QFieldToCells: map[nvidiasmi.QField]nvidiasmi.Cell{
+				nvidiasmi.UUIDQField: {RawValue: "GPU-111"},
+				"pci.bus_id":         {RawValue: "00000000:01:00.0"},
+			}},
+			{QFieldToCells: map[nvidiasmi.QField]nvidiasmi.Cell{
+				nvidiasmi.UUIDQField: {RawValue: "GPU-222"},
+				"pci.bus_id":         {RawValue: "00000000:02:00.0"},
+			}},
+		},
+	}
+
+	f.Fuzz(func(t *testing.T, output string) {
+		procs, err := nvidiasmi.ParseProcesses(output, table, discard)
+		if err != nil {
+			return
+		}
+
+		for _, slice := range [][]nvidiasmi.ComputeApp{procs.Compute, procs.Graphics} {
+			assertValidFuzzProcessSlice(t, slice)
+		}
+	})
+}
+
+func assertValidFuzzProcessSlice(t *testing.T, slice []nvidiasmi.ComputeApp) {
+	t.Helper()
+
+	seen := map[string]bool{}
+
+	for _, app := range slice {
+		if app.GPUUUID == "" || strings.Contains(app.GPUUUID, "\n") {
+			t.Fatalf("kept process with unusable gpu uuid %q", app.GPUUUID)
+		}
+
+		if _, err := strconv.ParseUint(app.PID, 10, 64); err != nil {
+			t.Fatalf("kept process with non-numeric pid %q: %v", app.PID, err)
+		}
+
+		if app.ProcessName == "" || strings.Contains(app.ProcessName, "\n") {
+			t.Fatalf("kept process with unusable name %q", app.ProcessName)
+		}
+
+		key := app.GPUUUID + "\x00" + app.PID + "\x00" + app.GPUInstanceID + "\x00" + app.ComputeInstanceID
+		if seen[key] {
+			t.Fatalf("duplicate process tuple in slice: %q", key)
+		}
+
+		seen[key] = true
+	}
+}
+
+// FuzzParsePmon covers nvidia-smi pmon output parsing. Every kept entry must
+// carry a numeric PID, a known GPU UUID, and at least one finite [0, 1] ratio.
+func FuzzParsePmon(f *testing.F) {
+	f.Add("# gpu pid type sm mem enc dec jpg ofa command\n0 123 C 50 10 - 0 5 1 python\n")
+	f.Add("0 123 G 10 20 0 - C:\\Program Files\\NVIDIA Share.exe\n")
+	f.Add("0 - - - - - - - - -\n")
+
+	indexToUUID := map[string]string{"0": "gpu-0", "1": "gpu-1"}
+
+	f.Fuzz(func(t *testing.T, output string) {
+		byKey := nvidiasmi.ParsePmon(output, indexToUUID)
+		for key, util := range byKey {
+			assertValidPmonEntry(t, key, util)
+		}
+	})
+}
+
+func assertValidPmonEntry(t *testing.T, key nvidiasmi.PmonKey, util *nvidiasmi.ProcessUtilization) {
+	t.Helper()
+
+	if key.GPUUUID == "" {
+		t.Fatalf("kept pmon entry with empty gpu uuid")
+	}
+
+	if _, err := strconv.ParseUint(key.PID, 10, 64); err != nil {
+		t.Fatalf("kept pmon entry with non-numeric pid %q: %v", key.PID, err)
+	}
+
+	if util == nil {
+		t.Fatalf("kept nil ProcessUtilization for %v", key)
+	}
+
+	assertValidPmonRatios(t, key, util)
+}
+
+func assertValidPmonRatios(t *testing.T, key nvidiasmi.PmonKey, util *nvidiasmi.ProcessUtilization) {
+	t.Helper()
+
+	anyPresent := false
+
+	for _, ratio := range []*float64{
+		util.SMRatio, util.MemoryRatio, util.EncoderRatio,
+		util.DecoderRatio, util.JPEGRatio, util.OFARatio,
+	} {
+		if ratio == nil {
+			continue
+		}
+
+		anyPresent = true
+
+		if math.IsNaN(*ratio) || math.IsInf(*ratio, 0) || *ratio < 0 || *ratio > 1 {
+			t.Fatalf("pmon ratio out of [0, 1]: %v", *ratio)
+		}
+	}
+
+	if !anyPresent {
+		t.Fatalf("kept all-nil ProcessUtilization for %v", key)
+	}
 }
