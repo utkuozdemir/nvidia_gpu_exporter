@@ -6,6 +6,7 @@ The exporter is configured with command line flags only. This page lists them an
 - [TLS, authentication and FIPS 140-3](#tls-authentication-and-fips-140-3)
 - [Native NVML backend](#native-nvml-backend)
 - [Per-process GPU metrics](#per-process-gpu-metrics)
+  - [Workload attribution](#workload-attribution)
 - [Background collection](#background-collection)
 - [Collection timeout](#collection-timeout)
 - [Scrape concurrency](#scrape-concurrency)
@@ -263,11 +264,28 @@ Operational details:
 
 - **Container PID visibility**: Process visibility follows the PID namespace. Run the container with `--pid=host` (Docker) or `hostPID: true` (Kubernetes) to see processes from other containers and pods. A host that mounts `/proc` with `hidepid` hides other users' process names from the exporter's non-root uid.
 - **Windows WDDM**: The driver does not report per-process memory in WDDM mode, so `used_memory_bytes` is omitted while `compute_app_info` and `compute_apps` still work.
-- **MIG attribution (`--collect.compute-apps-mig`)**: By default, processes are attributed to the parent GPU's UUID. `--collect.compute-apps-mig` adds `gpu_instance_id` and `compute_instance_id` labels to the per-process series on `nvml`, `exec` and `demo`. Per-process utilization (`*_app_*_utilization_ratio`) is omitted on MIG-enabled GPUs when the driver or `pmon` reports it as unsupported.
-- **Workload identity (`--collect.compute-apps-identity`)**: On Linux (and `demo`), adds `container_id` and `systemd_unit` labels read from `/proc/<pid>/cgroup` so per-process series can be joined with `kube_pod_container_info` or grouped by systemd service. Requires `--collect.compute-apps` or `--collect.graphics-apps` and host PID visibility in containers, and cannot be combined with a custom `--nvidia-smi-command`. See [METRICS.md](METRICS.md#per-process-metrics-opt-in).
 - **MIG container permissions**: A containerized exporter on a MIG-enabled GPU needs privileged mode, `NVIDIA_MIG_MONITOR_DEVICES=all` and host PID sharing for full visibility. Without privileged mode, per-MIG inventory, memory and activity still work, while GPU-level memory fields and per-process lists read `[Insufficient Permissions]`. See the [chart README](../charts/nvidia-gpu-exporter/README.md#per-process-gpu-metrics) for the Kubernetes `securityContext` block.
 - **Series cardinality**: Because the `pid` label changes as processes start and stop, short-lived processes create short-lived time series. This is why per-process collection is opt-in.
 - **Subprocess cost in `exec` mode**: Enabling per-process collection on the `exec` backend adds one `nvidia-smi -q -d PIDS` run per collection plus one `nvidia-smi pmon -c 1` run per 4 active non-MIG GPUs (~85ms total on a single local GPU). Pair it with `--collect.interval` on large multi-GPU nodes or when scraping remotely over `ssh`.
+
+### Workload attribution
+
+On Linux, `--collect.compute-apps-identity` reads `/proc/<pid>/cgroup` and adds `container_id` (Docker, containerd, CRI-O, Podman) and `systemd_unit` (such as `ollama.service`) labels to the per-process series from `--collect.compute-apps` and `--collect.graphics-apps` (synthesized on any platform in `demo` mode):
+
+```bash
+# Host binary or systemd service on Linux
+nvidia_gpu_exporter --collect.compute-apps --collect.compute-apps-identity
+
+# Docker container (--pid=host is required to see host and sibling-container PIDs)
+docker run -d --name nvidia_gpu_exporter --restart unless-stopped \
+  --gpus all -e NVIDIA_DRIVER_CAPABILITIES=utility --pid=host -p 9835:9835 \
+  utkuozdemir/nvidia_gpu_exporter:latest-nvml \
+  --collect.compute-apps --collect.compute-apps-identity
+```
+
+It cannot be combined with a non-default `--nvidia-smi-command`. For Kubernetes (`hostPID: true`), see the [Helm chart README](../charts/nvidia-gpu-exporter/README.md#workload-attribution). For label details and Kubernetes PromQL joins, see [METRICS.md](METRICS.md#workload-attribution-and-kubernetes-joins).
+
+On MIG-enabled GPUs, processes are attributed to the parent GPU's UUID by default. Add `--collect.compute-apps-mig` to attach `gpu_instance_id` and `compute_instance_id` labels (`nvml`, `exec` and `demo`). Per-process utilization (`*_app_*_utilization_ratio`) is omitted on MIG-enabled GPUs (synthesized in `demo` mode).
 
 ## Background collection
 
