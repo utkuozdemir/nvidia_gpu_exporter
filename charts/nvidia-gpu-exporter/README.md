@@ -16,8 +16,10 @@ We recommend the native NVML image variant (`X.Y.Z-nvml`), which reads
 `libnvidia-ml.so.1` in-process instead of spawning `nvidia-smi` on every
 scrape. It exports the same core metrics as the default image, plus NVML-only
 families: the GPU energy counter, per-MIG-instance metrics, hardware GPM
-activity, XID error counters, PCIe replay counters, NVLink byte counters,
-per-process SM/memory/codec utilization, and opt-in PCIe throughput (see the
+activity, XID and MIG XID error counters, PCIe replay counters, NVLink byte
+counters, per-fan speeds and RPM, BAR1 memory usage, thermal thresholds, power
+source state, and PCIe throughput (default on non-MIG GPM GPUs, opt-in
+elsewhere, see the
 [metrics reference](https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/docs/METRICS.md#nvml-only-metrics)).
 When `image.tag` is left empty, the chart defaults to the `exec`
 (`nvidia-smi`) image for 1.x compatibility.
@@ -113,8 +115,7 @@ inventory, memory and activity metrics still work, and only the GPU-level
 memory fields go absent.
 
 By default processes are attributed to the parent GPU's UUID, not to individual
-MIG instances. On the `-nvml` image, per-instance attribution labels can be
-added with:
+MIG instances. Per-instance attribution labels can be added with:
 
 ```yaml
 extraArgs:

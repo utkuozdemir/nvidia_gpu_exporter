@@ -2,7 +2,7 @@
 
 This page describes the exported metrics and what they mean.
 
-Which metrics appear depends on your GPU, driver, operating system and collection backend (`nvml` or `exec`). For every query field both backends serve, the exported series shares the same metric name, base unit, label set and enum mapping, while `nvml` preserves the driver's native byte and milliwatt precision and serves fields that `nvidia-smi` marks deprecated while the driver library still answers. The collection status metric differs by backend: `nvml` reports `nvidia_smi_nvml_return_code` in place of `nvidia_smi_command_exit_code`.
+Which metrics appear depends on your GPU, driver, operating system and collection backend (`nvml` or `exec`). For every metric both backends serve, the exported series shares the same metric name, base unit, label set and enum mapping, while `nvml` preserves native driver precision (bytes, milliwatts, and `1/16` degree Celsius `nvidia_smi_temperature_gpu` resolution on R620 and newer drivers via field ID `308`) and serves fields that `nvidia-smi` marks deprecated while the driver library still answers. The collection status metric differs by backend: `nvml` reports `nvidia_smi_nvml_return_code` in place of `nvidia_smi_command_exit_code`.
 
 On top of that shared core, the `nvml` backend serves the driver-only metric families described below. The `demo` backend synthesizes the full `nvml` surface, see [CONFIGURE.md](CONFIGURE.md#demo-mode).
 
@@ -21,11 +21,13 @@ These families come from the NVIDIA driver library (`libnvidia-ml` / `nvml.dll`)
   reset, so read it through `rate()` or `increase()`.
 - `nvidia_smi_pcie_throughput_tx_bytes_per_second{uuid}` and
   `nvidia_smi_pcie_throughput_rx_bytes_per_second{uuid}` (gauges): PCIe
-  traffic transmitted and received by the GPU. Opt-in via
-  `--collect.pcie-throughput` because of its collection cost, see
-  [CONFIGURE.md](CONFIGURE.md). The driver samples each direction over its
-  own 20ms counter window, so the two values are consecutive samples, not a
-  simultaneous pair.
+  traffic transmitted and received by the GPU. On non-MIG Hopper and newer
+  GPUs where GPM is supported, TX and RX throughput are exported by default
+  over the inter-collection GPM window (metric IDs `20` and `21`) without
+  blocking, starting from the second collection. On GPUs without whole-GPU
+  GPM, pass `--collect.pcie-throughput` to enable the `GetPcieThroughput`
+  fallback, which samples each direction over its own 20ms counter window
+  (see [CONFIGURE.md](CONFIGURE.md)).
 - `nvidia_smi_pcie_replays_total{uuid}` and
   `nvidia_smi_pcie_replay_rollovers_total{uuid}` (counters): PCIe data link
   layer replay and replay-rollover counts (`FI_DEV_PCIE_REPLAY_COUNTER` and
@@ -41,6 +43,33 @@ These families come from the NVIDIA driver library (`libnvidia-ml` / `nvml.dll`)
   `FI_DEV_NVLINK_LINK_COUNT > 0` and omitted on GPUs without NVLink or when
   the driver reports `NVML_ERROR_NOT_SUPPORTED`. Both counters reset on GPU
   reset or driver reload, so read them through `rate()` or `increase()`.
+
+### Fans, BAR1 memory, thermal thresholds and power source
+
+- `nvidia_smi_fan_speed_current_ratio{uuid, fan}` and
+  `nvidia_smi_fan_speed_target_ratio{uuid, fan}` (gauges, typically `0.0` to `1.0`, may exceed `1.0`),
+  plus `nvidia_smi_fan_speed_rpm{uuid, fan}` (gauge): per-cooler current speed
+  ratio (`GetFanSpeed_v2`), target speed ratio (`GetTargetFanSpeed`), and
+  rotor speed in revolutions per minute (`nvmlDeviceGetFanSpeedRPM`), labeled
+  by zero-based cooler index `fan`. Omitted on passively cooled GPUs
+  (`GetNumFans == 0`), and each individual metric is omitted when its driver
+  call is unsupported on the card or driver. The GPU-level
+  `nvidia_smi_fan_speed_ratio{uuid}` metric from the `fan.speed` query field
+  is kept alongside them.
+- `nvidia_smi_bar1_memory_total_bytes{uuid}`,
+  `nvidia_smi_bar1_memory_used_bytes{uuid}` and
+  `nvidia_smi_bar1_memory_free_bytes{uuid}` (gauges): BAR1 PCIe aperture
+  memory capacity, usage, and free space in bytes (`GetBAR1MemoryInfo`).
+- `nvidia_smi_temperature_threshold_shutdown_celsius{uuid}`,
+  `nvidia_smi_temperature_threshold_slowdown_celsius{uuid}`,
+  `nvidia_smi_temperature_threshold_memory_max_celsius{uuid}`,
+  `nvidia_smi_temperature_threshold_gpu_max_celsius{uuid}` and
+  `nvidia_smi_temperature_threshold_acoustic_celsius{uuid}` (gauges): thermal
+  thresholds in degrees Celsius (`GetTemperatureThreshold`). Unsupported
+  thresholds on a given card or driver are omitted individually.
+- `nvidia_smi_power_source{uuid}` (gauge): active power source reported by
+  `GetPowerSource`, `0` for AC power, `1` for battery, and `2` for an
+  undersized power supply. Omitted when unsupported.
 
 ### Whole-GPU GPM activity
 
@@ -71,7 +100,9 @@ metrics. Nothing to configure, they appear when MIG instances exist.
   (gauges): the GPU instance's memory. The framebuffer belongs to the GPU
   instance and is shared by its compute instances, so memory is reported
   once per GPU instance. Labeling it per MIG device would double-count on
-  instances hosting several compute slices.
+  instances hosting several compute slices. On pre-510 drivers lacking
+  `GetMemoryInfo_v2`, the exporter falls back to `GetMemoryInfo` and omits
+  `nvidia_smi_mig_memory_reserved_bytes`.
 - `nvidia_smi_mig_{graphics_activity,sm_activity,sm_occupancy,tensor_activity,dram_bandwidth_utilization}_ratio{uuid, gpu_instance_id}`
   and `nvidia_smi_mig_pcie_throughput_{tx,rx}_bytes_per_second{uuid, gpu_instance_id}`
   (gauges): the GPU instance's activity, computed over the window between
@@ -82,7 +113,7 @@ The activity metrics have a few details worth knowing:
 - They appear from the second collection that sees a GPU instance, and only
   on GPUs whose driver supports the GPM interface (the Hopper generation and
   later). A100-class MIG gets inventory and memory only.
-- The window is guarded on both ends. Collections less than a second apart
+- The window is guarded on both ends. Collections less than 150ms apart
   keep serving the previous values over the previous window. After a gap
   longer than ten minutes the sampling starts over, and the next collection
   emits nothing for that instance, like a first sight.
@@ -99,11 +130,10 @@ The activity metrics have a few details worth knowing:
   blend the two instances before self-correcting.
 
 With `--collect.compute-apps-mig` (requires `--collect.compute-apps` or
-`--collect.graphics-apps`, and the NVML backend) the per-process metrics
-additionally carry `gpu_instance_id` and `compute_instance_id` labels,
-attributing each process to its MIG instance (empty for processes on non-MIG
-GPUs). It is opt-in because it changes the label set of the per-process
-series.
+`--collect.graphics-apps`) the per-process metrics additionally carry
+`gpu_instance_id` and `compute_instance_id` labels, attributing each process
+to its MIG instance (empty for processes on non-MIG GPUs). It is opt-in
+because it changes the label set of the per-process series.
 
 Container note: full visibility under MIG, including per-process metrics, requires a privileged container with `NVIDIA_MIG_MONITOR_DEVICES=all` and the host PID namespace. Root is not needed, the exporter runs as its non-root uid (checked on an H200). Unprivileged, with only the environment variable, the per-MIG inventory, memory and activity metrics still work while the GPU-level memory fields are omitted. On Kubernetes, privileged mode must be configured together with the rest of the security context, see the [chart README](../charts/nvidia-gpu-exporter/README.md).
 
@@ -122,6 +152,13 @@ through driver events or the kernel log.
 - `nvidia_smi_xid_last_timestamp_seconds{uuid, xid}` (gauge): when the most
   recent event was received by the exporter. The driver events carry no
   timestamp of their own.
+- `nvidia_smi_mig_xid_errors_total{uuid, gpu_instance_id, compute_instance_id, xid}`
+  (counter) and
+  `nvidia_smi_mig_xid_last_timestamp_seconds{uuid, gpu_instance_id, compute_instance_id, xid}`
+  (gauge): MIG-attributed XID event counter and receive timestamp, emitted
+  alongside the GPU-level `nvidia_smi_xid_*` series when `nvmlEventSetWait_v2`
+  reports a valid `gpuInstanceId` (other than `0xFFFFFFFF`, with
+  `compute_instance_id` empty when `computeInstanceId` is `0xFFFFFFFF`).
 - `nvidia_smi_xid_watcher_enabled` (gauge): `1` when the NVML XID event
   watcher is registered and active, or `0` when event registration is
   unsupported or unavailable (for example on Windows under the WDDM driver
@@ -154,10 +191,10 @@ Both backends stamp the CUDA version the installed driver supports onto
 `nvidia_smi_gpu_info` as the `cuda_version` label. This is the version of
 the CUDA API the driver carries, not an installed CUDA toolkit.
 
-The default backend reads it from `nvidia-smi --version` once at startup (falling
-back to `nvidia-smi -q` on pre-550 drivers that do not recognize `--version`). The
-NVML backend asks the library directly. When it cannot be read, the label
-value is empty.
+The default backend reads it from `nvidia-smi --version` and refreshes it if
+`driver_version` changes across collections (falling back to `nvidia-smi -q`
+on pre-550 drivers that do not recognize `--version`). The NVML backend asks
+the library directly. When it cannot be read, the label value is empty.
 
 ## Enum-valued metrics
 
@@ -170,12 +207,15 @@ not recognized (an unexpected or brand-new state) is also skipped rather than
 guessed, and is logged so that the gap is visible.
 
 Two-state fields become `1`/`0`. This covers every field whose value is
-`Enabled`/`Disabled`, `Yes`/`No` or `Active`/`Not Active`, for example:
+`Enabled`/`Disabled`, `Yes`/`No`, `Active`/`Not Active` or `valid`/`invalid`,
+for example:
 
 - `persistence_mode`, `accounting.mode`, `display_mode`, `display_active`
 - `ecc.mode.current`/`.pending`, `mig.mode.current`/`.pending`
 - `gsp.mode.current`/`.default`, `c2c.mode`
 - `remapped_rows.failure`/`.pending`
+- `reset_status.reset_required`, `reset_status.drain_and_reset_recommended`
+- `inforom.checksum_validation`
 - every `clocks_event_reasons.*` throttle flag (`gpu_idle`, `hw_slowdown`,
   `sw_power_cap`, and so on)
 
@@ -270,8 +310,8 @@ complete outputs across every captured GPU.
 ## Per-process metrics (opt-in)
 
 With `--collect.compute-apps` enabled, the exporter additionally emits one
-set of series per process holding a compute context on a GPU. See the
-[configuration reference](CONFIGURE.md#per-process-gpu-metrics) for the
+set of series per process holding a compute or CUDA MPS context on a GPU. See
+the [configuration reference](CONFIGURE.md#per-process-gpu-metrics) for the
 caveats around containers, Windows and MIG.
 
 ```text
@@ -291,8 +331,8 @@ nvidia_smi_compute_apps{uuid="00000000-0000-0000-0000-000000000000"} 2
 nvidia_smi_compute_apps_last_collect_success 1
 ```
 
-On the NVML and demo backends, `--collect.compute-apps` also emits four
-per-process engine utilization gauges (`0.0` to `1.0`) on the same label set:
+With `--collect.compute-apps`, the exporter also emits up to six per-process
+engine utilization gauges (`0.0` to `1.0`) on the same label set:
 
 - `nvidia_smi_compute_app_sm_utilization_ratio`: SM (3D/compute) utilization
   ratio of the process over the driver's recent sampling window.
@@ -302,23 +342,36 @@ per-process engine utilization gauges (`0.0` to `1.0`) on the same label set:
   utilization ratio of the process over the driver's recent sampling window.
 - `nvidia_smi_compute_app_decoder_utilization_ratio`: video decoder (NVDEC)
   utilization ratio of the process over the driver's recent sampling window.
+- `nvidia_smi_compute_app_jpeg_utilization_ratio`: JPEG engine (NVJPG)
+  utilization ratio of the process over the driver's recent sampling window.
+- `nvidia_smi_compute_app_ofa_utilization_ratio`: Optical Flow Accelerator
+  (OFA) utilization ratio of the process over the driver's recent sampling
+  window.
 
-Active processes that were idle during the sampling window report `0`. When a
-GPU does not support per-process utilization (such as when MIG mode is enabled
-on the NVML backend), the utilization series are omitted for that GPU while
-`*_app_info` and `*_app_used_memory_bytes` are still served.
+Active processes that were idle during the sampling window report `0`. On
+`nvml`, R550 and newer drivers read all six engines via
+`nvmlDeviceGetProcessesUtilizationInfo` while older drivers fall back to
+`nvmlDeviceGetProcessUtilization` and omit `jpeg` and `ofa`. On `exec`,
+`nvidia-smi pmon -c 1` supplies the utilization percentages. On non-MIG GPUs,
+`-` cells in columns present in the `pmon` header report `0`, while columns
+absent from older `pmon` headers (such as pre-R550 `jpg` and `ofa`) are
+omitted. When per-process utilization is unavailable (such as on MIG-enabled
+GPUs, or inside a container without host PID visibility where `pmon` cannot
+observe host PIDs), the utilization series are omitted while `*_app_info` and
+`*_app_used_memory_bytes` are still served.
 
-On the NVML and demo backends, `--collect.graphics-apps` emits the matching
-series for processes holding a graphics context on a GPU
-(`nvidia_smi_graphics_app_info`, `nvidia_smi_graphics_app_used_memory_bytes`,
+`--collect.graphics-apps` emits the matching series for processes holding a
+graphics context on a GPU (`nvidia_smi_graphics_app_info`,
+`nvidia_smi_graphics_app_used_memory_bytes`,
 `nvidia_smi_graphics_app_sm_utilization_ratio`,
 `nvidia_smi_graphics_app_memory_utilization_ratio`,
 `nvidia_smi_graphics_app_encoder_utilization_ratio`,
 `nvidia_smi_graphics_app_decoder_utilization_ratio`,
-`nvidia_smi_graphics_apps`, and
-`nvidia_smi_graphics_apps_last_collect_success`). A process that holds both a
-compute and a graphics context appears in both families and shares the same
-PID-level utilization reading.
+`nvidia_smi_graphics_app_jpeg_utilization_ratio`,
+`nvidia_smi_graphics_app_ofa_utilization_ratio`, `nvidia_smi_graphics_apps`,
+and `nvidia_smi_graphics_apps_last_collect_success`). A process that holds
+both a compute and a graphics context appears in both families and shares the
+same PID-level utilization reading.
 
 With `--collect.compute-apps-identity` (requires `--collect.compute-apps` or
 `--collect.graphics-apps`, and Linux or the demo backend), the per-process
