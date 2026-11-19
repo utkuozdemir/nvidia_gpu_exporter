@@ -69,6 +69,18 @@ Three invariants hold this together, and all three are easy to break by accident
 Flag combinations that a chosen backend cannot honor are startup errors rather than silent ignores.
 A user passing a custom command with the nvml backend means something the backend cannot do, and failing loudly is the only honest answer.
 
+### Hardware-verified NVML invariants
+
+These driver quirks are easy to reintroduce without real datacenter and SoC hardware:
+
+- Always pre-initialize every `nvml.FieldValue.NvmlReturn` slot to `ERROR_NOT_SUPPORTED` before calling `GetFieldValues`.
+  Some drivers (observed on GB10 580.173.02) leave unimplemented field-value slots untouched, so zero-initialized structs otherwise decode as `SUCCESS` with `VALUE_TYPE_DOUBLE` (`0.0`).
+- On HGX NVSwitch systems (observed on A100 SXM4 and H100 SXM5), `FI_DEV_NVLINK_LINK_COUNT` and `FI_DEV_NVLINK_GET_STATE` return `NOT_SUPPORTED` while `FI_DEV_NVSWITCH_CONNECTED_LINK_COUNT` and `nvmlDeviceGetNvLinkState` serve the link count and per-link active state.
+- `FI_DEV_NVLINK_GET_STATE` defines `0 = inactive`, `1 = active`, and `2 = sleep`, so active-link counting must test `== 1`, never `!= 0`.
+- `FI_DEV_C2C_LINK_GET_STATUS` is per-link with `ScopeId` `0..count-1` and returns `NOT_SUPPORTED` at `count` and above (observed on GB10 with 8 links).
+- Free any fresh local GPM sample before calling `markLost()` / `nvmlShutdown()` on a lifecycle error so samples are never freed after NVML teardown.
+- Unified-memory SoCs like GB10 return `NOT_SUPPORTED` for framebuffer memory, BAR1, PCIe throughput, module power, and GPM, and can sit on non-zero PCI domains (for example `000f:01:00.0`).
+
 ## Code map
 
 - `cmd/nvidia_gpu_exporter`: the binary.

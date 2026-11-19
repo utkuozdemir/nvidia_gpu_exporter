@@ -44,6 +44,7 @@ type device interface {
 	GetEncoderStats() (int, uint32, uint32, nvml.Return)
 	GetEncoderUtilization() (uint32, uint32, nvml.Return)
 	GetEnforcedPowerLimit() (uint32, nvml.Return)
+	GetFanControlPolicy_v2(fan int) (nvml.FanControlPolicy, nvml.Return)
 	GetFanSpeed() (uint32, nvml.Return)
 	GetFanSpeed_v2(fan int) (uint32, nvml.Return)
 	GetFieldValues(values []nvml.FieldValue) nvml.Return
@@ -86,11 +87,13 @@ type device interface {
 	GetPowerManagementLimit() (uint32, nvml.Return)
 	GetPowerManagementLimitConstraints() (uint32, uint32, nvml.Return)
 	GetPowerManagementMode() (nvml.EnableState, nvml.Return)
+	GetPowerMizerMode_v1() (nvml.DevicePowerMizerModes_v1, nvml.Return)
 	GetPowerSource() (nvml.PowerSource, nvml.Return)
 	GetPowerUsage() (uint32, nvml.Return)
 	GetProcessUtilization(lastSeenTimestamp uint64) ([]nvml.ProcessUtilizationSample, nvml.Return)
 	GetRemappedRows() (int, int, bool, bool, nvml.Return)
 	GetRemappedRows_v2() (nvml.RemappedRowsInfo_v2, nvml.Return)
+	GetRepairStatus() (nvml.RepairStatus, nvml.Return)
 	GetRetiredPages(cause nvml.PageRetirementCause) ([]uint64, nvml.Return)
 	GetRetiredPagesPendingStatus() (nvml.EnableState, nvml.Return)
 	GetRowRemapperHistogram() (nvml.RowRemapperHistogramValues, nvml.Return)
@@ -103,9 +106,12 @@ type device interface {
 	GetTemperatureThreshold(thresholdType nvml.TemperatureThresholds) (uint32, nvml.Return)
 	GetTotalEccErrors(errorType nvml.MemoryErrorType, counterType nvml.EccCounterType) (uint64, nvml.Return)
 	GetTotalEnergyConsumption() (uint64, nvml.Return)
+	GetUnrepairableMemoryFlag_v1() (nvml.UnrepairableMemoryStatus_v1, nvml.Return)
 	GetUtilizationRates() (nvml.Utilization, nvml.Return)
 	GetUUID() (string, nvml.Return)
 	GetVbiosVersion() (string, nvml.Return)
+	GetVirtualizationMode() (nvml.GpuVirtualizationMode, nvml.Return)
+	GetNvLinkState(link int) (nvml.EnableState, nvml.Return)
 	GpmQueryDeviceSupport() (nvml.GpmSupport, nvml.Return)
 	RegisterEvents(eventTypes uint64, set nvml.EventSet) nvml.Return
 
@@ -926,6 +932,63 @@ func (g guardedDevice) RegisterEvents(p0 uint64, p1 nvml.EventSet) nvml.Return {
 	}
 
 	return g.dev.RegisterEvents(p0, p1)
+}
+
+//nolint:revive // matches go-nvml method name
+func (g guardedDevice) GetFanControlPolicy_v2(p0 int) (nvml.FanControlPolicy, nvml.Return) {
+	if !g.avail.has("nvmlDeviceGetFanControlPolicy_v2") {
+		return 0, nvml.ERROR_FUNCTION_NOT_FOUND
+	}
+
+	return g.dev.GetFanControlPolicy_v2(p0)
+}
+
+//nolint:revive // matches go-nvml method name
+func (g guardedDevice) GetPowerMizerMode_v1() (nvml.DevicePowerMizerModes_v1, nvml.Return) {
+	if !g.avail.has("nvmlDeviceGetPowerMizerMode_v1") {
+		var z0 nvml.DevicePowerMizerModes_v1
+
+		return z0, nvml.ERROR_FUNCTION_NOT_FOUND
+	}
+
+	return g.dev.GetPowerMizerMode_v1()
+}
+
+func (g guardedDevice) GetRepairStatus() (nvml.RepairStatus, nvml.Return) {
+	if !g.avail.has("nvmlDeviceGetRepairStatus") {
+		var z0 nvml.RepairStatus
+
+		return z0, nvml.ERROR_FUNCTION_NOT_FOUND
+	}
+
+	return g.dev.GetRepairStatus()
+}
+
+//nolint:revive // matches go-nvml method name
+func (g guardedDevice) GetUnrepairableMemoryFlag_v1() (nvml.UnrepairableMemoryStatus_v1, nvml.Return) {
+	if !g.avail.has("nvmlDeviceGetUnrepairableMemoryFlag_v1") {
+		var z0 nvml.UnrepairableMemoryStatus_v1
+
+		return z0, nvml.ERROR_FUNCTION_NOT_FOUND
+	}
+
+	return g.dev.GetUnrepairableMemoryFlag_v1()
+}
+
+func (g guardedDevice) GetVirtualizationMode() (nvml.GpuVirtualizationMode, nvml.Return) {
+	if !g.avail.has("nvmlDeviceGetVirtualizationMode") {
+		return 0, nvml.ERROR_FUNCTION_NOT_FOUND
+	}
+
+	return g.dev.GetVirtualizationMode()
+}
+
+func (g guardedDevice) GetNvLinkState(link int) (nvml.EnableState, nvml.Return) {
+	if !g.avail.has("nvmlDeviceGetNvLinkState") {
+		return 0, nvml.ERROR_FUNCTION_NOT_FOUND
+	}
+
+	return g.dev.GetNvLinkState(link)
 }
 
 // raw exposes the underlying handle for identity matching only. It must never

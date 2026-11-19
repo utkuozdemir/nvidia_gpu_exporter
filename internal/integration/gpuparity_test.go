@@ -131,7 +131,7 @@ const maxReportedMismatches = 25
 // their non-numeric states must match one of the brackets. The classes are
 // the ones established by the H100 diff sessions.
 var volatileFieldPrefixes = []string{
-	"timestamp", "temperature.", "power.draw", "utilization.", "clocks.current.",
+	"timestamp", "temperature.", "power.draw", "module.power.draw", "utilization.", "clocks.current.",
 	"memory.used", "memory.free", "fan.speed", "pstate", "encoder.stats.",
 	"clocks_event_reasons", "clocks_throttle_reasons", "ecc.errors.",
 	"gpu_uptime", "bbx.time_run",
@@ -387,7 +387,8 @@ func absoluteSlack(qField nvidiasmi.QField) float64 {
 		return 500 // MHz; clocks can step several bins between samples
 	case strings.HasPrefix(string(qField), "utilization."):
 		return 100 // percent; utilization can swing fully between samples
-	case strings.HasPrefix(string(qField), "power.draw"):
+	case strings.HasPrefix(string(qField), "power.draw"),
+		strings.HasPrefix(string(qField), "module.power.draw"):
 		return 50 // watts
 	case strings.HasPrefix(string(qField), "memory."):
 		return 512 // MiB; allocations move between samples
@@ -725,13 +726,24 @@ var nvmlOnlyFamilyPrefixes = []string{
 	"nvidia_smi_energy_joules_total",
 	"nvidia_smi_pcie_replays_total",
 	"nvidia_smi_pcie_replay_rollovers_total",
+	"nvidia_smi_pcie_errors_total",
+	"nvidia_smi_pcie_l0_to_recovery_total",
+	"nvidia_smi_pcie_runtime_",
 	"nvidia_smi_pcie_throughput_",
 	"nvidia_smi_nvlink_",
+	"nvidia_smi_c2c_links",
+	"nvidia_smi_c2c_active_links",
+	"nvidia_smi_c2c_throughput_",
+	"nvidia_smi_perf_policy_",
 	"nvidia_smi_graphics_activity_ratio",
 	"nvidia_smi_sm_activity_ratio",
 	"nvidia_smi_sm_occupancy_ratio",
 	"nvidia_smi_tensor_activity_ratio",
 	"nvidia_smi_dram_bandwidth_utilization_ratio",
+	"nvidia_smi_integer_activity_ratio",
+	"nvidia_smi_fp64_activity_ratio",
+	"nvidia_smi_fp32_activity_ratio",
+	"nvidia_smi_fp16_activity_ratio",
 	// deliberately NOT a bare "nvidia_smi_mig_" prefix: the shared
 	// mig.mode.* query fields render as nvidia_smi_mig_mode_*, and those
 	// must stay under the parity requirement
@@ -742,14 +754,24 @@ var nvmlOnlyFamilyPrefixes = []string{
 	"nvidia_smi_mig_sm_occupancy_ratio",
 	"nvidia_smi_mig_tensor_activity_ratio",
 	"nvidia_smi_mig_dram_bandwidth_utilization_ratio",
+	"nvidia_smi_mig_integer_activity_ratio",
+	"nvidia_smi_mig_fp64_activity_ratio",
+	"nvidia_smi_mig_fp32_activity_ratio",
+	"nvidia_smi_mig_fp16_activity_ratio",
 	"nvidia_smi_mig_pcie_throughput_",
 	"nvidia_smi_mig_xid_",
 	"nvidia_smi_fan_speed_current_ratio",
 	"nvidia_smi_fan_speed_target_ratio",
 	"nvidia_smi_fan_speed_rpm",
+	"nvidia_smi_fan_control_policy",
 	"nvidia_smi_bar1_memory_",
 	"nvidia_smi_temperature_threshold_",
+	"nvidia_smi_temperature_tlimit_threshold_",
 	"nvidia_smi_power_source",
+	"nvidia_smi_repair_pending",
+	"nvidia_smi_unrepairable_memory",
+	"nvidia_smi_virtualization_mode",
+	"nvidia_smi_power_mizer_mode",
 	// xid series appear only after an event is observed, so their presence
 	// is asserted by the GPU-box runbook (which triggers a real XID), not
 	// here

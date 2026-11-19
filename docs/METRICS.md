@@ -35,23 +35,60 @@ These families come from the NVIDIA driver library (`libnvidia-ml` / `nvml.dll`)
   omitted when the driver reports `NVML_ERROR_NOT_SUPPORTED`. Both counters
   reset on GPU reset or driver reload, so read them through `rate()` or
   `increase()`.
+- `nvidia_smi_pcie_errors_total{uuid, type}` (counter) and
+  `nvidia_smi_pcie_l0_to_recovery_total{uuid}` (counter): PCIe AER error counts
+  by severity (`type` in `correctable`, `non_fatal`, `fatal`) and PCIe
+  L0-to-recovery link retraining transitions (`FI_DEV_PCIE_COUNT_*` and
+  `FI_DEV_PCIE_L0_TO_RECOVERY_COUNTER`). Omitted individually when unsupported.
+- `nvidia_smi_pcie_runtime_suspended_seconds_total{uuid}` and
+  `nvidia_smi_pcie_runtime_active_seconds_total{uuid}` (counters): cumulative
+  seconds the GPU PCIe device has spent runtime-suspended or runtime-active,
+  read from Linux sysfs (`/sys/bus/pci/devices/<bus_id>/power/runtime_*_time`).
+  Note that NVML queries wake a runtime-suspended GPU, so scrape intervals
+  shorter than the driver's idle suspend delay keep the device active.
+  Omitted on non-Linux hosts or when sysfs is unreadable.
 - `nvidia_smi_nvlink_tx_bytes_total{uuid}` and
-  `nvidia_smi_nvlink_rx_bytes_total{uuid}` (counters): aggregate NVLink data
-  payload bytes transmitted and received across all links on the GPU
-  (`FI_DEV_NVLINK_THROUGHPUT_DATA_TX` and `FI_DEV_NVLINK_THROUGHPUT_DATA_RX`,
-  converted from KiB to bytes). Always on in the NVML backend when
-  `FI_DEV_NVLINK_LINK_COUNT > 0` and omitted on GPUs without NVLink or when
-  the driver reports `NVML_ERROR_NOT_SUPPORTED`. Both counters reset on GPU
-  reset or driver reload, so read them through `rate()` or `increase()`.
+  `nvidia_smi_nvlink_rx_bytes_total{uuid}` (counters),
+  `nvidia_smi_nvlink_links{uuid}` and `nvidia_smi_nvlink_active_links{uuid}`
+  (gauges), plus `nvidia_smi_nvlink_recovery_events_total{uuid}` and
+  `nvidia_smi_nvlink_recovery_failed_events_total{uuid}` (counters): aggregate
+  NVLink data payload bytes (`FI_DEV_NVLINK_THROUGHPUT_DATA_TX` and
+  `FI_DEV_NVLINK_THROUGHPUT_DATA_RX`, converted from KiB to bytes), total and
+  active NVLink counts (`FI_DEV_NVLINK_LINK_COUNT` with NVSwitch fallback to
+  `FI_DEV_NVSWITCH_CONNECTED_LINK_COUNT`, and per-link `FI_DEV_NVLINK_GET_STATE`
+  counting `ACTIVE` links with fallback to `nvmlDeviceGetNvLinkState`), and
+  GPU-wide NVLink 5 recovery event counts (`FI_DEV_NVLINK_COUNT_LINK_RECOVERY_EVENTS` and
+  `FI_DEV_NVLINK_COUNT_LINK_RECOVERY_FAILED_EVENTS`). Always on in the NVML
+  backend when `FI_DEV_NVLINK_LINK_COUNT > 0` and omitted on GPUs without
+  NVLink or when unsupported. Unbridged cards can report `nvlink_links > 0`
+  with zero active links, and idle links can enter NVML's sleep state and drop
+  out of `nvlink_active_links`, so alert on
+  `nvlink_recovery_failed_events_total` rather than comparing
+  `nvlink_active_links` against `nvlink_links`. All NVLink counters reset on
+  GPU reset or driver reload, so read them through `rate()` or `increase()`.
+- `nvidia_smi_c2c_links{uuid}` and `nvidia_smi_c2c_active_links{uuid}`
+  (gauges): total and active Chip-to-Chip (C2C) link counts on Grace-Hopper,
+  Grace-Blackwell, and GB10 systems (`FI_DEV_C2C_LINK_COUNT` and per-link
+  `FI_DEV_C2C_LINK_GET_STATUS`). Omitted on GPUs without C2C.
+- `nvidia_smi_perf_policy_violation_seconds_total{uuid, policy}` (counter) and
+  `nvidia_smi_perf_policy_base_clocks_violation_seconds_total{uuid}` (counter):
+  cumulative time in seconds the GPU was throttled by a performance policy
+  (`policy` in `thermal`, `board_limit`, `reliability`) or ran below its base
+  clock (`FI_DEV_PERF_POLICY_*`, converted from nanoseconds to seconds).
+  Individual policies can overlap in time, so read each policy series on its
+  own and use `perf_policy_base_clocks_violation_seconds_total` for total time
+  below base clock.
 
-### Fans, BAR1 memory, thermal thresholds and power source
+### Fans, BAR1 memory, thermal thresholds, power and health
 
 - `nvidia_smi_fan_speed_current_ratio{uuid, fan}` and
   `nvidia_smi_fan_speed_target_ratio{uuid, fan}` (gauges, typically `0.0` to `1.0`, may exceed `1.0`),
-  plus `nvidia_smi_fan_speed_rpm{uuid, fan}` (gauge): per-cooler current speed
-  ratio (`GetFanSpeed_v2`), target speed ratio (`GetTargetFanSpeed`), and
-  rotor speed in revolutions per minute (`nvmlDeviceGetFanSpeedRPM`), labeled
-  by zero-based cooler index `fan`. Omitted on passively cooled GPUs
+  `nvidia_smi_fan_speed_rpm{uuid, fan}` (gauge), and
+  `nvidia_smi_fan_control_policy{uuid, fan}` (gauge, `0` automatic, `1`
+  manual): per-cooler current speed ratio (`GetFanSpeed_v2`), target speed
+  ratio (`GetTargetFanSpeed`), rotor speed in revolutions per minute
+  (`nvmlDeviceGetFanSpeedRPM`), and control policy (`GetFanControlPolicy_v2`),
+  labeled by zero-based cooler index `fan`. Omitted on passively cooled GPUs
   (`GetNumFans == 0`), and each individual metric is omitted when its driver
   call is unsupported on the card or driver. The GPU-level
   `nvidia_smi_fan_speed_ratio{uuid}` metric from the `fan.speed` query field
@@ -67,18 +104,43 @@ These families come from the NVIDIA driver library (`libnvidia-ml` / `nvml.dll`)
   `nvidia_smi_temperature_threshold_acoustic_celsius{uuid}` (gauges): thermal
   thresholds in degrees Celsius (`GetTemperatureThreshold`). Unsupported
   thresholds on a given card or driver are omitted individually.
+- `nvidia_smi_temperature_tlimit_threshold_shutdown_celsius{uuid}`,
+  `nvidia_smi_temperature_tlimit_threshold_slowdown_celsius{uuid}`,
+  `nvidia_smi_temperature_tlimit_threshold_memory_max_celsius{uuid}` and
+  `nvidia_smi_temperature_tlimit_threshold_gpu_max_celsius{uuid}` (gauges):
+  signed T.Limit thermal offsets in degrees Celsius on Ada and newer GPUs
+  (`FI_DEV_TEMPERATURE_*_TLIMIT`), comparable against
+  `nvidia_smi_temperature_gpu_tlimit`. Omitted on earlier architectures.
 - `nvidia_smi_power_source{uuid}` (gauge): active power source reported by
   `GetPowerSource`, `0` for AC power, `1` for battery, and `2` for an
   undersized power supply. Omitted when unsupported.
+- `nvidia_smi_power_mizer_mode{uuid}` (gauge): active PowerMizer mode reported
+  by `GetPowerMizerMode_v1` (`0` adaptive, `1` prefer max performance, `2`
+  auto, `3` consistent performance). Omitted when unsupported.
+- `nvidia_smi_repair_pending{uuid, type}` (gauge, `type` in `channel`, `tpc`)
+  and `nvidia_smi_unrepairable_memory{uuid}` (gauge): hardware repair-pending
+  flags (`GetRepairStatus`) and unrepairable memory status
+  (`GetUnrepairableMemoryFlag_v1`), `1` when active and `0` when healthy.
+  Omitted when unsupported.
+- `nvidia_smi_virtualization_mode{uuid}` (gauge): virtualization mode reported
+  by `GetVirtualizationMode` (`0` none, `1` passthrough, `2` vGPU, `3` host
+  vGPU, `4` host vSGA). Omitted when unsupported.
 
 ### Whole-GPU GPM activity
 
 - `nvidia_smi_graphics_activity_ratio{uuid}`,
   `nvidia_smi_sm_activity_ratio{uuid}`,
   `nvidia_smi_sm_occupancy_ratio{uuid}`,
-  `nvidia_smi_tensor_activity_ratio{uuid}` and
-  `nvidia_smi_dram_bandwidth_utilization_ratio{uuid}` (gauges, `0.0` to `1.0`):
-  fine-grained engine activity and DRAM bandwidth utilization from NVML GPU
+  `nvidia_smi_tensor_activity_ratio{uuid}`,
+  `nvidia_smi_dram_bandwidth_utilization_ratio{uuid}`,
+  `nvidia_smi_integer_activity_ratio{uuid}`,
+  `nvidia_smi_fp64_activity_ratio{uuid}`,
+  `nvidia_smi_fp32_activity_ratio{uuid}`,
+  `nvidia_smi_fp16_activity_ratio{uuid}`, plus
+  `nvidia_smi_c2c_throughput_tx_bytes_per_second{uuid}` and
+  `nvidia_smi_c2c_throughput_rx_bytes_per_second{uuid}` (gauges): fine-grained
+  engine activity, precision pipe utilization (`0.0` to `1.0`), DRAM bandwidth
+  utilization, and C2C throughput (on C2C-equipped GPUs) from NVML GPU
   Performance Monitoring (`nvmlGpmSampleGet`), computed over the window
   between the two most recent collections. Always on in the NVML backend and
   probed at runtime via `nvmlGpmQueryDeviceSupport`: present on Hopper and
@@ -103,7 +165,7 @@ metrics. Nothing to configure, they appear when MIG instances exist.
   instances hosting several compute slices. On pre-510 drivers lacking
   `GetMemoryInfo_v2`, the exporter falls back to `GetMemoryInfo` and omits
   `nvidia_smi_mig_memory_reserved_bytes`.
-- `nvidia_smi_mig_{graphics_activity,sm_activity,sm_occupancy,tensor_activity,dram_bandwidth_utilization}_ratio{uuid, gpu_instance_id}`
+- `nvidia_smi_mig_{graphics_activity,sm_activity,sm_occupancy,tensor_activity,dram_bandwidth_utilization,integer_activity,fp64_activity,fp32_activity,fp16_activity}_ratio{uuid, gpu_instance_id}`
   and `nvidia_smi_mig_pcie_throughput_{tx,rx}_bytes_per_second{uuid, gpu_instance_id}`
   (gauges): the GPU instance's activity, computed over the window between
   the two most recent collections.

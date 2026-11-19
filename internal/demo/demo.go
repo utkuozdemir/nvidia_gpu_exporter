@@ -78,7 +78,8 @@ type Backend struct {
 	seenGIs map[string]bool
 	// seenGPUs tracks whole GPUs previous cycles served for whole-GPU GPM
 	// activity ratios.
-	seenGPUs map[string]bool
+	seenGPUs       map[string]bool
+	runtimePMStart time.Time
 }
 
 // energyState is one GPU's energy integration state.
@@ -264,6 +265,7 @@ func (b *Backend) resetState(snap snapshot) {
 	b.nextXIDAt = time.Time{}
 	b.seenGIs = map[string]bool{}
 	b.seenGPUs = map[string]bool{}
+	b.runtimePMStart = time.Time{}
 }
 
 // loadSnapshot reads and validates one immutable configuration, reconciling
@@ -383,6 +385,7 @@ func (b *Backend) overlay(reading *collect.Reading) {
 	b.synthBAR1(signals.uuids, reading)
 	synthTemperatureThresholds(signals.uuids, reading)
 	synthPowerSources(signals.uuids, reading)
+	b.synthExtendedExtras(signals.uuids, now, reading)
 }
 
 type tableSignals struct {

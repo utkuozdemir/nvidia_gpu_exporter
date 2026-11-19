@@ -14,15 +14,21 @@ import (
 )
 
 // The GPM metric ids this backend samples, from the NVML metric catalog.
-// Activity metrics report percentages (0-100), the PCIe metrics MiB/s.
+// Activity metrics report percentages (0-100), the PCIe and C2C metrics MiB/s.
 const (
-	gpmMetricGraphicsUtil  = 1
-	gpmMetricSMUtil        = 2
-	gpmMetricSMOccupancy   = 3
-	gpmMetricAnyTensorUtil = 5
-	gpmMetricDramBwUtil    = 10
-	gpmMetricPcieTxPerSec  = 20
-	gpmMetricPcieRxPerSec  = 21
+	gpmMetricGraphicsUtil    = 1
+	gpmMetricSMUtil          = 2
+	gpmMetricSMOccupancy     = 3
+	gpmMetricIntegerUtil     = 4
+	gpmMetricAnyTensorUtil   = 5
+	gpmMetricDramBwUtil      = 10
+	gpmMetricFP64Util        = 11
+	gpmMetricFP32Util        = 12
+	gpmMetricFP16Util        = 13
+	gpmMetricPcieTxPerSec    = 20
+	gpmMetricPcieRxPerSec    = 21
+	gpmMetricC2CTotalTxPerSc = 100
+	gpmMetricC2CTotalRxPerSc = 101
 )
 
 // gpmMibMultiplier converts the GPM PCIe metrics (documented as MiB/sec, a
@@ -44,6 +50,12 @@ const gpmMaxWindow = 10 * time.Minute
 // instance id fields.
 const migInvalidID = 0xFFFFFFFF
 
+type gpmSampleResult struct {
+	mig   *collect.MIGUtilization
+	c2cTX *float64
+	c2cRX *float64
+}
+
 // gpmState is the retained previous GPM sample of one GPU instance.
 type gpmState struct {
 	sample nvml.GpmSample
@@ -55,7 +67,7 @@ type gpmState struct {
 	fingerprint string
 	// last holds the most recent computed utilization, served again while
 	// the window guard keeps the sample anchored.
-	last *collect.MIGUtilization
+	last *gpmSampleResult
 }
 
 // migGroup accumulates one GPU instance's members during enumeration, to
@@ -283,49 +295,67 @@ func (b *Backend) collectGPM(
 	uuid string,
 	extras *collect.Extras,
 	seenGIs map[string]bool,
+	c2cActive bool,
 ) bool {
 	supported, ok := b.canSampleWholeGPUGPM(dev, uuid, seenGIs)
 	if !ok || !supported {
 		return ok
 	}
 
-	ids := []uint32{
-		gpmMetricGraphicsUtil, gpmMetricSMUtil, gpmMetricSMOccupancy,
-		gpmMetricAnyTensorUtil, gpmMetricDramBwUtil,
-		gpmMetricPcieTxPerSec, gpmMetricPcieRxPerSec,
+	var c2cIDs []uint32
+	if c2cActive {
+		c2cIDs = []uint32{gpmMetricC2CTotalTxPerSc, gpmMetricC2CTotalRxPerSc}
 	}
 
-	util, ok := b.gpmSample(
+	res, ok := b.gpmSample(
 		"gpm", "GPU", uuid, uuid,
 		func(sample nvml.GpmSample) nvml.Return {
 			return b.api.gpmSampleGet(dev.raw(), sample)
 		},
-		ids,
+		baseGPMMetricIDs(), c2cIDs,
 	)
-	if !ok {
-		return false
+	if !ok || res == nil || res.mig == nil {
+		return ok
 	}
 
-	if util != nil {
-		extras.GPM = append(extras.GPM, collect.GPUUtilization{
-			UUID:                          uuid,
-			GraphicsActivityRatio:         util.GraphicsActivityRatio,
-			SMActivityRatio:               util.SMActivityRatio,
-			SMOccupancyRatio:              util.SMOccupancyRatio,
-			TensorActivityRatio:           util.TensorActivityRatio,
-			DRAMBandwidthUtilizationRatio: util.DRAMBandwidthUtilizationRatio,
-		})
-
-		if util.PCIeTXBytesPerSecond != nil && util.PCIeRXBytesPerSecond != nil {
-			extras.PCIe = append(extras.PCIe, collect.PCIeThroughput{
-				UUID:             uuid,
-				TXBytesPerSecond: *util.PCIeTXBytesPerSecond,
-				RXBytesPerSecond: *util.PCIeRXBytesPerSecond,
-			})
-		}
-	}
+	appendWholeGPUGPM(uuid, res, extras)
 
 	return true
+}
+
+func baseGPMMetricIDs() []uint32 {
+	return []uint32{
+		gpmMetricGraphicsUtil, gpmMetricSMUtil, gpmMetricSMOccupancy,
+		gpmMetricIntegerUtil, gpmMetricAnyTensorUtil, gpmMetricDramBwUtil,
+		gpmMetricFP64Util, gpmMetricFP32Util, gpmMetricFP16Util,
+		gpmMetricPcieTxPerSec, gpmMetricPcieRxPerSec,
+	}
+}
+
+func appendWholeGPUGPM(uuid string, res *gpmSampleResult, extras *collect.Extras) {
+	util := res.mig
+	extras.GPM = append(extras.GPM, collect.GPUUtilization{
+		UUID:                          uuid,
+		GraphicsActivityRatio:         util.GraphicsActivityRatio,
+		SMActivityRatio:               util.SMActivityRatio,
+		SMOccupancyRatio:              util.SMOccupancyRatio,
+		TensorActivityRatio:           util.TensorActivityRatio,
+		DRAMBandwidthUtilizationRatio: util.DRAMBandwidthUtilizationRatio,
+		IntegerActivityRatio:          util.IntegerActivityRatio,
+		FP64ActivityRatio:             util.FP64ActivityRatio,
+		FP32ActivityRatio:             util.FP32ActivityRatio,
+		FP16ActivityRatio:             util.FP16ActivityRatio,
+		C2CTXBytesPerSecond:           res.c2cTX,
+		C2CRXBytesPerSecond:           res.c2cRX,
+	})
+
+	if util.PCIeTXBytesPerSecond != nil && util.PCIeRXBytesPerSecond != nil {
+		extras.PCIe = append(extras.PCIe, collect.PCIeThroughput{
+			UUID:             uuid,
+			TXBytesPerSecond: *util.PCIeTXBytesPerSecond,
+			RXBytesPerSecond: *util.PCIeRXBytesPerSecond,
+		})
+	}
 }
 
 func (b *Backend) canSampleWholeGPUGPM(
@@ -365,19 +395,18 @@ func (b *Backend) canSampleWholeGPUGPM(
 // an invalidated retention) seeds the state and reports nil values. Reports
 // whether extras collection may continue.
 func (b *Backend) gpmUtilization(dev device, key string, group migGroup) (*collect.MIGUtilization, bool) {
-	ids := []uint32{
-		gpmMetricGraphicsUtil, gpmMetricSMUtil, gpmMetricSMOccupancy,
-		gpmMetricAnyTensorUtil, gpmMetricDramBwUtil,
-		gpmMetricPcieTxPerSec, gpmMetricPcieRxPerSec,
-	}
-
-	return b.gpmSample(
+	res, ok := b.gpmSample(
 		"mig-gpm", "GPU instance", key, strings.Join(group.members, ","),
 		func(sample nvml.GpmSample) nvml.Return {
 			return b.api.gpmMigSampleGet(dev.raw(), group.gi, sample)
 		},
-		ids,
+		baseGPMMetricIDs(), nil,
 	)
+	if !ok || res == nil {
+		return nil, ok
+	}
+
+	return res.mig, true
 }
 
 // gpmSample runs the two-sample GPM retention state machine for either a whole
@@ -390,8 +419,9 @@ func (b *Backend) gpmSample(
 	key string,
 	fingerprint string,
 	take func(nvml.GpmSample) nvml.Return,
-	ids []uint32,
-) (*collect.MIGUtilization, bool) {
+	baseIDs []uint32,
+	extraIDs []uint32,
+) (*gpmSampleResult, bool) {
 	now := b.now()
 
 	state := b.gpm[key]
@@ -433,36 +463,65 @@ func (b *Backend) gpmSample(
 		return nil, true
 	}
 
-	util, ok := b.gpmMetrics(family, target, state.sample, sample, ids)
-	if !ok {
-		// a lifecycle-class failure: markLost already released the retained
-		// samples and emptied the map, so only the fresh local sample is
-		// still ours to free
+	res, errMsg, fatalRet := b.gpmMetrics(family, target, state.sample, sample, baseIDs, extraIDs)
+	if fatalRet != nvml.SUCCESS {
+		// Free the fresh local sample before extrasFailure triggers markLost
+		// and nvmlShutdown, so no sample is ever freed after NVML teardown.
 		_ = b.api.gpmSampleFree(sample)
 
-		return nil, false
+		return nil, b.extrasFailure(family, errMsg, fatalRet)
 	}
 
 	_ = b.api.gpmSampleFree(state.sample)
 	state.sample = sample
 	state.taken = now
-	state.last = util
+	state.last = res
 
-	return util, true
+	return res, true
 }
 
-// gpmMetrics diffs two samples into utilization values. A metric whose
-// per-metric status is not success, or whose value is not finite, stays nil.
-// Reports whether extras collection may continue: a lifecycle-class failure,
-// outer or per-metric, marks the backend lost and aborts.
-//
-//nolint:cyclop // one linear decode pass with per-metric classification
+// gpmMetrics diffs two samples into utilization values. Base IDs (R535+ GPU
+// and MIG activity + precision pipes + PCIe) run first; C2C IDs (100, 101)
+// run in a separate optional gpmMetricsGet on the same sample pair so a driver
+// lacking C2C GPM never breaks the base metrics. Returns a non-SUCCESS
+// nvml.Return when a lifecycle-class error occurred so gpmSample can free the
+// fresh local sample before markLost tears down NVML.
 func (b *Backend) gpmMetrics(
 	family string,
 	target string,
 	prev, cur nvml.GpmSample,
+	baseIDs []uint32,
+	extraIDs []uint32,
+) (*gpmSampleResult, string, nvml.Return) {
+	res := &gpmSampleResult{mig: &collect.MIGUtilization{}}
+
+	populated, errMsg, fatalRet := b.gpmMetricsBatch(family, target, prev, cur, baseIDs, res, false)
+	if fatalRet != nvml.SUCCESS {
+		return nil, errMsg, fatalRet
+	}
+
+	if !populated {
+		return nil, "", nvml.SUCCESS
+	}
+
+	if len(extraIDs) > 0 {
+		_, errMsg, fatalRet := b.gpmMetricsBatch(family, target, prev, cur, extraIDs, res, true)
+		if fatalRet != nvml.SUCCESS {
+			return nil, errMsg, fatalRet
+		}
+	}
+
+	return res, "", nvml.SUCCESS
+}
+
+func (b *Backend) gpmMetricsBatch(
+	family string,
+	target string,
+	prev, cur nvml.GpmSample,
 	ids []uint32,
-) (*collect.MIGUtilization, bool) {
+	res *gpmSampleResult,
+	optional bool,
+) (bool, string, nvml.Return) {
 	var metricsGet nvml.GpmMetricsGetType
 
 	metricsGet.NumMetrics = uint32(len(ids)) //nolint:gosec // G115: len(ids) is a small constant
@@ -474,10 +533,18 @@ func (b *Backend) gpmMetrics(
 	}
 
 	if ret := b.api.gpmMetricsGet(&metricsGet); ret != nvml.SUCCESS {
-		return nil, b.extrasFailure(family, "cannot compute the "+target+" activity metrics", ret)
-	}
+		if isLifecycleError(ret) {
+			return false, "cannot compute the " + target + " activity metrics", ret
+		}
 
-	util := &collect.MIGUtilization{}
+		if optional {
+			b.warnOnce(family+"-extended", "cannot compute extended "+target+" activity metrics", ret)
+		} else {
+			b.warnOnce(family, "cannot compute the "+target+" activity metrics", ret)
+		}
+
+		return false, "", nvml.SUCCESS
+	}
 
 	for i, id := range ids {
 		metric := metricsGet.Metrics[i]
@@ -485,7 +552,7 @@ func (b *Backend) gpmMetrics(
 		metricRet := nvml.Return(metric.NvmlReturn) //nolint:gosec // G115: the field carries an nvmlReturn_t
 		if metricRet != nvml.SUCCESS {
 			if isLifecycleError(metricRet) {
-				return nil, b.extrasFailure(family, target+" activity metric hit a lifecycle error", metricRet)
+				return false, target + " activity metric hit a lifecycle error", metricRet
 			}
 
 			continue
@@ -495,25 +562,44 @@ func (b *Backend) gpmMetrics(
 			continue
 		}
 
-		switch id {
-		case gpmMetricGraphicsUtil:
-			util.GraphicsActivityRatio = new(metric.Value / 100)
-		case gpmMetricSMUtil:
-			util.SMActivityRatio = new(metric.Value / 100)
-		case gpmMetricSMOccupancy:
-			util.SMOccupancyRatio = new(metric.Value / 100)
-		case gpmMetricAnyTensorUtil:
-			util.TensorActivityRatio = new(metric.Value / 100)
-		case gpmMetricDramBwUtil:
-			util.DRAMBandwidthUtilizationRatio = new(metric.Value / 100)
-		case gpmMetricPcieTxPerSec:
-			util.PCIeTXBytesPerSecond = new(metric.Value * gpmMibMultiplier)
-		case gpmMetricPcieRxPerSec:
-			util.PCIeRXBytesPerSecond = new(metric.Value * gpmMibMultiplier)
-		}
+		assignGPMMetric(id, metric.Value, res)
 	}
 
-	return util, true
+	return true, "", nvml.SUCCESS
+}
+
+//nolint:cyclop // flat GPM metric-ID dispatch
+func assignGPMMetric(id uint32, value float64, res *gpmSampleResult) {
+	util := res.mig
+
+	switch id {
+	case gpmMetricGraphicsUtil:
+		util.GraphicsActivityRatio = new(value / 100)
+	case gpmMetricSMUtil:
+		util.SMActivityRatio = new(value / 100)
+	case gpmMetricSMOccupancy:
+		util.SMOccupancyRatio = new(value / 100)
+	case gpmMetricIntegerUtil:
+		util.IntegerActivityRatio = new(value / 100)
+	case gpmMetricAnyTensorUtil:
+		util.TensorActivityRatio = new(value / 100)
+	case gpmMetricDramBwUtil:
+		util.DRAMBandwidthUtilizationRatio = new(value / 100)
+	case gpmMetricFP64Util:
+		util.FP64ActivityRatio = new(value / 100)
+	case gpmMetricFP32Util:
+		util.FP32ActivityRatio = new(value / 100)
+	case gpmMetricFP16Util:
+		util.FP16ActivityRatio = new(value / 100)
+	case gpmMetricPcieTxPerSec:
+		util.PCIeTXBytesPerSecond = new(value * gpmMibMultiplier)
+	case gpmMetricPcieRxPerSec:
+		util.PCIeRXBytesPerSecond = new(value * gpmMibMultiplier)
+	case gpmMetricC2CTotalTxPerSc:
+		res.c2cTX = new(value * gpmMibMultiplier)
+	case gpmMetricC2CTotalRxPerSc:
+		res.c2cRX = new(value * gpmMibMultiplier)
+	}
 }
 
 // freeGPMSamples releases every retained GPM sample. It must run before an

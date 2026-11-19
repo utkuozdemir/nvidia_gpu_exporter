@@ -356,6 +356,12 @@ nvidia_smi_fabric_status{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
 # HELP nvidia_smi_failed_scrapes_total Number of failed collections
 # TYPE nvidia_smi_failed_scrapes_total counter
 nvidia_smi_failed_scrapes_total 0
+# HELP nvidia_smi_fan_control_policy Control policy of a GPU fan (0 = temperature-controlled automatic, 1 = manual).
+# TYPE nvidia_smi_fan_control_policy gauge
+nvidia_smi_fan_control_policy{fan="0",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_fan_control_policy{fan="0",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
+nvidia_smi_fan_control_policy{fan="1",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_fan_control_policy{fan="1",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
 # HELP nvidia_smi_fan_speed_current_ratio Intended operating speed of a GPU fan as a fraction of its maximum speed (0 to 1), as reported by the fan controller.
 # TYPE nvidia_smi_fan_speed_current_ratio gauge
 nvidia_smi_fan_speed_current_ratio{fan="0",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0.4221086022644569
@@ -520,6 +526,22 @@ nvidia_smi_mig_xid_errors_total{compute_instance_id="0",gpu_instance_id="2",uuid
 # TYPE nvidia_smi_name gauge
 nvidia_smi_name{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 200
 nvidia_smi_name{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 200
+# HELP nvidia_smi_nvlink_active_links Number of active NVLink links on the GPU.
+# TYPE nvidia_smi_nvlink_active_links gauge
+nvidia_smi_nvlink_active_links{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 18
+nvidia_smi_nvlink_active_links{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 18
+# HELP nvidia_smi_nvlink_links Number of NVLink links present on the GPU.
+# TYPE nvidia_smi_nvlink_links gauge
+nvidia_smi_nvlink_links{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 18
+nvidia_smi_nvlink_links{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 18
+# HELP nvidia_smi_nvlink_recovery_events_total Total NVLink recovery events across all links on the GPU.
+# TYPE nvidia_smi_nvlink_recovery_events_total counter
+nvidia_smi_nvlink_recovery_events_total{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_nvlink_recovery_events_total{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
+# HELP nvidia_smi_nvlink_recovery_failed_events_total Total failed NVLink recovery events across all links on the GPU.
+# TYPE nvidia_smi_nvlink_recovery_failed_events_total counter
+nvidia_smi_nvlink_recovery_failed_events_total{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_nvlink_recovery_failed_events_total{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
 # HELP nvidia_smi_nvlink_rx_bytes_total Total bytes received by the GPU across all active NVLink links.
 # TYPE nvidia_smi_nvlink_rx_bytes_total counter
 nvidia_smi_nvlink_rx_bytes_total{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
@@ -559,6 +581,18 @@ nvidia_smi_pci_sub_class{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 2
 # TYPE nvidia_smi_pci_sub_device_id gauge
 nvidia_smi_pci_sub_device_id{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 4.15109342e+08
 nvidia_smi_pci_sub_device_id{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 4.15109342e+08
+# HELP nvidia_smi_pcie_errors_total Total PCIe AER errors on the GPU by severity type (correctable, non_fatal, fatal).
+# TYPE nvidia_smi_pcie_errors_total counter
+nvidia_smi_pcie_errors_total{type="correctable",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_pcie_errors_total{type="correctable",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
+nvidia_smi_pcie_errors_total{type="fatal",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_pcie_errors_total{type="fatal",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
+nvidia_smi_pcie_errors_total{type="non_fatal",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_pcie_errors_total{type="non_fatal",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
+# HELP nvidia_smi_pcie_l0_to_recovery_total Total PCIe L0-to-recovery link retraining transitions on the GPU.
+# TYPE nvidia_smi_pcie_l0_to_recovery_total counter
+nvidia_smi_pcie_l0_to_recovery_total{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_pcie_l0_to_recovery_total{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1
 # HELP nvidia_smi_pcie_link_gen_current pcie.link.gen.current
 # TYPE nvidia_smi_pcie_link_gen_current gauge
 nvidia_smi_pcie_link_gen_current{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 5
@@ -591,6 +625,14 @@ nvidia_smi_pcie_replay_rollovers_total{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b
 # TYPE nvidia_smi_pcie_replays_total counter
 nvidia_smi_pcie_replays_total{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
 nvidia_smi_pcie_replays_total{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 4
+# HELP nvidia_smi_pcie_runtime_active_seconds_total Cumulative time in seconds the GPU PCIe device has spent runtime-active (Linux sysfs).
+# TYPE nvidia_smi_pcie_runtime_active_seconds_total counter
+nvidia_smi_pcie_runtime_active_seconds_total{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_pcie_runtime_active_seconds_total{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
+# HELP nvidia_smi_pcie_runtime_suspended_seconds_total Cumulative time in seconds the GPU PCIe device has spent runtime-suspended (Linux sysfs).
+# TYPE nvidia_smi_pcie_runtime_suspended_seconds_total counter
+nvidia_smi_pcie_runtime_suspended_seconds_total{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_pcie_runtime_suspended_seconds_total{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
 # HELP nvidia_smi_pcie_throughput_rx_bytes_per_second PCIe traffic received by the GPU in bytes per second.
 # TYPE nvidia_smi_pcie_throughput_rx_bytes_per_second gauge
 nvidia_smi_pcie_throughput_rx_bytes_per_second{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 9.950037259513843e+08
@@ -599,6 +641,18 @@ nvidia_smi_pcie_throughput_rx_bytes_per_second{uuid="ef427e4f-1970-42f2-ab0c-ecf
 # TYPE nvidia_smi_pcie_throughput_tx_bytes_per_second gauge
 nvidia_smi_pcie_throughput_tx_bytes_per_second{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1.2444794109305713e+09
 nvidia_smi_pcie_throughput_tx_bytes_per_second{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 1.8914627843641977e+09
+# HELP nvidia_smi_perf_policy_base_clocks_violation_seconds_total Cumulative time in seconds the GPU ran below its base clock due to performance limiters.
+# TYPE nvidia_smi_perf_policy_base_clocks_violation_seconds_total counter
+nvidia_smi_perf_policy_base_clocks_violation_seconds_total{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_perf_policy_base_clocks_violation_seconds_total{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
+# HELP nvidia_smi_perf_policy_violation_seconds_total Cumulative time in seconds the GPU was throttled by a performance policy (thermal, board_limit, reliability).
+# TYPE nvidia_smi_perf_policy_violation_seconds_total counter
+nvidia_smi_perf_policy_violation_seconds_total{policy="board_limit",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_perf_policy_violation_seconds_total{policy="board_limit",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
+nvidia_smi_perf_policy_violation_seconds_total{policy="reliability",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_perf_policy_violation_seconds_total{policy="reliability",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
+nvidia_smi_perf_policy_violation_seconds_total{policy="thermal",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_perf_policy_violation_seconds_total{policy="thermal",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
 # HELP nvidia_smi_persistence_mode persistence_mode
 # TYPE nvidia_smi_persistence_mode gauge
 nvidia_smi_persistence_mode{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 1
@@ -655,6 +709,10 @@ nvidia_smi_power_max_limit_watts{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 70
 # TYPE nvidia_smi_power_min_limit_watts gauge
 nvidia_smi_power_min_limit_watts{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 200
 nvidia_smi_power_min_limit_watts{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 200
+# HELP nvidia_smi_power_mizer_mode Active PowerMizer mode of the GPU (0 = adaptive, 1 = prefer max performance, 2 = auto, 3 = consistent performance).
+# TYPE nvidia_smi_power_mizer_mode gauge
+nvidia_smi_power_mizer_mode{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_power_mizer_mode{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
 # HELP nvidia_smi_power_source Power source feeding the GPU (0 = AC, 1 = battery, 2 = undersized).
 # TYPE nvidia_smi_power_source gauge
 nvidia_smi_power_source{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
@@ -711,6 +769,12 @@ nvidia_smi_remapped_rows_pending{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
 # TYPE nvidia_smi_remapped_rows_uncorrectable gauge
 nvidia_smi_remapped_rows_uncorrectable{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
 nvidia_smi_remapped_rows_uncorrectable{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
+# HELP nvidia_smi_repair_pending Whether a hardware repair is pending on the GPU (1 = pending, 0 = none), labeled by type (channel, tpc).
+# TYPE nvidia_smi_repair_pending gauge
+nvidia_smi_repair_pending{type="channel",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_repair_pending{type="channel",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
+nvidia_smi_repair_pending{type="tpc",uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_repair_pending{type="tpc",uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
 # HELP nvidia_smi_serial serial
 # TYPE nvidia_smi_serial gauge
 nvidia_smi_serial{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
@@ -747,6 +811,10 @@ nvidia_smi_temperature_threshold_shutdown_celsius{uuid="ef427e4f-1970-42f2-ab0c-
 # TYPE nvidia_smi_temperature_threshold_slowdown_celsius gauge
 nvidia_smi_temperature_threshold_slowdown_celsius{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 89
 nvidia_smi_temperature_threshold_slowdown_celsius{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 89
+# HELP nvidia_smi_unrepairable_memory Whether the GPU has unrepairable memory errors (1 = unrepairable, 0 = healthy).
+# TYPE nvidia_smi_unrepairable_memory gauge
+nvidia_smi_unrepairable_memory{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_unrepairable_memory{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
 # HELP nvidia_smi_utilization_decoder_ratio utilization.decoder [%]
 # TYPE nvidia_smi_utilization_decoder_ratio gauge
 nvidia_smi_utilization_decoder_ratio{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
@@ -771,6 +839,10 @@ nvidia_smi_utilization_memory_ratio{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"}
 # TYPE nvidia_smi_utilization_ofa_ratio gauge
 nvidia_smi_utilization_ofa_ratio{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
 nvidia_smi_utilization_ofa_ratio{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
+# HELP nvidia_smi_virtualization_mode Virtualization mode of the GPU (0 = none, 1 = passthrough, 2 = vGPU, 3 = host vGPU, 4 = host vSGA).
+# TYPE nvidia_smi_virtualization_mode gauge
+nvidia_smi_virtualization_mode{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64"} 0
+nvidia_smi_virtualization_mode{uuid="ef427e4f-1970-42f2-ab0c-ecf0e56a33b9"} 0
 # HELP nvidia_smi_xid_errors_total Number of XID errors observed on the GPU since the exporter started. A series appears when its first event arrives; earlier history cannot be replayed.
 # TYPE nvidia_smi_xid_errors_total counter
 nvidia_smi_xid_errors_total{uuid="1c67088e-9ecb-4564-bb97-6151ecc2ef64",xid="31"} 1

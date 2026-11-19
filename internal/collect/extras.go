@@ -40,18 +40,39 @@ type Extras struct {
 	BAR1 []BAR1Memory
 	// TemperatureThresholds holds per-GPU thermal thresholds in Celsius.
 	TemperatureThresholds []TemperatureThresholds
+	// TemperatureTLimitThresholds holds per-GPU signed T.Limit thermal
+	// thresholds in Celsius (Ada and newer).
+	TemperatureTLimitThresholds []TemperatureTLimitThresholds
 	// PowerSources holds per-GPU power source states.
 	PowerSources []PowerSource
+	// PCIeErrors holds per-GPU PCIe AER and L0-to-recovery counters.
+	PCIeErrors []PCIeErrorCounter
+	// C2CLinks holds per-GPU C2C total and active link counts.
+	C2CLinks []C2CLinkStatus
+	// PerfPolicyViolations holds per-GPU cumulative performance-policy
+	// violation durations in seconds.
+	PerfPolicyViolations []PerfPolicyViolation
+	// RepairStatuses holds per-GPU hardware repair-pending and unrepairable
+	// memory status flags.
+	RepairStatuses []RepairStatus
+	// VirtualizationModes holds per-GPU virtualization mode enums.
+	VirtualizationModes []VirtualizationMode
+	// PowerMizerModes holds per-GPU PowerMizer mode enums.
+	PowerMizerModes []PowerMizerMode
+	// PCIeRuntimePM holds per-GPU Linux sysfs PCIe runtime PM residency
+	// counters in seconds.
+	PCIeRuntimePM []PCIeRuntimePM
 }
 
-// FanReading is one fan's speed readings on a GPU. Each value is nil when that
-// getter is unsupported on the card or driver.
+// FanReading is one fan's speed and control policy readings on a GPU. Each
+// value is nil when that getter is unsupported on the card or driver.
 type FanReading struct {
-	UUID         string
-	Fan          string
-	CurrentRatio *float64
-	TargetRatio  *float64
-	RPM          *uint32
+	UUID          string
+	Fan           string
+	CurrentRatio  *float64
+	TargetRatio   *float64
+	RPM           *uint32
+	ControlPolicy *uint32
 }
 
 // BAR1Memory is one GPU's BAR1 aperture memory usage in bytes.
@@ -79,6 +100,72 @@ type PowerSource struct {
 	Source uint32
 }
 
+// TemperatureTLimitThresholds holds one GPU's signed T.Limit thermal
+// thresholds in degrees Celsius (Ada and newer).
+type TemperatureTLimitThresholds struct {
+	UUID      string
+	Shutdown  *float64
+	Slowdown  *float64
+	MemoryMax *float64
+	GPUMax    *float64
+}
+
+// PCIeErrorCounter holds one GPU's cumulative PCIe AER and L0-to-recovery counts.
+type PCIeErrorCounter struct {
+	UUID         string
+	Correctable  *uint64
+	NonFatal     *uint64
+	Fatal        *uint64
+	L0ToRecovery *uint64
+}
+
+// C2CLinkStatus holds one GPU's total and active C2C link counts.
+type C2CLinkStatus struct {
+	UUID        string
+	Links       uint64
+	ActiveLinks *uint64
+}
+
+// PerfPolicyViolation holds one GPU's cumulative performance-policy violation
+// durations in seconds.
+type PerfPolicyViolation struct {
+	UUID            string
+	Thermal         *float64
+	BoardLimit      *float64
+	Reliability     *float64
+	TotalBaseClocks *float64
+}
+
+// RepairStatus holds one GPU's hardware repair-pending and unrepairable memory
+// status flags.
+type RepairStatus struct {
+	UUID           string
+	ChannelPending *bool
+	TPCPending     *bool
+	Unrepairable   *bool
+}
+
+// VirtualizationMode holds one GPU's virtualization mode enum
+// (0 = none, 1 = passthrough, 2 = vgpu, 3 = host_vgpu, 4 = host_vsga).
+type VirtualizationMode struct {
+	UUID string
+	Mode uint32
+}
+
+// PowerMizerMode holds one GPU's active PowerMizer mode enum.
+type PowerMizerMode struct {
+	UUID string
+	Mode uint32
+}
+
+// PCIeRuntimePM holds one GPU's Linux sysfs PCIe runtime PM residency counters
+// in seconds.
+type PCIeRuntimePM struct {
+	UUID             string
+	SuspendedSeconds *float64
+	ActiveSeconds    *float64
+}
+
 // PCIeReplayCounter is one GPU's cumulative PCIe replay and replay-rollover
 // counts since the last GPU reset or driver reload.
 type PCIeReplayCounter struct {
@@ -88,11 +175,15 @@ type PCIeReplayCounter struct {
 }
 
 // NVLinkThroughput is one GPU's cumulative NVLink data traffic in bytes,
-// summed across all active links on the device.
+// link counts, and NVLink 5 recovery event counters across all links.
 type NVLinkThroughput struct {
-	UUID    string
-	TXBytes *uint64
-	RXBytes *uint64
+	UUID                 string
+	TXBytes              *uint64
+	RXBytes              *uint64
+	Links                *uint64
+	ActiveLinks          *uint64
+	RecoveryEvents       *uint64
+	RecoveryFailedEvents *uint64
 }
 
 // GPUUtilization is one whole GPU's GPM activity over the window between the
@@ -105,6 +196,12 @@ type GPUUtilization struct {
 	SMOccupancyRatio              *float64
 	TensorActivityRatio           *float64
 	DRAMBandwidthUtilizationRatio *float64
+	IntegerActivityRatio          *float64
+	FP64ActivityRatio             *float64
+	FP32ActivityRatio             *float64
+	FP16ActivityRatio             *float64
+	C2CTXBytesPerSecond           *float64
+	C2CRXBytesPerSecond           *float64
 }
 
 // PCIeThroughput is one GPU's sampled PCIe throughput.
@@ -202,6 +299,10 @@ type MIGUtilization struct {
 	SMOccupancyRatio              *float64
 	TensorActivityRatio           *float64
 	DRAMBandwidthUtilizationRatio *float64
+	IntegerActivityRatio          *float64
+	FP64ActivityRatio             *float64
+	FP32ActivityRatio             *float64
+	FP16ActivityRatio             *float64
 	// PCIeTXBytesPerSecond and PCIeRXBytesPerSecond are the instance's PCIe
 	// traffic over the window.
 	PCIeTXBytesPerSecond *float64

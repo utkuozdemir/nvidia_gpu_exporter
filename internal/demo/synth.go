@@ -145,11 +145,19 @@ func (b *Backend) synthNVLink(uuids []string, now time.Time, reading *collect.Re
 
 		tx := state.txBytes
 		rx := state.rxBytes
+		links := uint64(18)
+		activeLinks := uint64(18)
+		recovery := uint64(0)
+		recoveryFailed := uint64(0)
 
 		reading.Extras.NVLink = append(reading.Extras.NVLink, collect.NVLinkThroughput{
-			UUID:    uuid,
-			TXBytes: &tx,
-			RXBytes: &rx,
+			UUID:                 uuid,
+			TXBytes:              &tx,
+			RXBytes:              &rx,
+			Links:                &links,
+			ActiveLinks:          &activeLinks,
+			RecoveryEvents:       &recovery,
+			RecoveryFailedEvents: &recoveryFailed,
 		})
 	}
 
@@ -197,6 +205,10 @@ func (b *Backend) synthGPM(uuids []string, extras *extrasConfig, reading *collec
 			SMOccupancyRatio:              value(rangeCfg{Min: 0.35, Max: 0.75}),
 			TensorActivityRatio:           value(rangeCfg{Min: 0.30, Max: 0.70}),
 			DRAMBandwidthUtilizationRatio: value(rangeCfg{Min: 0.40, Max: 0.80}),
+			IntegerActivityRatio:          value(rangeCfg{Min: 0.05, Max: 0.20}),
+			FP64ActivityRatio:             value(rangeCfg{Min: 0.01, Max: 0.10}),
+			FP32ActivityRatio:             value(rangeCfg{Min: 0.25, Max: 0.60}),
+			FP16ActivityRatio:             value(rangeCfg{Min: 0.20, Max: 0.55}),
 		})
 	}
 
@@ -303,6 +315,10 @@ func (b *Backend) migUtilization(instance migInstanceConfig, extras *extrasConfi
 		SMOccupancyRatio:              value(activity),
 		TensorActivityRatio:           value(rangeCfg{Min: activity.Min * 0.5, Max: activity.Max * 0.8}),
 		DRAMBandwidthUtilizationRatio: value(rangeCfg{Min: activity.Min * 0.6, Max: activity.Max * 0.9}),
+		IntegerActivityRatio:          value(rangeCfg{Min: activity.Min * 0.1, Max: activity.Max * 0.25}),
+		FP64ActivityRatio:             value(rangeCfg{Min: activity.Min * 0.02, Max: activity.Max * 0.1}),
+		FP32ActivityRatio:             value(rangeCfg{Min: activity.Min * 0.3, Max: activity.Max * 0.6}),
+		FP16ActivityRatio:             value(rangeCfg{Min: activity.Min * 0.2, Max: activity.Max * 0.5}),
 		PCIeTXBytesPerSecond: value(rangeCfg{
 			Min: extras.PCIe.TXBytesPerSecond.Min * pcieShare.Min,
 			Max: extras.PCIe.TXBytesPerSecond.Max * pcieShare.Max,
@@ -686,12 +702,15 @@ func (b *Backend) synthFans(uuids []string, fans map[string]float64, reading *co
 				}
 			}
 
+			policy := uint32(0)
+
 			reading.Extras.Fans = append(reading.Extras.Fans, collect.FanReading{
-				UUID:         uuid,
-				Fan:          strconv.Itoa(fan),
-				CurrentRatio: &current,
-				TargetRatio:  &target,
-				RPM:          &rpm,
+				UUID:          uuid,
+				Fan:           strconv.Itoa(fan),
+				CurrentRatio:  &current,
+				TargetRatio:   &target,
+				RPM:           &rpm,
+				ControlPolicy: &policy,
 			})
 		}
 	}
@@ -741,6 +760,61 @@ func synthPowerSources(uuids []string, reading *collect.Reading) {
 		reading.Extras.PowerSources = append(reading.Extras.PowerSources, collect.PowerSource{
 			UUID:   uuid,
 			Source: 0,
+		})
+	}
+}
+
+func (b *Backend) synthExtendedExtras(uuids []string, now time.Time, reading *collect.Reading) {
+	if b.runtimePMStart.IsZero() {
+		b.runtimePMStart = now
+	}
+
+	activeSec := max(0.0, now.Sub(b.runtimePMStart).Seconds())
+
+	for idx, uuid := range uuids {
+		zeroU64 := uint64(0)
+		l0Recov := uint64(idx)
+		zeroF64 := 0.0
+		activeF64 := activeSec
+		falseVal := false
+
+		reading.Extras.PCIeErrors = append(reading.Extras.PCIeErrors, collect.PCIeErrorCounter{
+			UUID:         uuid,
+			Correctable:  &zeroU64,
+			NonFatal:     &zeroU64,
+			Fatal:        &zeroU64,
+			L0ToRecovery: &l0Recov,
+		})
+
+		reading.Extras.PerfPolicyViolations = append(reading.Extras.PerfPolicyViolations, collect.PerfPolicyViolation{
+			UUID:            uuid,
+			Thermal:         &zeroF64,
+			BoardLimit:      &zeroF64,
+			Reliability:     &zeroF64,
+			TotalBaseClocks: &zeroF64,
+		})
+
+		reading.Extras.RepairStatuses = append(reading.Extras.RepairStatuses, collect.RepairStatus{
+			UUID:           uuid,
+			ChannelPending: &falseVal,
+			TPCPending:     &falseVal,
+			Unrepairable:   &falseVal,
+		})
+
+		reading.Extras.VirtualizationModes = append(reading.Extras.VirtualizationModes, collect.VirtualizationMode{
+			UUID: uuid,
+			Mode: 0,
+		})
+
+		reading.Extras.PowerMizerModes = append(reading.Extras.PowerMizerModes, collect.PowerMizerMode{
+			UUID: uuid,
+			Mode: 0,
+		})
+
+		reading.Extras.PCIeRuntimePM = append(reading.Extras.PCIeRuntimePM, collect.PCIeRuntimePM{
+			UUID:             uuid,
+			SuspendedSeconds: &zeroF64,
+			ActiveSeconds:    &activeF64,
 		})
 	}
 }
