@@ -559,7 +559,12 @@ func migProfile(mig device) (string, nvml.Return) {
 // normalizeMIGUUID normalizes a MIG device uuid the way GPU uuids are
 // normalized on every label: lowercase, without the type prefix.
 func normalizeMIGUUID(raw string) string {
-	return strings.TrimPrefix(strings.ToLower(strings.TrimSpace(raw)), "mig-")
+	trimmed := strings.TrimSpace(raw)
+	if len(trimmed) >= 4 && strings.EqualFold(trimmed[:4], "mig-") {
+		trimmed = trimmed[4:]
+	}
+
+	return strings.ToLower(trimmed)
 }
 
 // firstError picks the first non-success return of a pair, for error paths

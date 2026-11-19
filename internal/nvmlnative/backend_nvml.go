@@ -102,9 +102,9 @@ type Backend struct {
 	// extrasWarned makes a persistent extras failure visible exactly once
 	// per family, mirroring permLogged/fnfLogged.
 	extrasWarned map[string]bool
-	// symbolsPresent caches ad-hoc driver-library symbol probes. Guarded by
-	// mu like the rest of the cycle state.
-	symbolsPresent map[string]bool
+	// devValues is a per-cycle scratch map reused across collections under mu
+	// so hot-path scrapes do not re-allocate the per-device value map every cycle.
+	devValues map[nvidiasmi.QField]string
 	// avail is the guarded-export snapshot for the current NVML generation.
 	// It is replaced wholesale on re-initialization rather than mutated, and
 	// read atomically because the XID watcher reads it without holding mu.
@@ -273,6 +273,8 @@ func tok(ret nvml.Return) string {
 // goroutine after abandonment is discarded with the rest of its result;
 // shutdown-on-error then fires one cycle later, when the re-detection runs.
 func (b *Backend) QueryFunc(fields nvidiasmi.ResolvedFields, opts CollectOptions) collect.QueryFunc {
+	plan := newPlan(fields)
+
 	return func(ctx context.Context) (collect.Reading, int, error) {
 		type outcome struct {
 			reading collect.Reading
@@ -283,7 +285,7 @@ func (b *Backend) QueryFunc(fields nvidiasmi.ResolvedFields, opts CollectOptions
 		resultCh := make(chan outcome, 1)
 
 		go func() {
-			reading, code, err := b.collectCycle(ctx, fields, opts)
+			reading, code, err := b.collectCycle(ctx, plan, opts)
 			resultCh <- outcome{reading: reading, code: code, err: err}
 		}()
 
@@ -303,7 +305,7 @@ func (b *Backend) QueryFunc(fields nvidiasmi.ResolvedFields, opts CollectOptions
 // subsequent scrapes must fail fast rather than queue up behind it.
 func (b *Backend) collectCycle(
 	ctx context.Context,
-	fields nvidiasmi.ResolvedFields,
+	reqs plan,
 	opts CollectOptions,
 ) (collect.Reading, int, error) {
 	if !b.mu.TryLock() {
@@ -312,7 +314,7 @@ func (b *Backend) collectCycle(
 	}
 	defer b.mu.Unlock()
 
-	table, code, err := b.collectTable(ctx, fields)
+	table, code, err := b.collectTable(ctx, reqs)
 	if err != nil {
 		return collect.Reading{}, code, err
 	}
@@ -357,7 +359,7 @@ func (b *Backend) collectCycle(
 //nolint:cyclop,funlen // one linear pass: init, count, per-device collect, assemble
 func (b *Backend) collectTable(
 	ctx context.Context,
-	fields nvidiasmi.ResolvedFields,
+	reqs plan,
 ) (*nvidiasmi.Table, int, error) {
 	if !b.initialized {
 		if ret := b.api.init(); ret != nvml.SUCCESS {
@@ -402,10 +404,7 @@ func (b *Backend) collectTable(
 	shared.driverVersion, shared.driverVersionRet = driverVersion, ret
 	shared.count, shared.countRet = count, nvml.SUCCESS
 
-	plan := newPlan(fields)
-
 	rows := make([]nvidiasmi.Row, 0, count)
-	qFieldToCells := make(map[nvidiasmi.QField][]nvidiasmi.Cell, len(fields.Query))
 
 	for deviceIdx := range count {
 		if err := ctx.Err(); err != nil {
@@ -417,7 +416,7 @@ func (b *Backend) collectTable(
 			return nil, int(ret), b.lifecycle(ret, fmt.Errorf("failed to get device %d", deviceIdx))
 		}
 
-		values, err := b.collectDevice(ctx, dev, shared, plan)
+		values, err := b.collectDevice(ctx, dev, shared, reqs)
 		if err != nil {
 			if lifecycleErr, ok := errors.AsType[*lifecycleRetError](err); ok {
 				return nil, int(lifecycleErr.ret), b.lifecycle(lifecycleErr.ret, err)
@@ -427,11 +426,11 @@ func (b *Backend) collectTable(
 			return nil, -1, err
 		}
 
-		cells := make([]nvidiasmi.Cell, 0, len(fields.Query))
-		rowCells := make(map[nvidiasmi.QField]nvidiasmi.Cell, len(fields.Query))
+		cells := make([]nvidiasmi.Cell, 0, len(reqs.fields))
+		rowCells := make(map[nvidiasmi.QField]nvidiasmi.Cell, len(reqs.fields))
 
-		for _, qField := range fields.Query {
-			raw, ok := values[canonicalQField(qField)]
+		for _, pf := range reqs.fields {
+			raw, ok := values[pf.canonical]
 			if !ok {
 				// a catalogued field this collector version has no reading
 				// for: emit the absent token so the behavior matches an
@@ -439,21 +438,15 @@ func (b *Backend) collectTable(
 				raw = tokenNotAvailable
 			}
 
-			cell := nvidiasmi.Cell{QField: qField, RField: fields.Returned[qField], RawValue: raw}
+			cell := nvidiasmi.Cell{QField: pf.qField, RField: pf.rField, RawValue: raw}
 			cells = append(cells, cell)
-			rowCells[qField] = cell
-			qFieldToCells[qField] = append(qFieldToCells[qField], cell)
+			rowCells[pf.qField] = cell
 		}
 
 		rows = append(rows, nvidiasmi.Row{QFieldToCells: rowCells, Cells: cells})
 	}
 
-	rFields := make([]nvidiasmi.RField, len(fields.Query))
-	for i, qField := range fields.Query {
-		rFields[i] = fields.Returned[qField]
-	}
-
-	return &nvidiasmi.Table{Rows: rows, RFields: rFields, QFieldToCells: qFieldToCells}, 0, nil
+	return &nvidiasmi.Table{Rows: rows, RFields: reqs.rFields}, 0, nil
 }
 
 // lifecycle folds a failed collection's error: lifecycle-class returns mark
@@ -582,20 +575,63 @@ type sharedValues struct {
 	countRet         nvml.Return
 }
 
-// plan is the per-cycle collection plan: which canonical fields were
-// requested, so unrequested NVML getters are not called at all (an excluded
-// slow or problematic field must cost nothing).
+type plannedField struct {
+	qField    nvidiasmi.QField
+	canonical nvidiasmi.QField
+	rField    nvidiasmi.RField
+}
+
+type fieldValueEntry struct {
+	field    nvidiasmi.QField
+	id       uint32
+	bare     bool
+	optional bool
+	format   func(v float64) string
+}
+
+// plan is the immutable collection plan built once in QueryFunc: which
+// canonical fields were requested (so unrequested NVML getters are not called),
+// the pre-resolved row assembly metadata, and the pre-filtered GetFieldValues
+// and ECC counter batches.
 type plan struct {
-	requested map[nvidiasmi.QField]bool
+	requested         map[nvidiasmi.QField]bool
+	fields            []plannedField
+	rFields           []nvidiasmi.RField
+	fieldValueEntries []fieldValueEntry
+	eccCounters       []eccCounterSpec
+	eccTotals         []eccTotalSpec
 }
 
 func newPlan(fields nvidiasmi.ResolvedFields) plan {
 	requested := make(map[nvidiasmi.QField]bool, len(fields.Query))
-	for _, qField := range fields.Query {
-		requested[canonicalQField(qField)] = true
+	planned := make([]plannedField, len(fields.Query))
+	rFields := make([]nvidiasmi.RField, len(fields.Query))
+
+	for i, qField := range fields.Query {
+		canonical := canonicalQField(qField)
+		rField := fields.Returned[qField]
+		requested[canonical] = true
+		planned[i] = plannedField{qField: qField, canonical: canonical, rField: rField}
+		rFields[i] = rField
 	}
 
-	return plan{requested: requested}
+	wantedFVs := make([]fieldValueEntry, 0, len(allFieldValueEntries))
+	for _, entry := range allFieldValueEntries {
+		if requested[entry.field] {
+			wantedFVs = append(wantedFVs, entry)
+		}
+	}
+
+	eccCounters, eccTotals := buildRequestedECCSpecs(requested)
+
+	return plan{
+		requested:         requested,
+		fields:            planned,
+		rFields:           rFields,
+		fieldValueEntries: wantedFVs,
+		eccCounters:       eccCounters,
+		eccTotals:         eccTotals,
+	}
 }
 
 // want reports whether any of the given fields was requested.
@@ -702,7 +738,13 @@ func (b *Backend) collectDevice(
 	shared sharedValues,
 	reqs plan,
 ) (map[nvidiasmi.QField]string, error) {
-	coll := &devCollector{values: make(map[nvidiasmi.QField]string, len(fieldOrder))}
+	if b.devValues == nil {
+		b.devValues = make(map[nvidiasmi.QField]string, len(fieldOrder))
+	} else {
+		clear(b.devValues)
+	}
+
+	coll := &devCollector{values: b.devValues}
 
 	coll.values["timestamp"] = shared.timestamp
 	coll.set("driver_version", shared.driverVersionRet, func() string { return shared.driverVersion })
@@ -1037,15 +1079,10 @@ func (b *Backend) collectDevice(
 		// only the inactive counts come from the v2 call: the four classic
 		// fields stay on the unversioned call, so drivers without the v2
 		// entry point keep serving them (the inactive series just stay
-		// absent there). The export must be probed first: driver 590 ships
-		// no v2 symbol at all, and calling a missing export crashes the
-		// process instead of returning FUNCTION_NOT_FOUND (verified live).
-		var info nvml.RemappedRowsInfo_v2
-
-		ret := nvml.ERROR_FUNCTION_NOT_FOUND
-		if b.symbolPresent("nvmlDeviceGetRemappedRows_v2") {
-			info, ret = dev.GetRemappedRows_v2()
-		}
+		// absent there). guardedDevice checks the availability snapshot before
+		// entering cgo, returning ERROR_FUNCTION_NOT_FOUND when the export is
+		// absent.
+		info, ret := dev.GetRemappedRows_v2()
 
 		coll.set("remapped_rows.correctable_inactive", ret,
 			func() string { return strconv.FormatUint(uint64(info.CorrInactiveRemaps), 10) })
@@ -1270,93 +1307,86 @@ func (b *Backend) collectDevice(
 	return coll.values, nil
 }
 
+// formatFieldValueNsToUs converts NVML's nanosecond clocks-event-reason
+// counters to fractional microseconds so the exporter's _seconds conversion
+// retains full nanosecond precision.
+func formatFieldValueNsToUs(v float64) string {
+	return strconv.FormatFloat(v/1000.0, 'f', -1, 64) + " us"
+}
+
+// allFieldValueEntries is the read-only catalog of fields served by
+// nvmlDeviceGetFieldValues. newPlan filters this table once per QueryFunc into
+// an immutable slice; callers must never mutate it in place.
+//
+//nolint:gochecknoglobals // read-only lookup table
+var allFieldValueEntries = []fieldValueEntry{
+	{
+		"power.draw.average", nvml.FI_DEV_POWER_AVERAGE, false, false,
+		func(v float64) string { return strconv.FormatFloat(v/1000.0, 'f', -1, 64) + " W" },
+	},
+	{
+		"power.draw.instant", nvml.FI_DEV_POWER_INSTANT, false, false,
+		func(v float64) string { return strconv.FormatFloat(v/1000.0, 'f', -1, 64) + " W" },
+	},
+	{
+		gpuTemperatureField, gpuTempFieldID, false, true,
+		func(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) },
+	},
+	{
+		"temperature.memory", nvml.FI_DEV_MEMORY_TEMP, true, false,
+		func(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) },
+	},
+	{
+		"clocks_event_reasons_counters.sw_power_cap", nvml.FI_DEV_CLOCKS_EVENT_REASON_SW_POWER_CAP, false, false,
+		formatFieldValueNsToUs,
+	},
+	{
+		"clocks_event_reasons_counters.sync_boost", nvml.FI_DEV_CLOCKS_EVENT_REASON_SYNC_BOOST, false, false,
+		formatFieldValueNsToUs,
+	},
+	{
+		"clocks_event_reasons_counters.sw_thermal_slowdown",
+		nvml.FI_DEV_CLOCKS_EVENT_REASON_SW_THERM_SLOWDOWN,
+		false,
+		false,
+		formatFieldValueNsToUs,
+	},
+	{
+		"clocks_event_reasons_counters.hw_thermal_slowdown",
+		nvml.FI_DEV_CLOCKS_EVENT_REASON_HW_THERM_SLOWDOWN,
+		false,
+		false,
+		formatFieldValueNsToUs,
+	},
+	{
+		"clocks_event_reasons_counters.hw_power_brake_slowdown",
+		nvml.FI_DEV_CLOCKS_EVENT_REASON_HW_POWER_BRAKE_SLOWDOWN, false, false,
+		formatFieldValueNsToUs,
+	},
+	{
+		"reset_status.reset_required", nvml.FI_DEV_RESET_STATUS, false, false,
+		func(v float64) string { return yesNo(v != 0) },
+	},
+	{
+		"reset_status.drain_and_reset_recommended", nvml.FI_DEV_DRAIN_AND_RESET_STATUS, false, false,
+		func(v float64) string { return yesNo(v != 0) },
+	},
+	{
+		"gpu_recovery_action", nvml.FI_DEV_GET_GPU_RECOVERY_ACTION, false, false,
+		func(v float64) string { return recoveryActionStr(uint64(v)) },
+	},
+	{
+		"edpp_multiplier", edppMultiplierFieldID, false, false,
+		func(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) + " %" },
+	},
+}
+
 // collectFieldValues batches everything served by nvmlDeviceGetFieldValues.
 // The field-ID choices are trace-verified against nvidia-smi's own calls.
 //
-//nolint:cyclop,funlen // one linear pass over the batched entries and their outcomes
+//nolint:cyclop // one linear pass over the batched entries and their outcomes
 func (b *Backend) collectFieldValues(dev device, coll *devCollector, reqs plan) {
-	// NVML serves the clocks-event-reason counters in nanoseconds, while the
-	// catalog header unit is [us]. Preserve the nanosecond remainder as
-	// fractional microseconds so the exporter's _seconds conversion retains
-	// full nanosecond precision.
-	nsToUs := func(v float64) string { return strconv.FormatFloat(v/1000.0, 'f', -1, 64) + " us" }
-
-	entries := []struct {
-		field    nvidiasmi.QField
-		id       uint32
-		bare     bool
-		optional bool
-		format   func(v float64) string
-	}{
-		{
-			"power.draw.average", nvml.FI_DEV_POWER_AVERAGE, false, false,
-			func(v float64) string { return strconv.FormatFloat(v/1000.0, 'f', -1, 64) + " W" },
-		},
-		{
-			"power.draw.instant", nvml.FI_DEV_POWER_INSTANT, false, false,
-			func(v float64) string { return strconv.FormatFloat(v/1000.0, 'f', -1, 64) + " W" },
-		},
-		{
-			gpuTemperatureField, gpuTempFieldID, false, true,
-			func(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) },
-		},
-		{
-			"temperature.memory", nvml.FI_DEV_MEMORY_TEMP, true, false,
-			func(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) },
-		},
-		{
-			"clocks_event_reasons_counters.sw_power_cap", nvml.FI_DEV_CLOCKS_EVENT_REASON_SW_POWER_CAP, false, false,
-			nsToUs,
-		},
-		{
-			"clocks_event_reasons_counters.sync_boost", nvml.FI_DEV_CLOCKS_EVENT_REASON_SYNC_BOOST, false, false,
-			nsToUs,
-		},
-		{
-			"clocks_event_reasons_counters.sw_thermal_slowdown",
-			nvml.FI_DEV_CLOCKS_EVENT_REASON_SW_THERM_SLOWDOWN,
-			false,
-			false,
-			nsToUs,
-		},
-		{
-			"clocks_event_reasons_counters.hw_thermal_slowdown",
-			nvml.FI_DEV_CLOCKS_EVENT_REASON_HW_THERM_SLOWDOWN,
-			false,
-			false,
-			nsToUs,
-		},
-		{
-			"clocks_event_reasons_counters.hw_power_brake_slowdown",
-			nvml.FI_DEV_CLOCKS_EVENT_REASON_HW_POWER_BRAKE_SLOWDOWN, false, false,
-			nsToUs,
-		},
-		{
-			"reset_status.reset_required", nvml.FI_DEV_RESET_STATUS, false, false,
-			func(v float64) string { return yesNo(v != 0) },
-		},
-		{
-			"reset_status.drain_and_reset_recommended", nvml.FI_DEV_DRAIN_AND_RESET_STATUS, false, false,
-			func(v float64) string { return yesNo(v != 0) },
-		},
-		{
-			"gpu_recovery_action", nvml.FI_DEV_GET_GPU_RECOVERY_ACTION, false, false,
-			func(v float64) string { return recoveryActionStr(uint64(v)) },
-		},
-		{
-			"edpp_multiplier", edppMultiplierFieldID, false, false,
-			func(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) + " %" },
-		},
-	}
-
-	wanted := entries[:0]
-
-	for _, entry := range entries {
-		if reqs.want(entry.field) {
-			wanted = append(wanted, entry)
-		}
-	}
-
+	wanted := reqs.fieldValueEntries
 	if len(wanted) == 0 {
 		return
 	}
@@ -1432,44 +1462,83 @@ func decodeFieldValue(fv nvml.FieldValue) (float64, bool) {
 	}
 }
 
-func collectEccCounters(dev device, coll *devCollector, reqs plan) {
-	locations := map[string]nvml.MemoryLocation{
-		"device_memory":  nvml.MEMORY_LOCATION_DEVICE_MEMORY,
-		"dram":           nvml.MEMORY_LOCATION_DRAM,
-		"register_file":  nvml.MEMORY_LOCATION_REGISTER_FILE,
-		"l1_cache":       nvml.MEMORY_LOCATION_L1_CACHE,
-		"l2_cache":       nvml.MEMORY_LOCATION_L2_CACHE,
-		"texture_memory": nvml.MEMORY_LOCATION_TEXTURE_MEMORY,
-		"cbu":            nvml.MEMORY_LOCATION_CBU,
-		"sram":           nvml.MEMORY_LOCATION_SRAM,
+type eccCounterSpec struct {
+	field   nvidiasmi.QField
+	errType nvml.MemoryErrorType
+	cntType nvml.EccCounterType
+	loc     nvml.MemoryLocation
+}
+
+type eccTotalSpec struct {
+	field   nvidiasmi.QField
+	errType nvml.MemoryErrorType
+	cntType nvml.EccCounterType
+}
+
+// buildRequestedECCSpecs precomputes the requested ECC counter and total specs
+// once per QueryFunc so collectEccCounters does no string formatting or map
+// lookups during scrapes.
+func buildRequestedECCSpecs(requested map[nvidiasmi.QField]bool) ([]eccCounterSpec, []eccTotalSpec) {
+	kinds := []struct {
+		name    string
+		errType nvml.MemoryErrorType
+	}{
+		{"corrected", nvml.MEMORY_ERROR_TYPE_CORRECTED},
+		{"uncorrected", nvml.MEMORY_ERROR_TYPE_UNCORRECTED},
+	}
+	counters := []struct {
+		name    string
+		cntType nvml.EccCounterType
+	}{
+		{"volatile", nvml.VOLATILE_ECC},
+		{"aggregate", nvml.AGGREGATE_ECC},
+	}
+	locations := []struct {
+		name string
+		loc  nvml.MemoryLocation
+	}{
+		{"device_memory", nvml.MEMORY_LOCATION_DEVICE_MEMORY},
+		{"dram", nvml.MEMORY_LOCATION_DRAM},
+		{"register_file", nvml.MEMORY_LOCATION_REGISTER_FILE},
+		{"l1_cache", nvml.MEMORY_LOCATION_L1_CACHE},
+		{"l2_cache", nvml.MEMORY_LOCATION_L2_CACHE},
+		{"texture_memory", nvml.MEMORY_LOCATION_TEXTURE_MEMORY},
+		{"cbu", nvml.MEMORY_LOCATION_CBU},
+		{"sram", nvml.MEMORY_LOCATION_SRAM},
 	}
 
-	for kindName, errType := range map[string]nvml.MemoryErrorType{
-		"corrected":   nvml.MEMORY_ERROR_TYPE_CORRECTED,
-		"uncorrected": nvml.MEMORY_ERROR_TYPE_UNCORRECTED,
-	} {
-		for cntName, cntType := range map[string]nvml.EccCounterType{
-			"volatile":  nvml.VOLATILE_ECC,
-			"aggregate": nvml.AGGREGATE_ECC,
-		} {
-			for locName, loc := range locations {
-				field := nvidiasmi.QField(fmt.Sprintf("ecc.errors.%s.%s.%s", kindName, cntName, locName))
-				if !reqs.want(field) {
-					continue
+	var (
+		eccCounters []eccCounterSpec
+		eccTotals   []eccTotalSpec
+	)
+
+	for _, kind := range kinds {
+		for _, cnt := range counters {
+			prefix := "ecc.errors." + kind.name + "." + cnt.name + "."
+			for _, loc := range locations {
+				if field := nvidiasmi.QField(prefix + loc.name); requested[field] {
+					eccCounters = append(eccCounters, eccCounterSpec{field, kind.errType, cnt.cntType, loc.loc})
 				}
-
-				v, ret := dev.GetMemoryErrorCounter(errType, cntType, loc)
-				coll.set(field, ret, func() string { return strconv.FormatUint(v, 10) })
 			}
 
-			field := nvidiasmi.QField(fmt.Sprintf("ecc.errors.%s.%s.total", kindName, cntName))
-			if !reqs.want(field) {
-				continue
+			if totalField := nvidiasmi.QField(prefix + "total"); requested[totalField] {
+				eccTotals = append(eccTotals, eccTotalSpec{totalField, kind.errType, cnt.cntType})
 			}
-
-			v, ret := dev.GetTotalEccErrors(errType, cntType)
-			coll.set(field, ret, func() string { return strconv.FormatUint(v, 10) })
 		}
+	}
+
+	return eccCounters, eccTotals
+}
+
+func collectEccCounters(dev device, coll *devCollector, reqs plan) {
+	for _, spec := range reqs.eccCounters {
+		v, ret := dev.GetMemoryErrorCounter(spec.errType, spec.cntType, spec.loc)
+		coll.set(spec.field, ret, func() string { return strconv.FormatUint(v, 10) })
+	}
+
+	for _, spec := range reqs.eccTotals {
+		v, ret := dev.GetTotalEccErrors(spec.errType, spec.cntType)
+		coll.set(spec.field, ret, func() string { return strconv.FormatUint(v, 10) })
 	}
 }
 
@@ -2277,29 +2346,6 @@ func (b *Backend) extrasFailure(family, msg string, ret nvml.Return) bool {
 	return true
 }
 
-// symbolPresent reports whether the driver library exports the symbol,
-// cached for the process lifetime. The caller holds the backend lock.
-func (b *Backend) symbolPresent(name string) bool {
-	present, ok := b.symbolsPresent[name]
-	if ok {
-		return present
-	}
-
-	if b.symbolsPresent == nil {
-		b.symbolsPresent = map[string]bool{}
-	}
-
-	present = b.api.lookupSymbol(name) == nil
-	b.symbolsPresent[name] = present
-
-	if !present {
-		b.logger.Info("driver library lacks an optional entry point, "+
-			"the fields it serves stay absent", "symbol", name)
-	}
-
-	return present
-}
-
 // warnOnce logs a warning the first time a family fails, so a persistent
 // extras failure stays visible without flooding the log on every cycle.
 func (b *Backend) warnOnce(family, msg string, ret nvml.Return) {
@@ -2321,9 +2367,6 @@ func (b *Backend) warnOnce(family, msg string, ret nvml.Return) {
 // during lifecycle recovery, which is exactly when the driver may have been
 // upgraded underneath it and the export set may differ.
 func (b *Backend) refreshAvailability() {
-	// the ad-hoc probe cache belongs to the previous library generation
-	b.symbolsPresent = nil
-
 	avail := probeSymbols(b.api.lookupSymbol, guardedSymbols)
 	b.avail.Store(avail)
 	avail.log(b.logger)

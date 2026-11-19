@@ -7,6 +7,7 @@ package nvml
 import (
 	"fmt"
 	"runtime"
+	"sync"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -628,17 +629,38 @@ type Device interface {
 	RegisterEvents(eventTypes uint64, set EventSet) Return
 }
 
-//nolint:gochecknoglobals // process-wide nvml.dll handle
-var dll = windows.NewLazySystemDLL("nvml.dll")
+//nolint:gochecknoglobals // process-wide nvml.dll handle and resolved procedure cache
+var (
+	dll         = windows.NewLazySystemDLL("nvml.dll")
+	procCacheMu sync.RWMutex
+	procCache   = map[string]*windows.LazyProc{}
+)
 
 func toReturn(r1 uintptr) Return {
 	return Return(r1) //nolint:gosec // NVML return codes fit in int32
 }
 
 func findProc(name string) (*windows.LazyProc, bool) {
-	p := dll.NewProc(name)
+	procCacheMu.RLock()
 
-	return p, p.Find() == nil
+	p, cached := procCache[name]
+
+	procCacheMu.RUnlock()
+
+	if cached {
+		return p, p != nil
+	}
+
+	candidate := dll.NewProc(name)
+	if candidate.Find() != nil {
+		candidate = nil
+	}
+
+	procCacheMu.Lock()
+	procCache[name] = candidate
+	procCacheMu.Unlock()
+
+	return candidate, candidate != nil
 }
 
 func findFirstProc(names ...string) (*windows.LazyProc, bool) {
@@ -661,8 +683,8 @@ func Extensions() ExtendedInterface {
 
 // LookupSymbol reports whether nvml.dll exports the named entry point.
 func (ExtendedInterface) LookupSymbol(name string) error {
-	if err := dll.NewProc(name).Find(); err != nil {
-		return fmt.Errorf("error looking up %s: %w", name, err)
+	if _, ok := findProc(name); !ok {
+		return fmt.Errorf("error looking up %s: %w", name, ERROR_FUNCTION_NOT_FOUND)
 	}
 
 	return nil

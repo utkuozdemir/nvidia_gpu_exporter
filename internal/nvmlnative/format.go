@@ -49,10 +49,10 @@ func milliwatts(mw uint32) string {
 // nvmlSystemGetCudaDriverVersion (major*1000 + minor*10) the way nvidia-smi
 // prints the CUDA version: 13010 -> "13.1".
 func cudaVersionStr(version int) string {
-	return fmt.Sprintf("%d.%d", version/1000, (version%1000)/10)
+	return strconv.Itoa(version/1000) + "." + strconv.Itoa((version%1000)/10)
 }
 
-func mhz(v uint32) string { return fmt.Sprintf("%d MHz", v) }
+func mhz(v uint32) string { return strconv.FormatUint(uint64(v), 10) + " MHz" }
 
 // mib formats a byte count in MiB without rounding, so multiplying by
 // 1048576 in the exporter reproduces the exact byte count.
@@ -60,7 +60,7 @@ func mib(bytes uint64) string {
 	return strconv.FormatFloat(float64(bytes)/float64(mibDivisor), 'f', -1, 64) + " MiB"
 }
 
-func pct(v uint32) string { return fmt.Sprintf("%d %%", v) }
+func pct(v uint32) string { return strconv.FormatUint(uint64(v), 10) + " %" }
 
 func computeModeStr(mode int32) string {
 	switch mode {

@@ -761,6 +761,13 @@ func (e *GPUExporter) WithContext(ctx context.Context) *GPUExporter {
 	return &scoped
 }
 
+// SetContext updates the context used by Collect on a collector copy owned
+// exclusively by a single in-flight scrape. Callers must not invoke this
+// concurrently with Collect.
+func (e *GPUExporter) SetContext(ctx context.Context) {
+	e.ctx = ctx
+}
+
 // Describe describes all the metrics ever exported by the exporter. It
 // implements prometheus.Collector.
 func (e *GPUExporter) Describe(descCh chan<- *prometheus.Desc) {
@@ -1205,8 +1212,10 @@ func (e *GPUExporter) renderApp(metricCh chan<- prometheus.Metric, descs *appDes
 
 	num, err := nvidiasmi.TransformRawValue(app.UsedMemory, nvidiasmi.UsedMemoryMultiplier)
 	if err != nil {
-		e.logger.Debug("failed to transform per-process memory value",
-			"err", err, "raw_value", app.UsedMemory, "pid", app.PID)
+		if e.logger.Enabled(e.ctx, slog.LevelDebug) {
+			e.logger.Debug("failed to transform per-process memory value",
+				"err", err, "raw_value", app.UsedMemory, "pid", app.PID)
+		}
 
 		return
 	}
@@ -1353,8 +1362,10 @@ func (e *GPUExporter) renderCell(metricCh chan<- prometheus.Metric, cell nvidias
 			e.logger.Warn("skipping metric: unrecognized enum value", "query_field_name",
 				cell.QField, "raw_value", cell.RawValue)
 		default:
-			e.logger.Debug("failed to transform raw value", "err", numErr, "query_field_name",
-				cell.QField, "raw_value", cell.RawValue)
+			if e.logger.Enabled(e.ctx, slog.LevelDebug) {
+				e.logger.Debug("failed to transform raw value", "err", numErr, "query_field_name",
+					cell.QField, "raw_value", cell.RawValue)
+			}
 		}
 
 		return
@@ -1458,9 +1469,8 @@ func reservedMetricNames(prefix string, exitCodeMetric ExitCodeMetric) map[strin
 // BuildQFieldToMetricInfoMap builds the per-field metric descriptors. A field
 // whose returned name yields no usable metric name, one another field already
 // claimed, or one reserved by a family the exporter owns, is left out: the whole
-// exporter is registered as one collector on every scrape, so a single
-// unusable or conflicting descriptor would fail every scrape wholesale instead
-// of costing one series.
+// exporter is registered as one collector, so a single unusable or conflicting
+// descriptor would fail registration wholesale instead of costing one series.
 func BuildQFieldToMetricInfoMap(
 	prefix string,
 	qFieldtoRFieldMap map[nvidiasmi.QField]nvidiasmi.RField,

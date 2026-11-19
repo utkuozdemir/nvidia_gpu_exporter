@@ -32,12 +32,19 @@ func DefaultRunFunc(cmd *exec.Cmd) error {
 	return nil
 }
 
+// gpuQueryInitialBufSize pre-sizes the stdout buffer for --query-gpu CSV output
+// (captures range from ~4 KiB to ~10 KiB for a single GPU, ~25 KiB for 8 GPUs)
+// to avoid repeated buffer growths on every exec scrape.
+const gpuQueryInitialBufSize = 16 * 1024
+
 // Query runs nvidia-smi --query-gpu for the given fields and parses the CSV
 // output into a table, returning the command's exit code alongside.
 func Query(ctx context.Context, command string, qFields []QField, run RunFunc) (*Table, int, error) {
 	qFieldsJoined := strings.Join(QFieldSliceToStringSlice(qFields), ",")
+	initialCap := min(len(qFieldsJoined)*2, gpuQueryInitialBufSize)
 
-	stdout, exitCode, err := execQuery(ctx, command, run, "--query-gpu="+qFieldsJoined, "--format=csv")
+	stdout, exitCode, err := execQueryWithBufSize(
+		ctx, command, run, initialCap, "--query-gpu="+qFieldsJoined, "--format=csv")
 	if err != nil {
 		return nil, exitCode, err
 	}
@@ -53,6 +60,16 @@ func Query(ctx context.Context, command string, qFields []QField, run RunFunc) (
 // execQuery runs the nvidia-smi command with the given arguments appended,
 // returning its stdout and exit code.
 func execQuery(ctx context.Context, command string, run RunFunc, args ...string) (string, int, error) {
+	return execQueryWithBufSize(ctx, command, run, 0, args...)
+}
+
+func execQueryWithBufSize(
+	ctx context.Context,
+	command string,
+	run RunFunc,
+	initialStdoutCap int,
+	args ...string,
+) (string, int, error) {
 	cmdAndArgs, err := SplitCommand(command)
 	if err != nil {
 		return "", -1, err
@@ -61,6 +78,9 @@ func execQuery(ctx context.Context, command string, run RunFunc, args ...string)
 	cmdAndArgs = append(cmdAndArgs, args...)
 
 	var stdout bytes.Buffer
+	if initialStdoutCap > 0 {
+		stdout.Grow(initialStdoutCap)
+	}
 
 	var stderr bytes.Buffer
 

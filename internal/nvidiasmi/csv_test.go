@@ -46,10 +46,6 @@ func TestParseCsvIntoTable(t *testing.T) {
 	expected := nvidiasmi.Table{
 		Rows:    []nvidiasmi.Row{row0, row1},
 		RFields: []nvidiasmi.RField{"name", "power.draw [W]"},
-		QFieldToCells: map[nvidiasmi.QField][]nvidiasmi.Cell{
-			"name":       {cell00, cell10},
-			"power.draw": {cell01, cell11},
-		},
 	}
 
 	assert.Equal(t, expected, parsed)

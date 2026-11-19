@@ -154,7 +154,7 @@ Some specifics that regularly surprise people:
   The MIG attribution labels on the per-process metrics are the precedent to follow.
 - Fields that report a state rather than a number are mapped to numbers.
   An unavailable value is not exported at all; an unrecognized value is also not exported, but is logged, because guessing at a brand-new driver state is worse than a visible gap.
-- A derived metric name that is unusable costs the whole scrape, not one series, because the exporter registers as a single collector on every scrape and the registry rejects a bad descriptor wholesale.
+- A derived metric name that is unusable fails the whole collector, not one series, because the exporter registers as a single collector and the registry rejects a bad descriptor wholesale.
   So a field whose returned name yields an empty name, or a name another field or one of the exporter's own families already owns, is dropped with a logged error instead.
   When several fields contend for one name, *all* of them are dropped: which field owns a derived name is not knowable here, and publishing one field's reading under a contested name would put a wrong value on an established series.
   The fixed family names live in one list in `internal/exporter`, pinned by a test against what the exporter actually describes, so a new family cannot be added without reserving its name.
