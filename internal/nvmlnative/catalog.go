@@ -7,7 +7,7 @@
 // 590.48.01) via the diff harness in _work/nvml-experiment.
 //
 // Fields nvidia-smi knows that have no checked NVML mapping yet (vGPU
-// capabilities, Blackwell power smoothing, GB200 module power, kmd_version,
+// capabilities, Blackwell power smoothing, fabric health, kmd_version,
 // pcie.link.gen.hostmax) are recorded in deferredFields and omitted from this
 // backend's vocabulary until a mapping is added.
 package nvmlnative
@@ -181,6 +181,13 @@ var fieldOrder = []nvidiasmi.QField{
 	"power.default_limit",
 	"power.min_limit",
 	"power.max_limit",
+	"module.power.draw.average",
+	"module.power.draw.instant",
+	"module.power.limit",
+	"module.enforced.power.limit",
+	"module.power.default_limit",
+	"module.power.min_limit",
+	"module.power.max_limit",
 	"edpp_multiplier",
 	"clocks.current.graphics",
 	"clocks.current.sm",
@@ -373,6 +380,13 @@ var catalogRFields = map[nvidiasmi.QField]nvidiasmi.RField{
 	"power.default_limit":                                     "power.default_limit [W]",
 	"power.min_limit":                                         "power.min_limit [W]",
 	"power.max_limit":                                         "power.max_limit [W]",
+	"module.power.draw.average":                               "module.power.draw.average [W]",
+	"module.power.draw.instant":                               "module.power.draw.instant [W]",
+	"module.power.limit":                                      "module.power.limit [W]",
+	"module.enforced.power.limit":                             "module.enforced.power.limit [W]",
+	"module.power.default_limit":                              "module.power.default_limit [W]",
+	"module.power.min_limit":                                  "module.power.min_limit [W]",
+	"module.power.max_limit":                                  "module.power.max_limit [W]",
 	"edpp_multiplier":                                         "edpp_multiplier [%]",
 	"clocks.current.graphics":                                 "clocks.current.graphics [MHz]",
 	"clocks.current.sm":                                       "clocks.current.sm [MHz]",
@@ -514,9 +528,9 @@ var deferredFields = map[nvidiasmi.QField]bool{
 }
 
 // deferredFieldPrefixes covers whole deferred families (vGPU capabilities,
-// Blackwell power smoothing, GB200 module power, fabric health...).
+// Blackwell power smoothing, fabric health...).
 var deferredFieldPrefixes = []string{
-	"vgpu_", "module.power.", "module.enforced.", "gpu.base.", "power_smoothing.",
+	"vgpu_", "gpu.base.", "power_smoothing.",
 	"fabric.cliques.", "fabric.health.", "remapped_banks.",
 }
 

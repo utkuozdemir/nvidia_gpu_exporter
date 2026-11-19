@@ -89,6 +89,24 @@ func identityDevice() *mock.Device {
 		GetMPSComputeRunningProcessesFunc: func() ([]nvml.ProcessInfo, nvml.Return) {
 			return nil, nvml.ERROR_NOT_SUPPORTED
 		},
+		GetFanControlPolicy_v2Func: func(int) (nvml.FanControlPolicy, nvml.Return) {
+			return 0, nvml.ERROR_NOT_SUPPORTED
+		},
+		GetPowerMizerMode_v1Func: func() (nvml.DevicePowerMizerModes_v1, nvml.Return) {
+			return nvml.DevicePowerMizerModes_v1{}, nvml.ERROR_NOT_SUPPORTED
+		},
+		GetRepairStatusFunc: func() (nvml.RepairStatus, nvml.Return) {
+			return nvml.RepairStatus{}, nvml.ERROR_NOT_SUPPORTED
+		},
+		GetUnrepairableMemoryFlag_v1Func: func() (nvml.UnrepairableMemoryStatus_v1, nvml.Return) {
+			return nvml.UnrepairableMemoryStatus_v1{}, nvml.ERROR_NOT_SUPPORTED
+		},
+		GetVirtualizationModeFunc: func() (nvml.GpuVirtualizationMode, nvml.Return) {
+			return 0, nvml.ERROR_NOT_SUPPORTED
+		},
+		GetNvLinkStateFunc: func(int) (nvml.EnableState, nvml.Return) {
+			return 0, nvml.ERROR_NOT_SUPPORTED
+		},
 	}
 }
 
@@ -1265,12 +1283,16 @@ func TestExtrasNVLink(t *testing.T) {
 	assert.Equal(t, uint64(200*1024), *reading.Extras.NVLink[0].RXBytes)
 
 	// connector present (linkCount > 0) but no active NVLink bridge:
-	// ERROR_NOT_SUPPORTED on 138/139 omits the series
+	// ERROR_NOT_SUPPORTED on 138/139 omits TX/RX bytes while still reporting link count
 	throughputRet = uint32(nvml.ERROR_NOT_SUPPORTED)
 
 	reading, _, err = query(t.Context())
 	require.NoError(t, err)
-	assert.Empty(t, reading.Extras.NVLink)
+	require.Len(t, reading.Extras.NVLink, 1)
+	assert.Nil(t, reading.Extras.NVLink[0].TXBytes)
+	assert.Nil(t, reading.Extras.NVLink[0].RXBytes)
+	require.NotNil(t, reading.Extras.NVLink[0].Links)
+	assert.Equal(t, uint64(18), *reading.Extras.NVLink[0].Links)
 
 	// zero links omits without querying throughput
 	linkCount = 0

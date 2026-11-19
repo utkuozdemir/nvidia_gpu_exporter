@@ -19,7 +19,9 @@ type (
 	DriverModel           int32
 	EccCounterType        int32
 	EnableState           int32
+	FanControlPolicy      uint32
 	GpuOperationMode      int32
+	GpuVirtualizationMode int32
 	InforomObject         int32
 	MemoryErrorType       int32
 	MemoryLocation        int32
@@ -177,15 +179,38 @@ const (
 	EventTypeXidCriticalError = 8
 
 	FI_DEV_CLOCKS_EVENT_REASON_SW_POWER_CAP            = 74
+	FI_DEV_PERF_POLICY_THERMAL                         = 75
 	FI_DEV_CLOCKS_EVENT_REASON_SYNC_BOOST              = 76
+	FI_DEV_PERF_POLICY_BOARD_LIMIT                     = 77
+	FI_DEV_PERF_POLICY_RELIABILITY                     = 79
+	FI_DEV_PERF_POLICY_TOTAL_BASE_CLOCKS               = 81
 	FI_DEV_MEMORY_TEMP                                 = 82
 	FI_DEV_NVLINK_LINK_COUNT                           = 91
 	FI_DEV_PCIE_REPLAY_COUNTER                         = 94
 	FI_DEV_PCIE_REPLAY_ROLLOVER_COUNTER                = 95
 	FI_DEV_NVLINK_THROUGHPUT_DATA_TX                   = 138
 	FI_DEV_NVLINK_THROUGHPUT_DATA_RX                   = 139
+	FI_DEV_NVSWITCH_CONNECTED_LINK_COUNT               = 147
+	FI_DEV_NVLINK_GET_STATE                            = 165
+	FI_DEV_PCIE_L0_TO_RECOVERY_COUNTER                 = 169
+	FI_DEV_C2C_LINK_COUNT                              = 170
+	FI_DEV_C2C_LINK_GET_STATUS                         = 171
+	FI_DEV_PCIE_COUNT_CORRECTABLE_ERRORS               = 173
+	FI_DEV_PCIE_COUNT_NON_FATAL_ERROR                  = 179
+	FI_DEV_PCIE_COUNT_FATAL_ERROR                      = 180
 	FI_DEV_POWER_AVERAGE                               = 185
 	FI_DEV_POWER_INSTANT                               = 186
+	FI_DEV_POWER_MIN_LIMIT                             = 187
+	FI_DEV_POWER_MAX_LIMIT                             = 188
+	FI_DEV_POWER_DEFAULT_LIMIT                         = 189
+	FI_DEV_POWER_CURRENT_LIMIT                         = 190
+	FI_DEV_POWER_REQUESTED_LIMIT                       = 192
+	FI_DEV_TEMPERATURE_SHUTDOWN_TLIMIT                 = 193
+	FI_DEV_TEMPERATURE_SLOWDOWN_TLIMIT                 = 194
+	FI_DEV_TEMPERATURE_MEM_MAX_TLIMIT                  = 195
+	FI_DEV_TEMPERATURE_GPU_MAX_TLIMIT                  = 196
+	FI_DEV_NVLINK_COUNT_LINK_RECOVERY_FAILED_EVENTS    = 214
+	FI_DEV_NVLINK_COUNT_LINK_RECOVERY_EVENTS           = 215
 	FI_DEV_RESET_STATUS                                = 226
 	FI_DEV_DRAIN_AND_RESET_STATUS                      = 227
 	FI_DEV_GET_GPU_RECOVERY_ACTION                     = 230
@@ -216,6 +241,22 @@ type C2cModeInfo_v1 struct {
 
 type BBXTimeData_v1 struct {
 	TimeRun uint32
+}
+
+type DevicePowerMizerModes_v1 struct {
+	CurrentMode              uint32
+	Mode                     uint32
+	SupportedPowerMizerModes uint32
+}
+
+type RepairStatus struct {
+	Version               uint32
+	BChannelRepairPending uint32
+	BTpcRepairPending     uint32
+}
+
+type UnrepairableMemoryStatus_v1 struct {
+	BUnrepairableMemory uint32
 }
 
 type BAR1Memory struct {
@@ -453,6 +494,9 @@ const (
 	_ = uint(8-unsafe.Sizeof(DeviceAddressingMode{})) + uint(unsafe.Sizeof(DeviceAddressingMode{})-8)
 	_ = uint(4-unsafe.Sizeof(C2cModeInfo_v1{})) + uint(unsafe.Sizeof(C2cModeInfo_v1{})-4)
 	_ = uint(4-unsafe.Sizeof(BBXTimeData_v1{})) + uint(unsafe.Sizeof(BBXTimeData_v1{})-4)
+	_ = uint(12-unsafe.Sizeof(DevicePowerMizerModes_v1{})) + uint(unsafe.Sizeof(DevicePowerMizerModes_v1{})-12)
+	_ = uint(12-unsafe.Sizeof(RepairStatus{})) + uint(unsafe.Sizeof(RepairStatus{})-12)
+	_ = uint(4-unsafe.Sizeof(UnrepairableMemoryStatus_v1{})) + uint(unsafe.Sizeof(UnrepairableMemoryStatus_v1{})-4)
 	_ = uint(24-unsafe.Sizeof(BAR1Memory{})) + uint(unsafe.Sizeof(BAR1Memory{})-24)
 	_ = uint(12-unsafe.Sizeof(fanSpeedInfoV1{})) + uint(unsafe.Sizeof(fanSpeedInfoV1{})-12)
 	_ = uint(12-unsafe.Sizeof(temperatureV1{})) + uint(unsafe.Sizeof(temperatureV1{})-12)
@@ -563,6 +607,7 @@ type Device interface {
 	GetEncoderStats() (int, uint32, uint32, Return)
 	GetEncoderUtilization() (uint32, uint32, Return)
 	GetEnforcedPowerLimit() (uint32, Return)
+	GetFanControlPolicy_v2(fan int) (FanControlPolicy, Return)
 	GetFanSpeed() (uint32, Return)
 	GetFanSpeed_v2(fan int) (uint32, Return)
 	GetFieldValues(values []FieldValue) Return
@@ -605,11 +650,13 @@ type Device interface {
 	GetPowerManagementLimit() (uint32, Return)
 	GetPowerManagementLimitConstraints() (uint32, uint32, Return)
 	GetPowerManagementMode() (EnableState, Return)
+	GetPowerMizerMode_v1() (DevicePowerMizerModes_v1, Return)
 	GetPowerSource() (PowerSource, Return)
 	GetPowerUsage() (uint32, Return)
 	GetProcessUtilization(lastSeenTimestamp uint64) ([]ProcessUtilizationSample, Return)
 	GetRemappedRows() (int, int, bool, bool, Return)
 	GetRemappedRows_v2() (RemappedRowsInfo_v2, Return)
+	GetRepairStatus() (RepairStatus, Return)
 	GetRetiredPages(cause PageRetirementCause) ([]uint64, Return)
 	GetRetiredPagesPendingStatus() (EnableState, Return)
 	GetRowRemapperHistogram() (RowRemapperHistogramValues, Return)
@@ -622,9 +669,12 @@ type Device interface {
 	GetTemperatureThreshold(thresholdType TemperatureThresholds) (uint32, Return)
 	GetTotalEccErrors(errorType MemoryErrorType, counterType EccCounterType) (uint64, Return)
 	GetTotalEnergyConsumption() (uint64, Return)
+	GetUnrepairableMemoryFlag_v1() (UnrepairableMemoryStatus_v1, Return)
 	GetUtilizationRates() (Utilization, Return)
 	GetUUID() (string, Return)
 	GetVbiosVersion() (string, Return)
+	GetVirtualizationMode() (GpuVirtualizationMode, Return)
+	GetNvLinkState(link int) (EnableState, Return)
 	GpmQueryDeviceSupport() (GpmSupport, Return)
 	RegisterEvents(eventTypes uint64, set EventSet) Return
 }
@@ -1992,6 +2042,92 @@ func (d winDevice) RegisterEvents(eventTypes uint64, set EventSet) Return {
 	r1, _, _ := proc.Call(d.handle, uintptr(eventTypes), evtSet.handle)
 
 	return toReturn(r1)
+}
+
+func (d winDevice) GetFanControlPolicy_v2(fan int) (FanControlPolicy, Return) {
+	if fan < 0 {
+		return 0, ERROR_INVALID_ARGUMENT
+	}
+
+	proc, ok := findProc("nvmlDeviceGetFanControlPolicy_v2")
+	if !ok {
+		return 0, ERROR_FUNCTION_NOT_FOUND
+	}
+
+	var policy FanControlPolicy
+
+	r1, _, _ := proc.Call(d.handle, uintptr(fan), uintptr(unsafe.Pointer(&policy)))
+
+	return policy, toReturn(r1)
+}
+
+func (d winDevice) GetPowerMizerMode_v1() (DevicePowerMizerModes_v1, Return) {
+	proc, ok := findProc("nvmlDeviceGetPowerMizerMode_v1")
+	if !ok {
+		return DevicePowerMizerModes_v1{}, ERROR_FUNCTION_NOT_FOUND
+	}
+
+	var modes DevicePowerMizerModes_v1
+
+	r1, _, _ := proc.Call(d.handle, uintptr(unsafe.Pointer(&modes)))
+
+	return modes, toReturn(r1)
+}
+
+func (d winDevice) GetRepairStatus() (RepairStatus, Return) {
+	proc, ok := findProc("nvmlDeviceGetRepairStatus")
+	if !ok {
+		return RepairStatus{}, ERROR_FUNCTION_NOT_FOUND
+	}
+
+	status := RepairStatus{Version: structVersion[RepairStatus](1)}
+
+	r1, _, _ := proc.Call(d.handle, uintptr(unsafe.Pointer(&status)))
+
+	return status, toReturn(r1)
+}
+
+func (d winDevice) GetUnrepairableMemoryFlag_v1() (UnrepairableMemoryStatus_v1, Return) {
+	proc, ok := findProc("nvmlDeviceGetUnrepairableMemoryFlag_v1")
+	if !ok {
+		return UnrepairableMemoryStatus_v1{}, ERROR_FUNCTION_NOT_FOUND
+	}
+
+	var status UnrepairableMemoryStatus_v1
+
+	r1, _, _ := proc.Call(d.handle, uintptr(unsafe.Pointer(&status)))
+
+	return status, toReturn(r1)
+}
+
+func (d winDevice) GetVirtualizationMode() (GpuVirtualizationMode, Return) {
+	proc, ok := findProc("nvmlDeviceGetVirtualizationMode")
+	if !ok {
+		return 0, ERROR_FUNCTION_NOT_FOUND
+	}
+
+	var mode GpuVirtualizationMode
+
+	r1, _, _ := proc.Call(d.handle, uintptr(unsafe.Pointer(&mode)))
+
+	return mode, toReturn(r1)
+}
+
+func (d winDevice) GetNvLinkState(link int) (EnableState, Return) {
+	if link < 0 {
+		return 0, ERROR_INVALID_ARGUMENT
+	}
+
+	proc, ok := findProc("nvmlDeviceGetNvLinkState")
+	if !ok {
+		return 0, ERROR_FUNCTION_NOT_FOUND
+	}
+
+	var state EnableState
+
+	r1, _, _ := proc.Call(d.handle, uintptr(link), uintptr(unsafe.Pointer(&state)))
+
+	return state, toReturn(r1)
 }
 
 func (d winDevice) getUint32(symbol string) (uint32, Return) {

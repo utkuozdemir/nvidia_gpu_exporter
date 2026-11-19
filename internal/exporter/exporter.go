@@ -129,8 +129,28 @@ type Features struct {
 	BAR1 bool
 	// TemperatureThresholds enables the per-GPU thermal threshold gauges.
 	TemperatureThresholds bool
+	// TemperatureTLimitThresholds enables the per-GPU signed T.Limit thermal
+	// threshold gauges (Ada and newer).
+	TemperatureTLimitThresholds bool
 	// PowerSource enables the per-GPU power source gauge.
 	PowerSource bool
+	// PCIeErrors enables the per-GPU PCIe AER and L0-to-recovery counters.
+	PCIeErrors bool
+	// C2CLinks enables the per-GPU C2C link count gauges.
+	C2CLinks bool
+	// PerfPolicyViolations enables the per-GPU performance-policy throttle
+	// violation duration counters.
+	PerfPolicyViolations bool
+	// RepairStatus enables the per-GPU hardware repair-pending and
+	// unrepairable memory status gauges.
+	RepairStatus bool
+	// VirtualizationMode enables the per-GPU virtualization mode gauge.
+	VirtualizationMode bool
+	// PowerMizerMode enables the per-GPU PowerMizer mode gauge.
+	PowerMizerMode bool
+	// PCIeRuntimePM enables the per-GPU Linux sysfs PCIe runtime PM residency
+	// counters.
+	PCIeRuntimePM bool
 }
 
 // XIDSource serves the cumulative XID error counts and watcher status. It is
@@ -165,13 +185,22 @@ type GPUExporter struct {
 	pcieRolloversDesc     *prometheus.Desc
 	nvlinkTxDesc          *prometheus.Desc
 	nvlinkRxDesc          *prometheus.Desc
+	nvlinkLinkDescs       *nvlinkLinkDescs
 	gpmDescs              *gpmDescs
 	energyDesc            *prometheus.Desc
 	migDescs              *migDescs
 	fanDescs              *fanDescs
 	bar1Descs             *bar1Descs
 	tempThresholdDescs    *tempThresholdDescs
+	tlimitThresholdDescs  *tlimitThresholdDescs
 	powerSourceDesc       *prometheus.Desc
+	pcieErrorDescs        *pcieErrorDescs
+	c2cLinkDescs          *c2cLinkDescs
+	perfPolicyDescs       *perfPolicyDescs
+	repairDescs           *repairDescs
+	virtModeDesc          *prometheus.Desc
+	powerMizerDesc        *prometheus.Desc
+	pcieRuntimePMDescs    *pcieRuntimePMDescs
 	appMIGLabels          bool
 	appIdentityLabels     bool
 	xids                  XIDSource
@@ -220,6 +249,12 @@ type gpmDescs struct {
 	smOccupancy      *prometheus.Desc
 	tensorActivity   *prometheus.Desc
 	dramBwUtil       *prometheus.Desc
+	integerActivity  *prometheus.Desc
+	fp64Activity     *prometheus.Desc
+	fp32Activity     *prometheus.Desc
+	fp16Activity     *prometheus.Desc
+	c2cTx            *prometheus.Desc
+	c2cRx            *prometheus.Desc
 }
 
 func (g *gpmDescs) all() []*prometheus.Desc {
@@ -230,6 +265,8 @@ func (g *gpmDescs) all() []*prometheus.Desc {
 	return []*prometheus.Desc{
 		g.graphicsActivity, g.smActivity, g.smOccupancy,
 		g.tensorActivity, g.dramBwUtil,
+		g.integerActivity, g.fp64Activity, g.fp32Activity, g.fp16Activity,
+		g.c2cTx, g.c2cRx,
 	}
 }
 
@@ -246,6 +283,10 @@ type migDescs struct {
 	smOccupancy      *prometheus.Desc
 	tensorActivity   *prometheus.Desc
 	dramBwUtil       *prometheus.Desc
+	integerActivity  *prometheus.Desc
+	fp64Activity     *prometheus.Desc
+	fp32Activity     *prometheus.Desc
+	fp16Activity     *prometheus.Desc
 	pcieTx           *prometheus.Desc
 	pcieRx           *prometheus.Desc
 }
@@ -259,14 +300,16 @@ func (m *migDescs) all() []*prometheus.Desc {
 	return []*prometheus.Desc{
 		m.info, m.memTotal, m.memUsed, m.memFree, m.memReserved,
 		m.graphicsActivity, m.smActivity, m.smOccupancy, m.tensorActivity,
-		m.dramBwUtil, m.pcieTx, m.pcieRx,
+		m.dramBwUtil, m.integerActivity, m.fp64Activity, m.fp32Activity, m.fp16Activity,
+		m.pcieTx, m.pcieRx,
 	}
 }
 
 type fanDescs struct {
-	currentRatio *prometheus.Desc
-	targetRatio  *prometheus.Desc
-	rpm          *prometheus.Desc
+	currentRatio  *prometheus.Desc
+	targetRatio   *prometheus.Desc
+	rpm           *prometheus.Desc
+	controlPolicy *prometheus.Desc
 }
 
 func (f *fanDescs) all() []*prometheus.Desc {
@@ -274,7 +317,7 @@ func (f *fanDescs) all() []*prometheus.Desc {
 		return nil
 	}
 
-	return []*prometheus.Desc{f.currentRatio, f.targetRatio, f.rpm}
+	return []*prometheus.Desc{f.currentRatio, f.targetRatio, f.rpm, f.controlPolicy}
 }
 
 type bar1Descs struct {
@@ -381,10 +424,19 @@ func buildGPUInfoLabels(infoFields []nvidiasmi.InfoField) []string {
 }
 
 func addHardwareExtrasDescs(exp *GPUExporter, prefix string, features Features) {
+	exp.nvlinkLinkDescs = newNVLinkLinkDescs(prefix, features.NVLink)
 	exp.fanDescs = newFanDescs(prefix, features.Fans)
 	exp.bar1Descs = newBAR1Descs(prefix, features.BAR1)
 	exp.tempThresholdDescs = newTempThresholdDescs(prefix, features.TemperatureThresholds)
+	exp.tlimitThresholdDescs = newTLimitThresholdDescs(prefix, features.TemperatureTLimitThresholds)
 	exp.powerSourceDesc = newPowerSourceDesc(prefix, features.PowerSource)
+	exp.pcieErrorDescs = newPCIeErrorDescs(prefix, features.PCIeErrors)
+	exp.c2cLinkDescs = newC2CLinkDescs(prefix, features.C2CLinks)
+	exp.perfPolicyDescs = newPerfPolicyDescs(prefix, features.PerfPolicyViolations)
+	exp.repairDescs = newRepairDescs(prefix, features.RepairStatus)
+	exp.virtModeDesc = newVirtualizationModeDesc(prefix, features.VirtualizationMode)
+	exp.powerMizerDesc = newPowerMizerModeDesc(prefix, features.PowerMizerMode)
+	exp.pcieRuntimePMDescs = newPCIeRuntimePMDescs(prefix, features.PCIeRuntimePM)
 }
 
 // addXIDDescs builds the XID error counter descriptors, left nil when the
@@ -591,6 +643,18 @@ func newGPMDescs(prefix string, enabled bool) *gpmDescs {
 			"Fraction of time the GPU's tensor pipes were active."),
 		dramBwUtil: activityDesc("dram_bandwidth_utilization_ratio",
 			"Fraction of peak memory bandwidth used by the GPU."),
+		integerActivity: activityDesc("integer_activity_ratio",
+			"Fraction of time the GPU's integer pipes were active."),
+		fp64Activity: activityDesc("fp64_activity_ratio",
+			"Fraction of time the GPU's FP64 pipes were active."),
+		fp32Activity: activityDesc("fp32_activity_ratio",
+			"Fraction of time the GPU's FP32 pipes were active."),
+		fp16Activity: activityDesc("fp16_activity_ratio",
+			"Fraction of time the GPU's FP16 pipes were active."),
+		c2cTx: activityDesc("c2c_throughput_tx_bytes_per_second",
+			"Chip-to-Chip (C2C) traffic transmitted by the GPU in bytes per second."),
+		c2cRx: activityDesc("c2c_throughput_rx_bytes_per_second",
+			"Chip-to-Chip (C2C) traffic received by the GPU in bytes per second."),
 	}
 }
 
@@ -660,6 +724,14 @@ func newMIGDescs(prefix string, enabled bool) *migDescs {
 			"Fraction of time the GPU instance's tensor pipes were active."),
 		dramBwUtil: activityDesc("mig_dram_bandwidth_utilization_ratio",
 			"Fraction of peak memory bandwidth used by the GPU instance."),
+		integerActivity: activityDesc("mig_integer_activity_ratio",
+			"Fraction of time the GPU instance's integer pipes were active."),
+		fp64Activity: activityDesc("mig_fp64_activity_ratio",
+			"Fraction of time the GPU instance's FP64 pipes were active."),
+		fp32Activity: activityDesc("mig_fp32_activity_ratio",
+			"Fraction of time the GPU instance's FP32 pipes were active."),
+		fp16Activity: activityDesc("mig_fp16_activity_ratio",
+			"Fraction of time the GPU instance's FP16 pipes were active."),
 		pcieTx: activityDesc("mig_pcie_throughput_tx_bytes_per_second",
 			"PCIe traffic transmitted by the GPU instance."),
 		pcieRx: activityDesc("mig_pcie_throughput_rx_bytes_per_second",
@@ -690,6 +762,11 @@ func newFanDescs(prefix string, enabled bool) *fanDescs {
 			prometheus.BuildFQName(prefix, "", "fan_speed_rpm"),
 			"Intended operating speed of a GPU fan in revolutions per minute, "+
 				"as reported by the fan controller.",
+			fanLabels,
+			nil),
+		controlPolicy: prometheus.NewDesc(
+			prometheus.BuildFQName(prefix, "", "fan_control_policy"),
+			"Control policy of a GPU fan (0 = temperature-controlled automatic, 1 = manual).",
 			fanLabels,
 			nil),
 	}
@@ -827,6 +904,8 @@ func (e *GPUExporter) describeExtras(descCh chan<- *prometheus.Desc) {
 		e.nvlinkTxDesc, e.nvlinkRxDesc,
 		e.energyDesc,
 		e.powerSourceDesc,
+		e.virtModeDesc,
+		e.powerMizerDesc,
 		e.xidCountDesc, e.xidTimestampDesc,
 		e.migXIDCountDesc, e.migXIDTimestampDesc,
 		e.xidWatcherDesc,
@@ -839,11 +918,18 @@ func (e *GPUExporter) describeExtras(descCh chan<- *prometheus.Desc) {
 	}
 
 	for _, group := range [][]*prometheus.Desc{
+		e.nvlinkLinkDescs.all(),
 		e.gpmDescs.all(),
 		e.migDescs.all(),
 		e.fanDescs.all(),
 		e.bar1Descs.all(),
 		e.tempThresholdDescs.all(),
+		e.tlimitThresholdDescs.all(),
+		e.pcieErrorDescs.all(),
+		e.c2cLinkDescs.all(),
+		e.perfPolicyDescs.all(),
+		e.repairDescs.all(),
+		e.pcieRuntimePMDescs.all(),
 	} {
 		for _, desc := range group {
 			e.sendDesc(descCh, desc)
@@ -932,19 +1018,7 @@ func (e *GPUExporter) renderExtras(metricCh chan<- prometheus.Metric, snapshot c
 		}
 	}
 
-	if e.nvlinkTxDesc != nil {
-		for _, sample := range snapshot.Extras.NVLink {
-			if sample.TXBytes != nil {
-				e.sendConstWithUUID(metricCh, e.nvlinkTxDesc, prometheus.CounterValue,
-					float64(*sample.TXBytes), sample.UUID)
-			}
-
-			if sample.RXBytes != nil {
-				e.sendConstWithUUID(metricCh, e.nvlinkRxDesc, prometheus.CounterValue,
-					float64(*sample.RXBytes), sample.UUID)
-			}
-		}
-	}
+	e.renderNVLinkExtras(metricCh, snapshot.Extras.NVLink)
 
 	if e.gpmDescs != nil {
 		for _, util := range snapshot.Extras.GPM {
@@ -970,25 +1044,11 @@ func (e *GPUExporter) renderExtras(metricCh chan<- prometheus.Metric, snapshot c
 	}
 
 	e.renderHardwareExtras(metricCh, snapshot.Extras)
+	e.renderExtendedExtras(metricCh, snapshot.Extras)
 }
 
-//nolint:cyclop // flat per-family rendering
 func (e *GPUExporter) renderHardwareExtras(metricCh chan<- prometheus.Metric, extras collect.Extras) {
-	if e.fanDescs != nil {
-		for _, fan := range extras.Fans {
-			if fan.CurrentRatio != nil {
-				e.sendLabeledGauge(metricCh, e.fanDescs.currentRatio, *fan.CurrentRatio, fan.UUID, fan.Fan)
-			}
-
-			if fan.TargetRatio != nil {
-				e.sendLabeledGauge(metricCh, e.fanDescs.targetRatio, *fan.TargetRatio, fan.UUID, fan.Fan)
-			}
-
-			if fan.RPM != nil {
-				e.sendLabeledGauge(metricCh, e.fanDescs.rpm, float64(*fan.RPM), fan.UUID, fan.Fan)
-			}
-		}
-	}
+	e.renderFanExtras(metricCh, extras.Fans)
 
 	if e.bar1Descs != nil {
 		for _, mem := range extras.BAR1 {
@@ -1034,6 +1094,12 @@ func (e *GPUExporter) renderGPUUtilization(metricCh chan<- prometheus.Metric, ut
 		{e.gpmDescs.smOccupancy, util.SMOccupancyRatio},
 		{e.gpmDescs.tensorActivity, util.TensorActivityRatio},
 		{e.gpmDescs.dramBwUtil, util.DRAMBandwidthUtilizationRatio},
+		{e.gpmDescs.integerActivity, util.IntegerActivityRatio},
+		{e.gpmDescs.fp64Activity, util.FP64ActivityRatio},
+		{e.gpmDescs.fp32Activity, util.FP32ActivityRatio},
+		{e.gpmDescs.fp16Activity, util.FP16ActivityRatio},
+		{e.gpmDescs.c2cTx, util.C2CTXBytesPerSecond},
+		{e.gpmDescs.c2cRx, util.C2CRXBytesPerSecond},
 	} {
 		if entry.value == nil {
 			continue
@@ -1088,6 +1154,10 @@ func (e *GPUExporter) renderMIGInstance(
 		{e.migDescs.smOccupancy, util.SMOccupancyRatio},
 		{e.migDescs.tensorActivity, util.TensorActivityRatio},
 		{e.migDescs.dramBwUtil, util.DRAMBandwidthUtilizationRatio},
+		{e.migDescs.integerActivity, util.IntegerActivityRatio},
+		{e.migDescs.fp64Activity, util.FP64ActivityRatio},
+		{e.migDescs.fp32Activity, util.FP32ActivityRatio},
+		{e.migDescs.fp16Activity, util.FP16ActivityRatio},
 		{e.migDescs.pcieTx, util.PCIeTXBytesPerSecond},
 		{e.migDescs.pcieRx, util.PCIeRXBytesPerSecond},
 	} {
@@ -1426,21 +1496,34 @@ var fixedMetricNames = []string{
 	// nvml extras
 	"pcie_throughput_tx_bytes_per_second", "pcie_throughput_rx_bytes_per_second",
 	"pcie_replays_total", "pcie_replay_rollovers_total",
+	"pcie_errors_total", "pcie_l0_to_recovery_total",
 	"nvlink_tx_bytes_total", "nvlink_rx_bytes_total",
+	"nvlink_links", "nvlink_active_links",
+	"nvlink_recovery_events_total", "nvlink_recovery_failed_events_total",
+	"c2c_links", "c2c_active_links",
+	"perf_policy_violation_seconds_total", "perf_policy_base_clocks_violation_seconds_total",
 	"graphics_activity_ratio", "sm_activity_ratio", "sm_occupancy_ratio",
 	"tensor_activity_ratio", "dram_bandwidth_utilization_ratio",
+	"integer_activity_ratio", "fp64_activity_ratio", "fp32_activity_ratio", "fp16_activity_ratio",
+	"c2c_throughput_tx_bytes_per_second", "c2c_throughput_rx_bytes_per_second",
 	"energy_joules_total",
 	"mig_info", "mig_memory_total_bytes", "mig_memory_used_bytes",
 	"mig_memory_free_bytes", "mig_memory_reserved_bytes",
 	"mig_graphics_activity_ratio", "mig_sm_activity_ratio", "mig_sm_occupancy_ratio",
 	"mig_tensor_activity_ratio", "mig_dram_bandwidth_utilization_ratio",
+	"mig_integer_activity_ratio", "mig_fp64_activity_ratio", "mig_fp32_activity_ratio", "mig_fp16_activity_ratio",
 	"mig_pcie_throughput_tx_bytes_per_second", "mig_pcie_throughput_rx_bytes_per_second",
-	"fan_speed_current_ratio", "fan_speed_target_ratio", "fan_speed_rpm",
+	"fan_speed_current_ratio", "fan_speed_target_ratio", "fan_speed_rpm", "fan_control_policy",
 	"bar1_memory_total_bytes", "bar1_memory_used_bytes", "bar1_memory_free_bytes",
 	"temperature_threshold_shutdown_celsius", "temperature_threshold_slowdown_celsius",
 	"temperature_threshold_memory_max_celsius", "temperature_threshold_gpu_max_celsius",
 	"temperature_threshold_acoustic_celsius",
+	"temperature_tlimit_threshold_shutdown_celsius", "temperature_tlimit_threshold_slowdown_celsius",
+	"temperature_tlimit_threshold_memory_max_celsius", "temperature_tlimit_threshold_gpu_max_celsius",
 	"power_source",
+	"repair_pending", "unrepairable_memory",
+	"virtualization_mode", "power_mizer_mode",
+	"pcie_runtime_suspended_seconds_total", "pcie_runtime_active_seconds_total",
 	// XID
 	"xid_errors_total", "xid_last_timestamp_seconds",
 	"mig_xid_errors_total", "mig_xid_last_timestamp_seconds",

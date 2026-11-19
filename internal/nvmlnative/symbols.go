@@ -681,4 +681,34 @@ var nvmlSymbolRequirements = []symbolRequirement{
 		anyOf:  []string{"nvmlDeviceGetProcessUtilization"},
 		serves: "per-process utilization metrics",
 	},
+	{
+		goCall: "GetFanControlPolicy_v2",
+		anyOf:  []string{"nvmlDeviceGetFanControlPolicy_v2"},
+		serves: "fan_control_policy",
+	},
+	{
+		goCall: "GetPowerMizerMode_v1",
+		anyOf:  []string{"nvmlDeviceGetPowerMizerMode_v1"},
+		serves: "power_mizer_mode",
+	},
+	{
+		goCall: "GetRepairStatus",
+		anyOf:  []string{"nvmlDeviceGetRepairStatus"},
+		serves: "repair_pending",
+	},
+	{
+		goCall: "GetUnrepairableMemoryFlag_v1",
+		anyOf:  []string{"nvmlDeviceGetUnrepairableMemoryFlag_v1"},
+		serves: "unrepairable_memory",
+	},
+	{
+		goCall: "GetVirtualizationMode",
+		anyOf:  []string{"nvmlDeviceGetVirtualizationMode"},
+		serves: "virtualization_mode",
+	},
+	{
+		goCall: "GetNvLinkState",
+		anyOf:  []string{"nvmlDeviceGetNvLinkState"},
+		serves: "nvlink_active_links",
+	},
 }

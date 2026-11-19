@@ -34,9 +34,34 @@ type CollectOptions struct {
 	TemperatureThresholds bool
 	// PowerSource enables the per-GPU power source gauge.
 	PowerSource bool
+	// PCIeErrors enables per-GPU PCIe AER and L0-to-recovery counters.
+	PCIeErrors bool
+	// C2CLinks enables per-GPU C2C total and active link count gauges.
+	C2CLinks bool
+	// PerfPolicyViolations enables per-GPU performance-policy throttle
+	// violation duration counters.
+	PerfPolicyViolations bool
+	// TemperatureTLimitThresholds enables per-GPU signed T.Limit thermal
+	// thresholds (Ada and newer).
+	TemperatureTLimitThresholds bool
+	// RepairStatus enables per-GPU hardware repair-pending and unrepairable
+	// memory status gauges.
+	RepairStatus bool
+	// VirtualizationMode enables the per-GPU virtualization mode gauge.
+	VirtualizationMode bool
+	// PowerMizerMode enables the per-GPU PowerMizer mode gauge.
+	PowerMizerMode bool
+	// PCIeRuntimePM enables per-GPU Linux sysfs PCIe runtime PM residency
+	// counters.
+	PCIeRuntimePM bool
 }
 
+//nolint:cyclop // flat disjunction over optional device extras
 func (o CollectOptions) hasDeviceExtras() bool {
-	return o.Energy || o.PCIeThroughput || o.PCIeReplays || o.NVLink ||
-		o.GPM || o.MIG || o.Fans || o.BAR1 || o.TemperatureThresholds || o.PowerSource
+	return o.Energy || o.PCIeThroughput || o.PCIeReplays || o.PCIeErrors ||
+		o.NVLink || o.C2CLinks || o.PerfPolicyViolations ||
+		o.GPM || o.MIG || o.Fans || o.BAR1 ||
+		o.TemperatureThresholds || o.TemperatureTLimitThresholds ||
+		o.PowerSource || o.RepairStatus || o.VirtualizationMode ||
+		o.PowerMizerMode || o.PCIeRuntimePM
 }

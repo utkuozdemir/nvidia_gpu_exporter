@@ -414,4 +414,5 @@ Differences from the real `nvml` backend worth knowing when developing dashboard
 
 - PCIe throughput is always on for every GPU in `demo` mode, whereas on `nvml` it is exported by default only on non-MIG GPUs with GPM and requires `--collect.pcie-throughput` elsewhere.
 - Per-process utilization is synthesized on every GPU in `demo` mode so a single card can exercise both MIG and process panels at once, whereas `nvml` omits `*_app_*_utilization_ratio` on MIG-enabled GPUs.
+- C2C families (`nvidia_smi_c2c_links`, `nvidia_smi_c2c_active_links`, `nvidia_smi_c2c_throughput_*`) and signed T.Limit thresholds (`nvidia_smi_temperature_tlimit_threshold_*`) are not synthesized in `demo` mode because the default demo topology simulates PCIe GPUs with absolute thermal thresholds.
 - For deterministic values across runs, set `extras.seed` and `fluctuate: false`.

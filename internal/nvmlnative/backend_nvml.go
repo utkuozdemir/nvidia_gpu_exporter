@@ -105,6 +105,9 @@ type Backend struct {
 	// devValues is a per-cycle scratch map reused across collections under mu
 	// so hot-path scrapes do not re-allocate the per-device value map every cycle.
 	devValues map[nvidiasmi.QField]string
+	// pciBusIDCache holds static per-UUID PCI bus IDs for Linux sysfs runtime
+	// PM reads during the current NVML generation, cleared in markLost().
+	pciBusIDCache map[string]string
 	// avail is the guarded-export snapshot for the current NVML generation.
 	// It is replaced wholesale on re-initialization rather than mutated, and
 	// read atomically because the XID watcher reads it without holding mu.
@@ -201,6 +204,7 @@ func (b *Backend) Close() {
 	}
 
 	b.freeGPMSamples()
+	clear(b.pciBusIDCache)
 
 	b.initialized = false
 	b.genLive.Store(false)
@@ -475,6 +479,7 @@ func (b *Backend) markLost() {
 	}
 
 	b.freeGPMSamples()
+	clear(b.pciBusIDCache)
 
 	b.initialized = false
 	b.genLive.Store(false)
@@ -584,6 +589,7 @@ type plannedField struct {
 type fieldValueEntry struct {
 	field    nvidiasmi.QField
 	id       uint32
+	scopeID  uint32
 	bare     bool
 	optional bool
 	format   func(v float64) string
@@ -1314,6 +1320,12 @@ func formatFieldValueNsToUs(v float64) string {
 	return strconv.FormatFloat(v/1000.0, 'f', -1, 64) + " us"
 }
 
+const powerScopeModule uint32 = 1
+
+func formatFieldValueMwToW(v float64) string {
+	return strconv.FormatFloat(v/1000.0, 'f', -1, 64) + " W"
+}
+
 // allFieldValueEntries is the read-only catalog of fields served by
 // nvmlDeviceGetFieldValues. newPlan filters this table once per QueryFunc into
 // an immutable slice; callers must never mutate it in place.
@@ -1321,63 +1333,87 @@ func formatFieldValueNsToUs(v float64) string {
 //nolint:gochecknoglobals // read-only lookup table
 var allFieldValueEntries = []fieldValueEntry{
 	{
-		"power.draw.average", nvml.FI_DEV_POWER_AVERAGE, false, false,
-		func(v float64) string { return strconv.FormatFloat(v/1000.0, 'f', -1, 64) + " W" },
+		field: "power.draw.average", id: nvml.FI_DEV_POWER_AVERAGE,
+		format: formatFieldValueMwToW,
 	},
 	{
-		"power.draw.instant", nvml.FI_DEV_POWER_INSTANT, false, false,
-		func(v float64) string { return strconv.FormatFloat(v/1000.0, 'f', -1, 64) + " W" },
+		field: "power.draw.instant", id: nvml.FI_DEV_POWER_INSTANT,
+		format: formatFieldValueMwToW,
 	},
 	{
-		gpuTemperatureField, gpuTempFieldID, false, true,
-		func(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) },
+		field: "module.power.draw.average", id: nvml.FI_DEV_POWER_AVERAGE, scopeID: powerScopeModule,
+		format: formatFieldValueMwToW,
 	},
 	{
-		"temperature.memory", nvml.FI_DEV_MEMORY_TEMP, true, false,
-		func(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) },
+		field: "module.power.draw.instant", id: nvml.FI_DEV_POWER_INSTANT, scopeID: powerScopeModule,
+		format: formatFieldValueMwToW,
 	},
 	{
-		"clocks_event_reasons_counters.sw_power_cap", nvml.FI_DEV_CLOCKS_EVENT_REASON_SW_POWER_CAP, false, false,
-		formatFieldValueNsToUs,
+		field: "module.power.limit", id: nvml.FI_DEV_POWER_REQUESTED_LIMIT, scopeID: powerScopeModule,
+		format: formatFieldValueMwToW,
 	},
 	{
-		"clocks_event_reasons_counters.sync_boost", nvml.FI_DEV_CLOCKS_EVENT_REASON_SYNC_BOOST, false, false,
-		formatFieldValueNsToUs,
+		field: "module.enforced.power.limit", id: nvml.FI_DEV_POWER_CURRENT_LIMIT, scopeID: powerScopeModule,
+		format: formatFieldValueMwToW,
 	},
 	{
-		"clocks_event_reasons_counters.sw_thermal_slowdown",
-		nvml.FI_DEV_CLOCKS_EVENT_REASON_SW_THERM_SLOWDOWN,
-		false,
-		false,
-		formatFieldValueNsToUs,
+		field: "module.power.default_limit", id: nvml.FI_DEV_POWER_DEFAULT_LIMIT, scopeID: powerScopeModule,
+		format: formatFieldValueMwToW,
 	},
 	{
-		"clocks_event_reasons_counters.hw_thermal_slowdown",
-		nvml.FI_DEV_CLOCKS_EVENT_REASON_HW_THERM_SLOWDOWN,
-		false,
-		false,
-		formatFieldValueNsToUs,
+		field: "module.power.min_limit", id: nvml.FI_DEV_POWER_MIN_LIMIT, scopeID: powerScopeModule,
+		format: formatFieldValueMwToW,
 	},
 	{
-		"clocks_event_reasons_counters.hw_power_brake_slowdown",
-		nvml.FI_DEV_CLOCKS_EVENT_REASON_HW_POWER_BRAKE_SLOWDOWN, false, false,
-		formatFieldValueNsToUs,
+		field: "module.power.max_limit", id: nvml.FI_DEV_POWER_MAX_LIMIT, scopeID: powerScopeModule,
+		format: formatFieldValueMwToW,
 	},
 	{
-		"reset_status.reset_required", nvml.FI_DEV_RESET_STATUS, false, false,
-		func(v float64) string { return yesNo(v != 0) },
+		field: gpuTemperatureField, id: gpuTempFieldID, optional: true,
+		format: func(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) },
 	},
 	{
-		"reset_status.drain_and_reset_recommended", nvml.FI_DEV_DRAIN_AND_RESET_STATUS, false, false,
-		func(v float64) string { return yesNo(v != 0) },
+		field: "temperature.memory", id: nvml.FI_DEV_MEMORY_TEMP, bare: true,
+		format: func(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) },
 	},
 	{
-		"gpu_recovery_action", nvml.FI_DEV_GET_GPU_RECOVERY_ACTION, false, false,
-		func(v float64) string { return recoveryActionStr(uint64(v)) },
+		field: "clocks_event_reasons_counters.sw_power_cap", id: nvml.FI_DEV_CLOCKS_EVENT_REASON_SW_POWER_CAP,
+		format: formatFieldValueNsToUs,
 	},
 	{
-		"edpp_multiplier", edppMultiplierFieldID, false, false,
-		func(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) + " %" },
+		field: "clocks_event_reasons_counters.sync_boost", id: nvml.FI_DEV_CLOCKS_EVENT_REASON_SYNC_BOOST,
+		format: formatFieldValueNsToUs,
+	},
+	{
+		field:  "clocks_event_reasons_counters.sw_thermal_slowdown",
+		id:     nvml.FI_DEV_CLOCKS_EVENT_REASON_SW_THERM_SLOWDOWN,
+		format: formatFieldValueNsToUs,
+	},
+	{
+		field:  "clocks_event_reasons_counters.hw_thermal_slowdown",
+		id:     nvml.FI_DEV_CLOCKS_EVENT_REASON_HW_THERM_SLOWDOWN,
+		format: formatFieldValueNsToUs,
+	},
+	{
+		field:  "clocks_event_reasons_counters.hw_power_brake_slowdown",
+		id:     nvml.FI_DEV_CLOCKS_EVENT_REASON_HW_POWER_BRAKE_SLOWDOWN,
+		format: formatFieldValueNsToUs,
+	},
+	{
+		field: "reset_status.reset_required", id: nvml.FI_DEV_RESET_STATUS,
+		format: func(v float64) string { return yesNo(v != 0) },
+	},
+	{
+		field: "reset_status.drain_and_reset_recommended", id: nvml.FI_DEV_DRAIN_AND_RESET_STATUS,
+		format: func(v float64) string { return yesNo(v != 0) },
+	},
+	{
+		field: "gpu_recovery_action", id: nvml.FI_DEV_GET_GPU_RECOVERY_ACTION,
+		format: func(v float64) string { return recoveryActionStr(uint64(v)) },
+	},
+	{
+		field: "edpp_multiplier", id: edppMultiplierFieldID,
+		format: func(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) + " %" },
 	},
 }
 
@@ -1394,6 +1430,10 @@ func (b *Backend) collectFieldValues(dev device, coll *devCollector, reqs plan) 
 	values := make([]nvml.FieldValue, len(wanted))
 	for i, e := range wanted {
 		values[i].FieldId = e.id
+		values[i].ScopeId = e.scopeID
+		// Some drivers (verified on GB10 580.173.02) leave unimplemented slots
+		// untouched, so zero-initialized NvmlReturn would look like SUCCESS.
+		values[i].NvmlReturn = uint32(nvml.ERROR_NOT_SUPPORTED)
 	}
 
 	ret := dev.GetFieldValues(values)
@@ -2099,22 +2139,21 @@ func (b *Backend) collectDeviceExtras(
 		return false
 	}
 
+	// Field-value extras run before GPM so we know whether C2C links are
+	// present before requesting C2C GPM metrics.
+	c2cActive, ok := b.collectFieldValueExtras(dev, uuid, opts, extras)
+	if !ok {
+		return false
+	}
+
 	// GPM runs before collectPcie so non-MIG Hopper+ GPUs fill PCIe throughput
 	// from the non-blocking GPM sample window instead of sleeping 40ms in
 	// GetPcieThroughput.
-	if opts.GPM && !b.collectGPM(dev, uuid, extras, seenGIs) {
+	if opts.GPM && !b.collectGPM(dev, uuid, extras, seenGIs, c2cActive) {
 		return false
 	}
 
 	if opts.PCIeThroughput && !b.collectPcie(ctx, dev, uuid, extras) {
-		return false
-	}
-
-	if opts.PCIeReplays && !b.collectPCIeReplays(dev, uuid, extras) {
-		return false
-	}
-
-	if opts.NVLink && !b.collectNVLink(dev, uuid, extras) {
 		return false
 	}
 
@@ -2134,88 +2173,35 @@ func (b *Backend) collectDeviceExtras(
 		return false
 	}
 
+	return b.collectExtendedDeviceExtras(dev, uuid, opts, extras, seenGIs)
+}
+
+//nolint:cyclop // flat per-family dispatch
+func (b *Backend) collectExtendedDeviceExtras(
+	dev device,
+	uuid string,
+	opts CollectOptions,
+	extras *collect.Extras,
+	seenGIs map[string]bool,
+) bool {
+	if opts.RepairStatus && !b.collectRepairStatus(dev, uuid, extras) {
+		return false
+	}
+
+	if opts.VirtualizationMode && !b.collectVirtualizationMode(dev, uuid, extras) {
+		return false
+	}
+
+	if opts.PowerMizerMode && !b.collectPowerMizerMode(dev, uuid, extras) {
+		return false
+	}
+
+	if opts.PCIeRuntimePM && !b.collectPCIeRuntimePM(dev, uuid, extras) {
+		return false
+	}
+
 	if opts.MIG && !b.collectMIG(dev, uuid, extras, seenGIs) {
 		return false
-	}
-
-	return true
-}
-
-// collectPCIeReplays appends one device's PCIe replay and replay-rollover
-// counters. Devices or drivers that report NOT_SUPPORTED are skipped silently.
-// Reports whether extras collection may continue.
-func (b *Backend) collectPCIeReplays(dev device, uuid string, extras *collect.Extras) bool {
-	values := []nvml.FieldValue{
-		{FieldId: nvml.FI_DEV_PCIE_REPLAY_COUNTER},
-		{FieldId: nvml.FI_DEV_PCIE_REPLAY_ROLLOVER_COUNTER},
-	}
-
-	ok, supported := b.queryExtraFieldValues(dev, "pcie-replays", "cannot read the PCIe replay counters", values)
-	if !ok || !supported {
-		return ok
-	}
-
-	replays, ok := b.decodeExtraFieldCounter("pcie-replays", values[0])
-	if !ok {
-		return false
-	}
-
-	rollovers, ok := b.decodeExtraFieldCounter("pcie-replays", values[1])
-	if !ok {
-		return false
-	}
-
-	if replays != nil || rollovers != nil {
-		extras.PCIeReplays = append(extras.PCIeReplays, collect.PCIeReplayCounter{
-			UUID:      uuid,
-			Replays:   replays,
-			Rollovers: rollovers,
-		})
-	}
-
-	return true
-}
-
-// collectNVLink appends one device's aggregate NVLink throughput counters in
-// bytes when NVLink links are present and supported. Devices without NVLink or
-// with unpopulated NVLink connectors return NOT_SUPPORTED and are skipped
-// silently. Reports whether extras collection may continue.
-func (b *Backend) collectNVLink(dev device, uuid string, extras *collect.Extras) bool {
-	values := []nvml.FieldValue{
-		{FieldId: nvml.FI_DEV_NVLINK_LINK_COUNT},
-		{FieldId: nvml.FI_DEV_NVLINK_THROUGHPUT_DATA_TX, ScopeId: math.MaxUint32},
-		{FieldId: nvml.FI_DEV_NVLINK_THROUGHPUT_DATA_RX, ScopeId: math.MaxUint32},
-	}
-
-	ok, supported := b.queryExtraFieldValues(dev, "nvlink", "cannot read the NVLink throughput counters", values)
-	if !ok || !supported {
-		return ok
-	}
-
-	linkCount, ok := b.decodeExtraFieldCounter("nvlink", values[0])
-	if !ok || linkCount == nil || *linkCount == 0 {
-		return ok
-	}
-
-	txKiB, ok := b.decodeExtraFieldCounter("nvlink", values[1])
-	if !ok {
-		return false
-	}
-
-	rxKiB, ok := b.decodeExtraFieldCounter("nvlink", values[2])
-	if !ok {
-		return false
-	}
-
-	txBytes := scaleCounterKiB(txKiB)
-	rxBytes := scaleCounterKiB(rxKiB)
-
-	if txBytes != nil || rxBytes != nil {
-		extras.NVLink = append(extras.NVLink, collect.NVLinkThroughput{
-			UUID:    uuid,
-			TXBytes: txBytes,
-			RXBytes: rxBytes,
-		})
 	}
 
 	return true
@@ -2226,6 +2212,13 @@ func (b *Backend) queryExtraFieldValues(
 	family, errMsg string,
 	values []nvml.FieldValue,
 ) (bool, bool) {
+	// Pre-fill each slot with ERROR_NOT_SUPPORTED: some drivers (verified on
+	// GB10 580.173.02) leave unimplemented slots untouched, so zero-initialized
+	// NvmlReturn would otherwise decode as SUCCESS + 0.0.
+	for i := range values {
+		values[i].NvmlReturn = uint32(nvml.ERROR_NOT_SUPPORTED)
+	}
+
 	ret := dev.GetFieldValues(values)
 
 	//nolint:exhaustive // all other codes are unexpected failures
@@ -2264,7 +2257,8 @@ func (b *Backend) decodeExtraFieldCounter(family string, fieldValue nvml.FieldVa
 		count := uint64(val)
 
 		return &count, true
-	case nvml.ERROR_NOT_SUPPORTED, nvml.ERROR_FUNCTION_NOT_FOUND, nvml.ERROR_NOT_FOUND, nvml.ERROR_NO_DATA:
+	case nvml.ERROR_NOT_SUPPORTED, nvml.ERROR_FUNCTION_NOT_FOUND, nvml.ERROR_NOT_FOUND,
+		nvml.ERROR_NO_DATA, nvml.ERROR_INVALID_ARGUMENT:
 		return nil, true
 	default:
 		return nil, b.extrasFailure(family, "cannot read an NVML field counter", fret)
