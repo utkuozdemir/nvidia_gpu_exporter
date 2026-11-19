@@ -52,7 +52,12 @@ type ProcessUtilization struct {
 // NormalizeUUID normalizes a GPU uuid the way all metric labels carry it:
 // lowercase, without the "GPU-" prefix.
 func NormalizeUUID(raw string) string {
-	return strings.TrimPrefix(strings.ToLower(strings.TrimSpace(raw)), "gpu-")
+	trimmed := strings.TrimSpace(raw)
+	if len(trimmed) >= 4 && strings.EqualFold(trimmed[:4], "gpu-") {
+		trimmed = trimmed[4:]
+	}
+
+	return strings.ToLower(trimmed)
 }
 
 // IsKnownAbsentValue reports whether a raw value is one of the tokens
@@ -62,8 +67,21 @@ func NormalizeUUID(raw string) string {
 // "[Not Supported]", or an empty value. These are expected states reported on
 // every collection, so callers skip them without logging.
 func IsKnownAbsentValue(raw string) bool {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "", "n/a", "[n/a]", "[not supported]", "[insufficient permissions]", "[unknown error]":
+	trimmed := strings.TrimSpace(raw)
+	if !isASCII(trimmed) {
+		trimmed = strings.ToLower(trimmed)
+		if !isASCII(trimmed) {
+			return false
+		}
+	}
+
+	switch {
+	case trimmed == "",
+		strings.EqualFold(trimmed, "n/a"),
+		strings.EqualFold(trimmed, "[n/a]"),
+		strings.EqualFold(trimmed, "[not supported]"),
+		strings.EqualFold(trimmed, "[insufficient permissions]"),
+		strings.EqualFold(trimmed, "[unknown error]"):
 		return true
 	default:
 		return false

@@ -10,15 +10,19 @@ import (
 	"net/http/httptest"
 	"os/exec"
 	"slices"
+	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 	"time"
 
 	"github.com/neilotoole/slogt/v2"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/collect"
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvidiasmi"
 )
 
@@ -603,4 +607,159 @@ func TestBuildQueryFuncRecoversEmptyStartupCudaVersion(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "13.5", reading.Extras.CUDAVersion)
 	assert.Equal(t, 1, versionCalls)
+}
+
+type staticSource struct {
+	snap collect.Snapshot
+}
+
+func (s staticSource) Latest(context.Context) collect.Snapshot {
+	return s.snap
+}
+
+func newTestMetricsHandler(
+	t *testing.T,
+	resolved nvidiasmi.ResolvedFields,
+	src collect.Source,
+	cached bool,
+) http.Handler {
+	t.Helper()
+
+	logger := slogt.New(t)
+	reg := prometheus.NewRegistry()
+	exp := exporter.New(
+		t.Context(), exporter.DefaultPrefix, resolved, src,
+		exporter.Features{}, nil, exporter.NVMLReturnCodeMetric, logger,
+	)
+
+	handler, err := newMetricsHandler(t.Context(), serveMuxConfig{
+		metricsPath: "/metrics",
+		maxRequests: 16,
+		cached:      cached,
+	}, reg, exp, logger)
+	require.NoError(t, err)
+
+	return handler
+}
+
+func scrapeConcurrent(t *testing.T, handler http.Handler, count int) string {
+	t.Helper()
+
+	var wg sync.WaitGroup
+
+	bodies := make([]string, count)
+	for idx := range bodies {
+		wg.Add(1)
+
+		go func(pos int) {
+			defer wg.Done()
+
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", http.NoBody)
+			handler.ServeHTTP(rec, req)
+			assert.Equal(t, http.StatusOK, rec.Code)
+
+			bodies[pos] = rec.Body.String()
+		}(idx)
+	}
+
+	wg.Wait()
+
+	first := filterPrefixLines(bodies[0], "nvidia_smi_")
+	for idx := 1; idx < len(bodies); idx++ {
+		assert.Equal(t, first, filterPrefixLines(bodies[idx], "nvidia_smi_"))
+	}
+
+	return first
+}
+
+func TestMetricsHandlerLiveAndCachedEquivalence(t *testing.T) {
+	t.Parallel()
+
+	resolved := nvidiasmi.ResolvedFields{
+		Query: []nvidiasmi.QField{nvidiasmi.UUIDQField, "temperature.gpu"},
+		Returned: map[nvidiasmi.QField]nvidiasmi.RField{
+			nvidiasmi.UUIDQField: "uuid",
+			"temperature.gpu":    "temperature.gpu",
+		},
+		Info: []nvidiasmi.InfoField{{QField: nvidiasmi.UUIDQField, Label: "uuid"}},
+	}
+
+	uuidCell := nvidiasmi.Cell{QField: nvidiasmi.UUIDQField, RField: "uuid", RawValue: "GPU-1234"}
+	tempCell := nvidiasmi.Cell{QField: "temperature.gpu", RField: "temperature.gpu", RawValue: "42"}
+	snap := collect.Snapshot{
+		Attempted: true, Success: true, Duration: 10 * time.Millisecond, LastSuccess: time.Unix(1700000000, 0),
+		Table: &nvidiasmi.Table{
+			RFields: []nvidiasmi.RField{"uuid", "temperature.gpu"},
+			Rows: []nvidiasmi.Row{{
+				Cells: []nvidiasmi.Cell{uuidCell, tempCell},
+				QFieldToCells: map[nvidiasmi.QField]nvidiasmi.Cell{
+					nvidiasmi.UUIDQField: uuidCell,
+					"temperature.gpu":    tempCell,
+				},
+			}},
+		},
+	}
+
+	liveOut := scrapeConcurrent(t, newTestMetricsHandler(t, resolved, staticSource{snap: snap}, false), 8)
+	cachedOut := scrapeConcurrent(t, newTestMetricsHandler(t, resolved, staticSource{snap: snap}, true), 8)
+
+	require.NotEmpty(t, liveOut)
+	assert.Equal(t, liveOut, cachedOut)
+}
+
+type ctxKey string
+
+type recordingSource struct {
+	mu   sync.Mutex
+	seen []string
+	snap collect.Snapshot
+}
+
+func (s *recordingSource) Latest(ctx context.Context) collect.Snapshot {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if val, ok := ctx.Value(ctxKey("req")).(string); ok {
+		s.seen = append(s.seen, val)
+	}
+
+	return s.snap
+}
+
+func TestLiveScrapeSlotPropagatesPerRequestContext(t *testing.T) {
+	t.Parallel()
+
+	resolved := nvidiasmi.ResolvedFields{
+		Query:    []nvidiasmi.QField{nvidiasmi.UUIDQField},
+		Returned: map[nvidiasmi.QField]nvidiasmi.RField{nvidiasmi.UUIDQField: "uuid"},
+		Info:     []nvidiasmi.InfoField{{QField: nvidiasmi.UUIDQField, Label: "uuid"}},
+	}
+
+	src := &recordingSource{snap: collect.Snapshot{Attempted: true, Success: true}}
+	handler := newTestMetricsHandler(t, resolved, src, false)
+
+	// Two sequential scrapes deterministically reuse the warmed slot and must
+	// each deliver their own request context to Latest.
+	for _, id := range []string{"req-1", "req-2"} {
+		ctx := context.WithValue(t.Context(), ctxKey("req"), id)
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/metrics", http.NoBody)
+		handler.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+	}
+
+	assert.Equal(t, []string{"req-1", "req-2"}, src.seen)
+}
+
+func filterPrefixLines(body, prefix string) string {
+	var out []string
+
+	for line := range strings.SplitSeq(body, "\n") {
+		if strings.HasPrefix(line, prefix) {
+			out = append(out, line)
+		}
+	}
+
+	return strings.Join(out, "\n")
 }

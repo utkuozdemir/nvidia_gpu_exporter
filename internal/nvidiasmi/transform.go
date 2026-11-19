@@ -4,22 +4,25 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/util"
 )
 
 const floatBitSize = 64
 
-var numericRegex = regexp.MustCompile(`[+-]?(\d*[.])?\d+`)
+var (
+	// ErrAbsentValue marks a value that an enum field reports as expectedly
+	// unavailable (for example on a GPU that does not support the field). Callers
+	// skip these quietly. It is deliberately distinct from an unrecognized value,
+	// which is unexpected and should be surfaced rather than dropped silently.
+	ErrAbsentValue = errors.New("value is an expected-absent token")
 
-// ErrAbsentValue marks a value that an enum field reports as expectedly
-// unavailable (for example on a GPU that does not support the field). Callers
-// skip these quietly. It is deliberately distinct from an unrecognized value,
-// which is unexpected and should be surfaced rather than dropped silently.
-var ErrAbsentValue = errors.New("value is an expected-absent token")
+	errNotNumeric = errors.New("could not parse number from value")
+	errNonFinite  = errors.New("value does not scale to a finite number")
+)
 
 // enumFieldAbsentTokens are the values that mean "this field exists but is not
 // available here". This is IsKnownAbsentValue minus "[unknown error]": for a
@@ -128,38 +131,67 @@ func TransformRawValue(rawValue string, valueMultiplier float64) (float64, error
 		return decimal, nil
 	}
 
-	val := strings.ToLower(trimmed)
-
-	switch val {
-	case "enabled", "yes", "active", "valid":
-		return 1, nil
-	case "disabled", "no", "not active", "invalid":
-		return 0, nil
-	case "default":
-		return 0, nil
-	case "exclusive_thread":
-		return 1, nil
-	case "prohibited":
-		return 2, nil
-	case "exclusive_process":
-		return 3, nil
-	default:
-		return parseSanitizedValueWithBestEffort(val, valueMultiplier)
+	if val, ok := matchKeywordValue(trimmed); ok {
+		return val, nil
 	}
+
+	return parseSanitizedValueWithBestEffort(trimmed, valueMultiplier)
+}
+
+// matchKeywordValue matches the non-numeric state tokens nvidia-smi prints
+// without allocating a lowercased copy on ASCII inputs. Non-ASCII inputs fall
+// back to strings.ToLower so Unicode case mappings (such as Turkish İ -> i)
+// match the original behavior without letting strings.EqualFold match
+// non-ASCII runes like long s (ſ).
+func matchKeywordValue(val string) (float64, bool) {
+	if !isASCII(val) {
+		val = strings.ToLower(val)
+		if !isASCII(val) {
+			return 0, false
+		}
+	}
+
+	switch {
+	case strings.EqualFold(val, "enabled"), strings.EqualFold(val, "yes"),
+		strings.EqualFold(val, "active"), strings.EqualFold(val, "valid"):
+		return 1, true
+	case strings.EqualFold(val, "disabled"), strings.EqualFold(val, "no"),
+		strings.EqualFold(val, "not active"), strings.EqualFold(val, "invalid"),
+		strings.EqualFold(val, "default"):
+		return 0, true
+	case strings.EqualFold(val, "exclusive_thread"):
+		return 1, true
+	case strings.EqualFold(val, "prohibited"):
+		return 2, true
+	case strings.EqualFold(val, "exclusive_process"):
+		return 3, true
+	default:
+		return 0, false
+	}
+}
+
+func isASCII(val string) bool {
+	for idx := range len(val) {
+		if val[idx] > unicode.MaxASCII {
+			return false
+		}
+	}
+
+	return true
 }
 
 func parseSanitizedValueWithBestEffort(
 	sanitizedValue string,
 	valueMultiplier float64,
 ) (float64, error) {
-	allNums := numericRegex.FindAllString(sanitizedValue, 2)
-	if len(allNums) != 1 {
-		return -1, fmt.Errorf("could not parse number from value: %q", sanitizedValue)
+	numStr, ok := findSingleNumber(sanitizedValue)
+	if !ok {
+		return -1, errNotNumeric
 	}
 
-	parsed, err := strconv.ParseFloat(allNums[0], floatBitSize)
+	parsed, err := strconv.ParseFloat(numStr, floatBitSize)
 	if err != nil {
-		return -1, fmt.Errorf("failed to parse float %q: %w", allNums[0], err)
+		return -1, fmt.Errorf("failed to parse float %q: %w", numStr, err)
 	}
 
 	scaled := parsed * valueMultiplier
@@ -169,8 +201,61 @@ func parseSanitizedValueWithBestEffort(
 	// average computed over the series, so it is dropped like any other
 	// unusable value.
 	if math.IsInf(scaled, 0) || math.IsNaN(scaled) {
-		return -1, fmt.Errorf("value %q does not scale to a finite number", sanitizedValue)
+		return -1, errNonFinite
 	}
 
 	return scaled, nil
+}
+
+// findSingleNumber scans input for non-overlapping matches of [+-]?(\d*[.])?\d+
+// with leftmost-first semantics, returning the match only when there is
+// exactly one. Equivalent to regexp.MustCompile(`[+-]?(\d*[.])?\d+`).FindAllString(input, 2)
+// without heap allocations.
+func findSingleNumber(input string) (string, bool) {
+	var match string
+
+	for pos := 0; pos < len(input); {
+		end, ok := scanNumberAt(input, pos)
+		if !ok {
+			pos++
+
+			continue
+		}
+
+		if match != "" {
+			return "", false
+		}
+
+		match = input[pos:end]
+		pos = end
+	}
+
+	return match, match != ""
+}
+
+func scanNumberAt(input string, start int) (int, bool) {
+	end := start
+	if input[end] == '+' || input[end] == '-' {
+		end++
+	}
+
+	digitsStart := end
+	for end < len(input) && isASCIIDigit(input[end]) {
+		end++
+	}
+
+	if end+1 < len(input) && input[end] == '.' && isASCIIDigit(input[end+1]) {
+		end += 2
+		for end < len(input) && isASCIIDigit(input[end]) {
+			end++
+		}
+
+		return end, true
+	}
+
+	return end, end > digitsStart
+}
+
+func isASCIIDigit(ch byte) bool {
+	return ch >= '0' && ch <= '9'
 }

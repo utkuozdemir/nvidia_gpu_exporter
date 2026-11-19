@@ -6,9 +6,8 @@ import (
 )
 
 type Table struct {
-	Rows          []Row
-	RFields       []RField
-	QFieldToCells map[QField][]Cell
+	Rows    []Row
+	RFields []RField
 }
 
 type Row struct {
@@ -46,28 +45,18 @@ func ParseCSVIntoTable(queryResult string, qFields []QField) (Table, error) {
 
 	rows := make([]Row, numRows)
 
-	qFieldToCells := make(map[QField][]Cell)
-	for _, q := range qFields {
-		qFieldToCells[q] = make([]Cell, numRows)
-	}
-
 	for rowIndex, valuesLine := range valuesLines {
 		row, err := parseCSVRow(valuesLine, qFields, rFields)
 		if err != nil {
 			return Table{}, fmt.Errorf("row %d: %w", rowIndex+1, err)
 		}
 
-		for colIndex, cell := range row.Cells {
-			qFieldToCells[qFields[colIndex]][rowIndex] = cell
-		}
-
 		rows[rowIndex] = row
 	}
 
 	return Table{
-		Rows:          rows,
-		RFields:       rFields,
-		QFieldToCells: qFieldToCells,
+		Rows:    rows,
+		RFields: rFields,
 	}, nil
 }
 
@@ -107,11 +96,10 @@ func parseCSVRow(valuesLine string, qFields []QField, rFields []RField) (Row, er
 
 func parseCSVLine(line string) []string {
 	values := strings.Split(line, ",")
-	result := make([]string, len(values))
 
 	for i, field := range values {
-		result[i] = strings.TrimSpace(field)
+		values[i] = strings.TrimSpace(field)
 	}
 
-	return result
+	return values
 }

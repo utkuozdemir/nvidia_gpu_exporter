@@ -29,6 +29,7 @@ func TestTransformRawValueValidValues(t *testing.T) {
 		"VALID":             1,
 		"invalid":           0,
 		"Invalid":           0,
+		"INVALİD":           0,
 		"default":           0,
 		"exclusive_thread":  1,
 		"prohibited":        2,
@@ -50,7 +51,7 @@ func TestTransformRawValueInvalidValues(t *testing.T) {
 	t.Parallel()
 
 	rawValues := []string{
-		"aaaaa", "0X1234", "aa111aa111", "123.456.789",
+		"aaaaa", "0X1234", "aa111aa111", "123.456.789", "diſabled",
 	}
 
 	for _, raw := range rawValues {

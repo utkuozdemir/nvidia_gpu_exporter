@@ -107,11 +107,6 @@ func assertRowConsistent(
 			t.Fatalf("row %d: by-field lookup of %q gives %+v, want %+v",
 				rowIndex, cell.QField, got, cell)
 		}
-
-		if got := table.QFieldToCells[cell.QField][rowIndex]; got != cell {
-			t.Fatalf("row %d: table lookup of %q gives %+v, want %+v",
-				rowIndex, cell.QField, got, cell)
-		}
 	}
 
 	rejoined := make([]string, 0, len(row.Cells))

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os/exec"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvidiasmi"
@@ -228,7 +229,11 @@ func foldSeenUUIDs(table *nvidiasmi.Table, seenUUIDs map[string]bool) []string {
 		}
 
 		current[uuid] = true
-		seenUUIDs[uuid] = true
+		if !seenUUIDs[uuid] {
+			// Clone before retaining in seenUUIDs so a zero-copy substring of
+			// an exec CSV response does not pin the full response buffer.
+			seenUUIDs[strings.Clone(uuid)] = true
+		}
 	}
 
 	var missing []string

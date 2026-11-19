@@ -278,11 +278,12 @@ func Run(ctx context.Context, args []string, opts Options) error {
 		return err
 	}
 
-	mux, err := newServeMux(serveMuxConfig{
+	mux, err := newServeMux(ctx, serveMuxConfig{
 		metricsPath:   *metricsPath,
 		enablePprof:   *enablePprof,
 		maxRequests:   *maxRequests,
 		timeoutOffset: *timeoutOffset,
+		cached:        *collectInterval > 0,
 	}, registry, exp, peeker, xids, logger)
 	if err != nil {
 		return err
@@ -558,9 +559,9 @@ type collectConfig struct {
 // setupExporter resolves the query fields, builds the collection source
 // (adding the background collector to the errgroup when an interval is set),
 // and builds the exporter. The exporter itself is returned instead of
-// registered: the metrics handler collects it under each scrape's own
-// context, so it lives in a per-scrape registry there. The given registry
-// gets the collectors whose output is scrape-independent.
+// registered here so newMetricsHandler can register it once directly in cached
+// mode or in reusable per-scrape slots in live mode. The given registry gets
+// the collectors whose output is scrape-independent.
 //
 //nolint:ireturn // returns the collection peeker and XID source interfaces for the health endpoint
 func setupExporter(
@@ -834,7 +835,7 @@ func buildQueryFunc(
 	runFunc nvidiasmi.RunFunc,
 	logger *slog.Logger,
 ) collect.QueryFunc {
-	cudaCache := &cudaVersionCache{version: initialCudaVersion}
+	cudaCache := &cudaVersionCache{version: strings.Clone(initialCudaVersion)}
 
 	return func(queryCtx context.Context) (collect.Reading, int, error) {
 		table, exitCode, err := nvidiasmi.Query(
@@ -880,7 +881,7 @@ func (c *cudaVersionCache) resolve(
 	}
 
 	if curDriver == "" && curVersion != "" {
-		c.driver = driverVer
+		c.driver = strings.Clone(driverVer)
 		c.mu.Unlock()
 
 		return curVersion
@@ -897,8 +898,8 @@ func (c *cudaVersionCache) resolve(
 
 	c.mu.Lock()
 	if refreshed != "" {
-		c.version = refreshed
-		c.driver = driverVer
+		c.version = strings.Clone(refreshed)
+		c.driver = strings.Clone(driverVer)
 	}
 
 	res := c.version
@@ -1032,18 +1033,24 @@ func enrichAppsIdentity(
 	}
 }
 
+// defaultLiveSlotCap caps the number of retained live-mode scrape slots when
+// --web.max-requests is 0 (unlimited).
+const defaultLiveSlotCap = 8
+
 // serveMuxConfig carries the web flags into the mux construction.
 type serveMuxConfig struct {
 	metricsPath   string
 	enablePprof   bool
 	maxRequests   int
 	timeoutOffset time.Duration
+	cached        bool
 }
 
 // newServeMux builds the HTTP mux: the landing page on exactly the root path
 // (anything unknown is a 404), the metrics endpoint, the health endpoints and
 // optionally pprof.
 func newServeMux(
+	ctx context.Context,
 	cfg serveMuxConfig,
 	registry *prometheus.Registry,
 	exp *exporter.GPUExporter,
@@ -1066,8 +1073,13 @@ func newServeMux(
 		return nil, fmt.Errorf("failed to create the landing page: %w", err)
 	}
 
+	metricsHandler, err := newMetricsHandler(ctx, cfg, registry, exp, logger)
+	if err != nil {
+		return nil, err
+	}
+
 	mux.Handle("GET /{$}", landingPage)
-	mux.Handle("GET "+cfg.metricsPath, newMetricsHandler(cfg, registry, exp, logger))
+	mux.Handle("GET "+cfg.metricsPath, metricsHandler)
 
 	// process-level health checks: reachable means healthy. Deliberately
 	// independent of collection success, a host whose nvidia-smi is failing
@@ -1084,47 +1096,159 @@ func newServeMux(
 	return mux, nil
 }
 
-// newMetricsHandler builds the metrics endpoint. Each scrape gathers the
-// exporter under the scrape's own context through a per-scrape registry,
-// since the collector interface has no context of its own; the collectors
-// whose output is scrape-independent live in the shared registry, which also
-// carries the promhttp instrumentation and error counter so the handler's
-// own health stays visible in the output.
+// scrapeSlot holds a pre-registered exporter copy and HTTP handler for one
+// in-flight live scrape, avoiding per-scrape Registry/Register/HandlerFor
+// allocations and Gatherers re-hashing while still bounding each scrape by its
+// own request context.
+type scrapeSlot struct {
+	exp     *exporter.GPUExporter
+	handler http.Handler
+}
+
+type scrapeSlotPool struct {
+	mu       sync.Mutex
+	free     []*scrapeSlot
+	cap      int
+	idleCtx  context.Context //nolint:containedctx // long-lived process context for idle slots
+	base     *exporter.GPUExporter
+	sharedTG prometheus.TransactionalGatherer
+	opts     promhttp.HandlerOpts
+}
+
+func newScrapeSlotPool(
+	ctx context.Context,
+	registry *prometheus.Registry,
+	exp *exporter.GPUExporter,
+	opts promhttp.HandlerOpts,
+	maxSlots int,
+) (*scrapeSlotPool, error) {
+	if maxSlots <= 0 || maxSlots > defaultLiveSlotCap {
+		maxSlots = defaultLiveSlotCap
+	}
+
+	pool := &scrapeSlotPool{
+		free:     make([]*scrapeSlot, 0, maxSlots),
+		cap:      maxSlots,
+		idleCtx:  ctx,
+		base:     exp,
+		sharedTG: prometheus.ToTransactionalGatherer(registry),
+		opts:     opts,
+	}
+
+	// Build one slot up front so any registration error surfaces at startup
+	// and the first scrape runs warm.
+	slot, err := pool.newSlot()
+	if err != nil {
+		return nil, err
+	}
+
+	pool.free = append(pool.free, slot)
+
+	return pool, nil
+}
+
+func (p *scrapeSlotPool) newSlot() (*scrapeSlot, error) {
+	scoped := p.base.WithContext(p.idleCtx)
+
+	slotReg := prometheus.NewRegistry()
+	if err := slotReg.Register(scoped); err != nil {
+		return nil, fmt.Errorf("failed to register the exporter: %w", err)
+	}
+
+	// The shared registry (go_*, process_*, promhttp_*, build_info) and the
+	// exporter registry (nvidia_smi_*) own disjoint metric family names, so
+	// MultiTRegistry merges them with a single sort and no re-hashing.
+	gatherer := prometheus.NewMultiTRegistry(p.sharedTG, prometheus.ToTransactionalGatherer(slotReg))
+
+	return &scrapeSlot{
+		exp:     scoped,
+		handler: promhttp.HandlerForTransactional(gatherer, p.opts),
+	}, nil
+}
+
+func (p *scrapeSlotPool) acquire() (*scrapeSlot, error) {
+	p.mu.Lock()
+	if n := len(p.free); n > 0 {
+		slot := p.free[n-1]
+		p.free[n-1] = nil
+		p.free = p.free[:n-1]
+		p.mu.Unlock()
+
+		return slot, nil
+	}
+	p.mu.Unlock()
+
+	return p.newSlot()
+}
+
+func (p *scrapeSlotPool) release(slot *scrapeSlot) {
+	slot.exp.SetContext(p.idleCtx)
+
+	p.mu.Lock()
+	if len(p.free) < p.cap {
+		p.free = append(p.free, slot)
+	}
+	p.mu.Unlock()
+}
+
+// newMetricsHandler builds the metrics endpoint. In cached mode the collector
+// does not depend on the request context, so it is registered once directly on
+// the shared registry. In live mode each scrape acquires a pre-registered slot
+// so it can pass its own scrape deadline into Collect without rebuilding the
+// registry or promhttp handler on every request.
 func newMetricsHandler(
+	ctx context.Context,
 	cfg serveMuxConfig,
 	registry *prometheus.Registry,
 	exp *exporter.GPUExporter,
 	logger *slog.Logger,
-) http.Handler {
+) (http.Handler, error) {
 	opts := promhttp.HandlerOpts{
 		ErrorLog:      promhttpLogger{logger: logger},
 		ErrorHandling: promhttp.HTTPErrorOnError,
 		Registry:      registry,
 	}
 
-	// the scrape context is derived from the request context, the linter just
-	// cannot see it through the helper
-	//nolint:contextcheck
-	handler := http.HandlerFunc(func(writer http.ResponseWriter, req *http.Request) {
-		ctx, cancel := scrapeContext(req, cfg.timeoutOffset)
-		defer cancel()
+	var handler http.Handler
 
-		scrapeRegistry := prometheus.NewRegistry()
-		if err := scrapeRegistry.Register(exp.WithContext(ctx)); err != nil {
-			logger.Error("failed to register the exporter for a scrape", "err", err)
-			http.Error(writer, "failed to register the exporter", http.StatusInternalServerError)
-
-			return
+	if cfg.cached {
+		if err := registry.Register(exp); err != nil {
+			return nil, fmt.Errorf("failed to register the exporter: %w", err)
 		}
 
-		// the scrape deadline travels through the context-scoped collector;
-		// stamping it onto the request as well is defensive (promhttp does
-		// not currently read the request context)
-		promhttp.HandlerFor(prometheus.Gatherers{registry, scrapeRegistry}, opts).
-			ServeHTTP(writer, req.WithContext(ctx))
-	})
+		handler = promhttp.HandlerFor(registry, opts)
+	} else {
+		pool, err := newScrapeSlotPool(ctx, registry, exp, opts, cfg.maxRequests)
+		if err != nil {
+			return nil, err
+		}
 
-	return promhttp.InstrumentMetricHandler(registry, limitConcurrency(handler, cfg.maxRequests, logger))
+		// the scrape context is derived from the request context, the linter just
+		// cannot see it through the helper
+		//nolint:contextcheck
+		handler = http.HandlerFunc(func(writer http.ResponseWriter, req *http.Request) {
+			ctx, cancel := scrapeContext(req, cfg.timeoutOffset)
+			defer cancel()
+
+			slot, acquireErr := pool.acquire()
+			if acquireErr != nil {
+				logger.Error("failed to register the exporter for a scrape", "err", acquireErr)
+				http.Error(writer, "failed to register the exporter", http.StatusInternalServerError)
+
+				return
+			}
+			defer pool.release(slot)
+
+			slot.exp.SetContext(ctx)
+
+			// the scrape deadline travels through the context-scoped collector;
+			// stamping it onto the request as well is defensive (promhttp does
+			// not currently read the request context)
+			slot.handler.ServeHTTP(writer, req.WithContext(ctx))
+		})
+	}
+
+	return promhttp.InstrumentMetricHandler(registry, limitConcurrency(handler, cfg.maxRequests, logger)), nil
 }
 
 // scrapeContext bounds a scrape by the timeout Prometheus advertises for it,
