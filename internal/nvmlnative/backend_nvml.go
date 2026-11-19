@@ -93,14 +93,13 @@ type Backend struct {
 	mu          sync.Mutex
 	initialized bool
 	permLogged  bool
-	fnfLogged   bool
 	// lastCUDAVersion retains the most recent successfully read CUDA version
 	// so a transient per-cycle failure does not flap the gpu_info series to
 	// an empty cuda_version label. Guarded by mu like the rest of the cycle
 	// state.
 	lastCUDAVersion string
 	// extrasWarned makes a persistent extras failure visible exactly once
-	// per family, mirroring permLogged/fnfLogged.
+	// per family, mirroring permLogged.
 	extrasWarned map[string]bool
 	// devValues is a per-cycle scratch map reused across collections under mu
 	// so hot-path scrapes do not re-allocate the per-device value map every cycle.
@@ -654,10 +653,9 @@ func (reqs plan) want(fields ...nvidiasmi.QField) bool {
 // devCollector accumulates one device's readings and remembers the first
 // lifecycle-class return and any permission-denied fields it sees.
 type devCollector struct {
-	values   map[nvidiasmi.QField]string
-	fatal    *nvml.Return
-	denied   []nvidiasmi.QField
-	notFound []nvidiasmi.QField
+	values map[nvidiasmi.QField]string
+	fatal  *nvml.Return
+	denied []nvidiasmi.QField
 }
 
 // classify tracks a non-success return's collection-level consequences.
@@ -668,10 +666,6 @@ func (c *devCollector) classify(field nvidiasmi.QField, ret nvml.Return) {
 
 	if ret == nvml.ERROR_NO_PERMISSION {
 		c.denied = append(c.denied, field)
-	}
-
-	if ret == nvml.ERROR_FUNCTION_NOT_FOUND {
-		c.notFound = append(c.notFound, field)
 	}
 }
 
@@ -1294,18 +1288,6 @@ func (b *Backend) collectDevice(
 			"fields", fmt.Sprintf("%v", coll.denied))
 	}
 
-	// a required NVML function being unavailable usually means driver drift
-	// (the library dropped or renamed an entry point this backend expects);
-	// users on brand-new drivers are the earliest signal, so say it once
-	if len(coll.notFound) > 0 && !b.fnfLogged {
-		b.fnfLogged = true
-
-		b.logger.Warn("required NVML functions are unavailable in this driver; "+
-			"the affected fields will be absent - please report this on the project's issue tracker",
-			"fields", fmt.Sprintf("%v", coll.notFound),
-			"driver_version", shared.driverVersion)
-	}
-
 	if coll.fatal != nil {
 		return nil, &lifecycleRetError{ret: *coll.fatal}
 	}
@@ -1667,14 +1649,24 @@ func collectPlatform(dev device, coll *devCollector, reqs plan) {
 	info, ret := dev.GetPlatformInfo()
 
 	coll.set("platform.chassis_serial_number", ret, func() string { return cstr(info.ChassisSerialNumber[:]) })
-	coll.set("platform.slot_number", ret, func() string { return strconv.FormatUint(uint64(info.SlotNumber), 10) })
-	coll.set("platform.tray_index", ret, func() string { return strconv.FormatUint(uint64(info.TrayIndex), 10) })
+	coll.set("platform.slot_number", ret, func() string { return formatPlatformUint8(info.SlotNumber) })
+	coll.set("platform.tray_index", ret, func() string { return formatPlatformUint8(info.TrayIndex) })
 	coll.set("platform.host_id", ret, func() string { return strconv.FormatUint(uint64(info.HostId), 10) })
 	coll.set("platform.peer_type", ret, func() string { return peerTypeStr(info.PeerType) })
 	coll.set("platform.module_id", ret, func() string { return strconv.FormatUint(uint64(info.ModuleId), 10) })
 	coll.set("platform.gpu_fabric_guid", ret, func() string {
-		return fmt.Sprintf("0x%016X", binary.BigEndian.Uint64(info.IbGuid[:8]))
+		return fmt.Sprintf("0x%016x", binary.LittleEndian.Uint64(info.IbGuid[:8]))
 	})
+}
+
+// formatPlatformUint8 treats 0xFF (NVML_VALUE_NOT_AVAILABLE truncated to uint8)
+// as unavailable so platform.slot_number and platform.tray_index match nvidia-smi.
+func formatPlatformUint8(v uint8) string {
+	if v == math.MaxUint8 {
+		return tokenNotAvailable
+	}
+
+	return strconv.FormatUint(uint64(v), 10)
 }
 
 // deviceUtil caches one device's per-process utilization lookup within a
