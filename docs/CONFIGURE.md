@@ -86,18 +86,16 @@ Flags:
                                  `remapped_rows.histogram.*`). Useful to drop
                                  fields that are slow or unsupported on a given
                                  setup.
-      --collect.backend=exec     How to collect GPU metrics. `nvml`
-                                 (recommended) reads the driver library
-                                 (libnvidia-ml on Linux, nvml.dll on Windows)
-                                 directly without nvidia-smi, exposing the core
-                                 metrics plus NVML-only extras (see the docs).
-                                 On Windows it is included in the standard
-                                 build. On Linux it ships in the `-nvml` release
-                                 artifact, where it is the default. `exec` runs
-                                 nvidia-smi (the default in the standard build).
-                                 `demo` serves synthetic data mimicking the
-                                 nvml surface, with no GPU or driver needed,
-                                 on any platform.
+      --collect.backend=nvml     How to collect GPU metrics. `nvml` reads the
+                                 driver library (libnvidia-ml.so.1 on Linux,
+                                 nvml.dll on Windows) directly without
+                                 nvidia-smi, exposing the core metrics plus
+                                 NVML-only extras (see the docs). It is the
+                                 default on Linux and Windows. `exec` runs
+                                 nvidia-smi (the default on macOS and in the
+                                 Linux `-static` build). `demo` serves synthetic
+                                 data mimicking the nvml surface, with no GPU or
+                                 driver needed, on any platform.
       --collect.interval=0       Interval at which the collection runs in the
                                  background, with scrapes serving the most
                                  recent result. When 0, the collection runs
@@ -182,26 +180,25 @@ Basic auth passwords are hashed with `bcrypt`, which is outside the FIPS module.
 
 ## Native NVML backend
 
-`--collect.backend=nvml` is the recommended backend on Linux and Windows. It reads GPU metrics directly from the driver library (`libnvidia-ml.so.1` on Linux, `nvml.dll` on Windows) without spawning `nvidia-smi`.
+`--collect.backend=nvml` is the default backend on Linux (cgo builds, container images, `deb`/`rpm`, and main archives) and Windows. It reads GPU metrics directly from the driver library (`libnvidia-ml.so.1` on Linux, `nvml.dll` on Windows) without spawning `nvidia-smi`.
 
 For every metric both `nvml` and `exec` serve, the exported series shares the same metric name, base unit, label set and enum mapping, while each backend preserves the precision and availability its source offers. On top of that shared surface, `nvml` exports families that only the driver library provides (documented in [METRICS.md](METRICS.md)).
 
 The `nvidia_smi_*` metric prefix is used by both backends. It refers to the metric schema, not the collection mechanism.
 
 ```bash
-nvidia_gpu_exporter --collect.backend nvml
+# Default on Linux and Windows (no flag needed):
+nvidia_gpu_exporter
+
+# Switch back to the nvidia-smi subprocess backend:
+nvidia_gpu_exporter --collect.backend=exec
 ```
 
-On Linux, the `-nvml` release archives and image tags (e.g., `utkuozdemir/nvidia_gpu_exporter:latest-nvml`) carry this backend and default to it, so no flag is needed. Passing `--collect.backend=exec` switches them back to running `nvidia-smi`.
-
-On Windows, the standard `nvidia_gpu_exporter.exe` binary includes both backends and loads `nvml.dll` from `System32` when `--collect.backend=nvml` is passed.
-
-A note for semver-based image automation (e.g., a Flux `ImagePolicy`): the `-nvml` suffix parses as a semver pre-release, so filter the flavored tags explicitly:
-`filterTags: {pattern: '^(?P<version>\d+\.\d+\.\d+)-nvml$', extract: '$version'}`.
+On macOS and in the Linux `-static` release archive (built with `CGO_ENABLED=0`), `exec` is the default backend and `nvml` is not compiled in.
 
 What each backend supports (`demo` serves synthetic data, see [Demo mode](#demo-mode)):
 
-| Capability | nvml (recommended) | exec (1.x default) | demo |
+| Capability | nvml (default on Linux/Windows) | exec | demo |
 | --- | --- | --- | --- |
 | Query-field metrics (shared schema: names, units, labels, enum mappings) | yes | yes | synthetic |
 | `gpu_info` with the `cuda_version` label | yes | yes | yes |
@@ -279,7 +276,7 @@ nvidia_gpu_exporter --collect.compute-apps --collect.compute-apps-identity
 # Docker container (--pid=host is required to see host and sibling-container PIDs)
 docker run -d --name nvidia_gpu_exporter --restart unless-stopped \
   --gpus all -e NVIDIA_DRIVER_CAPABILITIES=utility --pid=host -p 9835:9835 \
-  utkuozdemir/nvidia_gpu_exporter:latest-nvml \
+  utkuozdemir/nvidia_gpu_exporter:latest \
   --collect.compute-apps --collect.compute-apps-identity
 ```
 
@@ -355,10 +352,10 @@ With `--collect.backend=exec`, `--nvidia-smi-command` sets the executable path a
 
 ```bash
 # Windows, nvidia-smi not on PATH
-nvidia_gpu_exporter --nvidia-smi-command '"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe"'
+nvidia_gpu_exporter --collect.backend=exec --nvidia-smi-command '"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe"'
 
 # Wrapper plus a quoted path
-nvidia_gpu_exporter --nvidia-smi-command 'sudo "/opt/my tools/nvidia-smi"'
+nvidia_gpu_exporter --collect.backend=exec --nvidia-smi-command 'sudo "/opt/my tools/nvidia-smi"'
 ```
 
 Where no shell strips outer quotes (a Windows service or a systemd unit), a single layer of quotes is enough.
@@ -368,7 +365,7 @@ Where no shell strips outer quotes (a Windows service or a systemd unit), a sing
 With `--collect.backend=exec`, the exporter can scrape a remote GPU host over SSH:
 
 ```bash
-nvidia_gpu_exporter --nvidia-smi-command "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null SSH_USER@SSH_HOST nvidia-smi"
+nvidia_gpu_exporter --collect.backend=exec --nvidia-smi-command "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null SSH_USER@SSH_HOST nvidia-smi"
 ```
 
 This requires a binary install or a custom container image that includes `ssh`, since the distroless exporter image contains only the exporter binary (see [INSTALL.md](INSTALL.md#no-shell-in-the-image)).

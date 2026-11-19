@@ -31,22 +31,22 @@ The exporter collects utilization, memory, power, thermals, clocks, throttling r
 
 It supports two hardware collection backends and a synthetic `demo` backend that share the same metric schema (metric names, base units, label sets and enum mappings) whenever they expose the same data (see [CONFIGURE.md](docs/CONFIGURE.md#native-nvml-backend)):
 
-- **Native NVML (`nvml`, recommended)**: reads `libnvidia-ml.so.1` on Linux and `nvml.dll` on Windows in-process without spawning `nvidia-smi`. In addition to the shared metrics, it exports families only the driver library provides: XID and MIG XID error counters, total energy consumed, per-MIG-instance metrics, whole-GPU GPM activity ratios, PCIe throughput and replay counters, NVLink byte counters, per-fan speeds and RPM, BAR1 memory usage, thermal thresholds, and power source state. On Linux it ships in the `-nvml` container images (`:X.Y.Z-nvml`) and `nvidia_gpu_exporter-nvml_*` archives with `nvml` enabled by default. On Windows it is included in `nvidia_gpu_exporter.exe` and enabled with `--collect.backend=nvml`.
-- **`nvidia-smi` subprocess (`exec`)**: runs `nvidia-smi` and parses its output (GPU CSV plus `-q -d PIDS` and `pmon -c 1` when per-process collection is enabled). It remains the compiled default in the plain (non-`-nvml`) images, archives, `deb`/`rpm` packages, and Windows binary for 1.x compatibility, works as a static binary with zero C bindings on any platform where `nvidia-smi` exists, isolates the exporter from stuck driver calls, auto-discovers brand-new driver fields, and supports custom wrapper commands (`ssh`, `sudo`).
+- **Native NVML (`nvml`, default on Linux and Windows)**: reads `libnvidia-ml.so.1` on Linux and `nvml.dll` on Windows in-process without spawning `nvidia-smi`. In addition to the shared metrics, it exports families only the driver library provides: XID and MIG XID error counters, total energy consumed, per-MIG-instance metrics, whole-GPU GPM activity ratios, PCIe throughput, replay and AER error counters, NVLink and C2C link metrics, per-fan speeds and RPM, BAR1 memory usage, thermal thresholds, and power source state.
+- **`nvidia-smi` subprocess (`exec`, default on macOS and Linux `-static`)**: runs `nvidia-smi` and parses its output (GPU CSV plus `-q -d PIDS` and `pmon -c 1` when per-process collection is enabled). Works as a static binary with zero C bindings on any platform where `nvidia-smi` exists, isolates the exporter from stuck driver calls, auto-discovers brand-new driver fields, and supports custom wrapper commands (`ssh`, `sudo`). Pass `--collect.backend=exec` on Linux or Windows to use it.
 - **Synthetic demo (`demo`)**: serves realistic synthetic metrics covering the NVML surface on any platform without a GPU or driver, enabled with `--collect.backend=demo` (see [Demo mode](#demo-mode)).
 
 ## Quick start
 
-On a Linux machine with the NVIDIA driver and the NVIDIA Container Toolkit (using the `-nvml` image flavor):
+On a Linux machine with the NVIDIA driver and the NVIDIA Container Toolkit:
 
 ```bash
 docker run -d --name nvidia_gpu_exporter --restart unless-stopped \
   --gpus all -e NVIDIA_DRIVER_CAPABILITIES=utility -p 9835:9835 \
-  utkuozdemir/nvidia_gpu_exporter:latest-nvml
+  utkuozdemir/nvidia_gpu_exporter:latest
 curl http://localhost:9835/metrics
 ```
 
-Use `utkuozdemir/nvidia_gpu_exporter:latest` instead if you prefer the static `nvidia-smi` subprocess backend.
+Pass `--collect.backend=exec` after the image name if you prefer the `nvidia-smi` subprocess backend.
 
 No GPU at hand? `nvidia_gpu_exporter --collect.backend demo` serves realistic synthetic metrics on any machine. For Windows, macOS, packages, Kubernetes and running without Docker, see [INSTALL.md](docs/INSTALL.md).
 
@@ -95,8 +95,8 @@ Import either by ID in Grafana (*Dashboards* - *New* - *Import*), or enable `gra
 
 [INSTALL.md](docs/INSTALL.md) covers every platform:
 
-- **Linux**: `deb`/`rpm` packages, static or `-nvml` binaries, and a systemd unit
-- **Docker**: `:X.Y.Z-nvml` and `:X.Y.Z` container images on [Docker Hub](https://hub.docker.com/r/utkuozdemir/nvidia_gpu_exporter) and [GHCR](https://github.com/utkuozdemir/nvidia_gpu_exporter/pkgs/container/nvidia_gpu_exporter)
+- **Linux**: `deb`/`rpm` packages (glibc 2.34+), binary archives (default NVML and `-static`), and a systemd unit
+- **Docker**: container images on [Docker Hub](https://hub.docker.com/r/utkuozdemir/nvidia_gpu_exporter) and [GHCR](https://github.com/utkuozdemir/nvidia_gpu_exporter/pkgs/container/nvidia_gpu_exporter)
 - **Kubernetes**: the [Helm chart](charts/nvidia-gpu-exporter) on [Artifact Hub](https://artifacthub.io/packages/helm/nvidia-gpu-exporter/nvidia-gpu-exporter) (including Prometheus alert rules and Grafana dashboards) or a plain DaemonSet
 - **Windows**: `winget`, Scoop, a native Windows service, or an all-in-one PowerShell script that also sets up Prometheus and Grafana
 - **macOS**: binary archive for remote scraping over SSH

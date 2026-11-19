@@ -18,7 +18,7 @@ const Available = false
 // backend needs Windows, or Linux with cgo enabled.
 var ErrUnavailable = errors.New(
 	"the nvml backend is not available in this build: it requires Windows, or Linux with a cgo-enabled binary " +
-		"(use the nvml release artifact or build with CGO_ENABLED=1)")
+		"(use the default Linux release artifact instead of -static, or build with CGO_ENABLED=1)")
 
 // Backend is the unavailable-build placeholder.
 type Backend struct{}

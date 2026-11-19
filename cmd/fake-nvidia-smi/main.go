@@ -17,9 +17,9 @@
 // integration tests, and handy for local development:
 //
 //	go run ./cmd/fake-nvidia-smi --help-query-gpu
-//	nvidia_gpu_exporter \
+//	nvidia_gpu_exporter --collect.backend=exec \
 //	  --nvidia-smi-command "fake-nvidia-smi --capture linux-x86_64__nvidia-h200__590.48.01 --state load"
-//	nvidia_gpu_exporter --nvidia-smi-command "fake-nvidia-smi --gpus 4 --fluctuate"
+//	nvidia_gpu_exporter --collect.backend=exec --nvidia-smi-command "fake-nvidia-smi --gpus 4 --fluctuate"
 package main
 
 import (

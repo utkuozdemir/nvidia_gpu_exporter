@@ -18,6 +18,7 @@ import (
 
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/app"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/demodata"
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvmlnative"
 )
 
 const configureDocPath = "docs/CONFIGURE.md"
@@ -35,9 +36,10 @@ func main() {
 
 func run(check bool) error {
 	// exporter-toolkit registers --[no-]web.systemd-socket only on Linux,
-	// which also shifts the flag column alignment in --help.
-	if runtime.GOOS != "linux" {
-		return errors.New("gen-docs must run on linux (use: task docs or task fmt)")
+	// which also shifts the flag column alignment in --help, and the default
+	// --collect.backend in --help requires a Linux cgo build (nvmlnative.Available).
+	if runtime.GOOS != "linux" || !nvmlnative.Available {
+		return errors.New("gen-docs must run on linux with cgo enabled (use: task docs or task fmt)")
 	}
 
 	root, err := os.OpenRoot(".")

@@ -5,6 +5,8 @@ before:
     - go mod download
 
 builds:
+  # Default Linux build: cgo-enabled so the native NVML backend (go-nvml) is
+  # compiled in and selected by default. Requires glibc 2.34+ at runtime.
   - id: nvidia_gpu_exporter
     main: ./cmd/nvidia_gpu_exporter
     binary: nvidia_gpu_exporter
@@ -21,45 +23,9 @@ builds:
       - -X github.com/prometheus/common/version.BuildUser=goreleaser
       - -X github.com/prometheus/common/version.BuildDate={{.CommitDate}}
     env:
-      - CGO_ENABLED=0
+      - CGO_ENABLED=1
       # the module of CMVP certificate #5247, pinned instead of `certified`
       # so that a Go bump cannot change the module the docs cite
-      - GOFIPS140=v1.0.0
-    goos:
-      - linux
-      - darwin
-      - windows
-    goarch:
-      - amd64
-      - arm64
-    ignore:
-      - goos: windows
-        goarch: arm64
-      - goos: darwin
-        goarch: arm64
-
-  # The nvml flavor carries the --collect.backend=nvml backend, which needs cgo
-  # (go-nvml). It is a separate artifact so the main builds above stay
-  # CGO_ENABLED=0 and fully static.
-  - id: nvidia_gpu_exporter-nvml
-    main: ./cmd/nvidia_gpu_exporter
-    binary: nvidia_gpu_exporter
-    # reproducible: no build paths in the binary, and the commit time as the
-    # file and build timestamp, so the same commit yields the same bytes
-    flags:
-      - -trimpath
-    mod_timestamp: "{{ .CommitTimestamp }}"
-    ldflags:
-      - -s -w
-      # this flavor exists for the nvml backend, so it defaults to it
-      - -X github.com/utkuozdemir/nvidia_gpu_exporter/internal/app.DefaultBackend=nvml
-      - -X github.com/prometheus/common/version.Version={{.Version}}
-      - -X github.com/prometheus/common/version.Revision={{.Commit}}
-      - -X github.com/prometheus/common/version.Branch={{.Branch}}
-      - -X github.com/prometheus/common/version.BuildUser=goreleaser
-      - -X github.com/prometheus/common/version.BuildDate={{.CommitDate}}
-    env:
-      - CGO_ENABLED=1
       - GOFIPS140=v1.0.0
       - CC={{ if eq .Arch "arm64" }}aarch64-linux-gnu-gcc{{ else }}gcc{{ end }}
     goos:
@@ -68,33 +34,54 @@ builds:
       - amd64
       - arm64
 
-archives:
-  - id: nvidia_gpu_exporter-nvml-archive
-    name_template: >-
-      {{ .ProjectName }}-nvml_
-      {{- .Version }}_
-      {{- .Os }}_
-      {{- if eq .Arch "amd64" }}x86_64
-      {{- else }}{{ .Arch }}{{ end }}
-    ids:
-      - nvidia_gpu_exporter-nvml
-    # the archive entries would otherwise carry the builder's uid, gid and
-    # user name (1001 "runner" on the release runner) and the checkout's file
-    # mode, which follows the umask, so the archives reproduced only under
-    # that same user. Fixed owner and mode for every entry, and the commit
-    # time on the extra files; the binaries get their mode (0755) from
-    # goreleaser and their time from mod_timestamp above
-    builds_info:
-      owner: root
-      group: root
-    files:
-      - src: LICENSE
-        info:
-          owner: root
-          group: root
-          mode: 0644
-          mtime: "{{ .CommitDate }}"
+  # Windows (native NVML via lazy nvml.dll, no cgo) and macOS (exec default).
+  - id: nvidia_gpu_exporter-other
+    main: ./cmd/nvidia_gpu_exporter
+    binary: nvidia_gpu_exporter
+    flags:
+      - -trimpath
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    ldflags:
+      - -s -w
+      - -X github.com/prometheus/common/version.Version={{.Version}}
+      - -X github.com/prometheus/common/version.Revision={{.Commit}}
+      - -X github.com/prometheus/common/version.Branch={{.Branch}}
+      - -X github.com/prometheus/common/version.BuildUser=goreleaser
+      - -X github.com/prometheus/common/version.BuildDate={{.CommitDate}}
+    env:
+      - CGO_ENABLED=0
+      - GOFIPS140=v1.0.0
+    goos:
+      - darwin
+      - windows
+    goarch:
+      - amd64
 
+  # Fully static Linux build (no cgo, exec backend default) for musl/Alpine
+  # hosts, older glibc (< 2.34) systems, and minimal wrapper-command setups.
+  - id: nvidia_gpu_exporter-static
+    main: ./cmd/nvidia_gpu_exporter
+    binary: nvidia_gpu_exporter
+    flags:
+      - -trimpath
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    ldflags:
+      - -s -w
+      - -X github.com/prometheus/common/version.Version={{.Version}}
+      - -X github.com/prometheus/common/version.Revision={{.Commit}}
+      - -X github.com/prometheus/common/version.Branch={{.Branch}}
+      - -X github.com/prometheus/common/version.BuildUser=goreleaser
+      - -X github.com/prometheus/common/version.BuildDate={{.CommitDate}}
+    env:
+      - CGO_ENABLED=0
+      - GOFIPS140=v1.0.0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+
+archives:
   - id: nvidia_gpu_exporter-archive
     name_template: >-
       {{ .ProjectName }}_
@@ -108,6 +95,7 @@ archives:
       {{- if not (eq .Amd64 "v1") }}{{ .Amd64 }}{{ end }}
     ids:
       - nvidia_gpu_exporter
+      - nvidia_gpu_exporter-other
     format_overrides:
       - goos: windows
         formats:
@@ -116,8 +104,28 @@ archives:
     # user name (1001 "runner" on the release runner) and the checkout's file
     # mode, which follows the umask, so the archives reproduced only under
     # that same user. Fixed owner and mode for every entry, and the commit
-    # time on the extra files; the binaries get their mode (0755) from
+    # time on the extra files: the binaries get their mode (0755) from
     # goreleaser and their time from mod_timestamp above
+    builds_info:
+      owner: root
+      group: root
+    files:
+      - src: LICENSE
+        info:
+          owner: root
+          group: root
+          mode: 0644
+          mtime: "{{ .CommitDate }}"
+
+  - id: nvidia_gpu_exporter-static-archive
+    name_template: >-
+      {{ .ProjectName }}-static_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+    ids:
+      - nvidia_gpu_exporter-static
     builds_info:
       owner: root
       group: root
@@ -131,7 +139,6 @@ archives:
 
 nfpms:
   - id: nvidia_gpu_exporter
-    # only the static build; the cgo nvml flavor must never leak into the packages
     ids:
       - nvidia_gpu_exporter
     package_name: nvidia-gpu-exporter
@@ -149,12 +156,18 @@ nfpms:
     maintainer: Utku Ozdemir <utkuozdemir@gmail.com>
     section: misc
     description: |-
-      Nvidia GPU exporter for prometheus.
-      This is a simple exporter that uses `nvidia-smi(.exe)` binary to collect, 
-      parse and export metrics.
+      Nvidia GPU exporter for Prometheus.
+      Collects GPU metrics natively via NVML (or via `nvidia-smi` with `--collect.backend=exec`).
     formats:
       - deb
       - rpm
+    overrides:
+      deb:
+        dependencies:
+          - libc6 (>= 2.34)
+      rpm:
+        dependencies:
+          - glibc >= 2.34
     contents:
       - src: ./install/systemd/nvidia_gpu_exporter.service
         dst: /usr/lib/systemd/system/nvidia_gpu_exporter.service
@@ -177,7 +190,6 @@ nfpms:
       postremove: install/scripts/post-remove.sh
     deb:
       lintian_overrides:
-        - statically-linked-binary
         - changelog-file-missing-in-native-package
         - no-manual-page
         # Probably won't be implemented: https://github.com/goreleaser/nfpm/issues/15#issuecomment-830816661
@@ -211,25 +223,25 @@ changelog:
   sort: asc
   groups:
     - title: "New Features"
-      regexp: '^feat(\(.+\))?:'
+      regexp: '^feat(\(.+\))?!?: '
       order: 0
     - title: "Bug Fixes"
-      regexp: '^fix(\(.+\))?:'
+      regexp: '^fix(\(.+\))?!?: '
       order: 1
     - title: "Performance Improvements"
-      regexp: '^perf(\(.+\))?:'
+      regexp: '^perf(\(.+\))?!?: '
       order: 2
     - title: "Documentation"
-      regexp: '^docs(\(.+\))?:'
+      regexp: '^docs(\(.+\))?!?: '
       order: 3
     - title: "Refactors & Internal Changes"
-      regexp: '^refactor(\(.+\))?:'
+      regexp: '^refactor(\(.+\))?!?: '
       order: 4
     - title: "Dependency Updates"
-      regexp: '^chore\(deps\):'
+      regexp: '^chore\(deps\)!?: '
       order: 5
     - title: "Build, CI & Chores"
-      regexp: '^(build|ci|cd|cicd|docker|test|chore)(\(.+\))?:'
+      regexp: '^(build|ci|cd|cicd|docker|test|chore)(\(.+\))?!?: '
       order: 6
     - title: "Other Changes"
       order: 999
@@ -244,11 +256,10 @@ dockers_v2:
     images:
       - docker.io/utkuozdemir/nvidia_gpu_exporter
       - ghcr.io/utkuozdemir/nvidia_gpu_exporter
-    # only the static build; the cgo nvml flavor must never leak into this image
     ids:
       - nvidia_gpu_exporter
     tags:
-      - "{{ .Version }}" # keep the existing no-"v" tag scheme (e.g. 1.4.1)
+      - "{{ .Version }}" # keep the existing no-"v" tag scheme (e.g. 2.0.0)
       - "{{ if not .Prerelease }}latest{{ end }}"
     platforms:
       - linux/amd64
@@ -279,42 +290,7 @@ dockers_v2:
       org.opencontainers.image.created: "{{ .CommitDate }}"
     annotations: *oci_metadata
 
-  # The nvml flavor as a tag variant of the same image (postgres:16-alpine
-  # style): carries the cgo binary and defaults to the nvml backend.
-  - id: nvidia_gpu_exporter-nvml
-    images:
-      - docker.io/utkuozdemir/nvidia_gpu_exporter
-      - ghcr.io/utkuozdemir/nvidia_gpu_exporter
-    dockerfile: Dockerfile.nvml
-    ids:
-      - nvidia_gpu_exporter-nvml
-    tags:
-      - "{{ .Version }}-nvml"
-      - "{{ if not .Prerelease }}latest-nvml{{ end }}"
-    platforms:
-      - linux/amd64
-      - linux/arm64
-    # reproducible image: the commit time as the image and history timestamp
-    # (buildkit reads it from this build argument), and the exporter rewrites
-    # the layer timestamps to it, which the COPY of the binary otherwise
-    # stamps with the build time. The exporter option only applies to the
-    # pushed release image: a snapshot loads a multi-platform build into the
-    # daemon, which cannot carry it, so snapshot images stay non-reproducible.
-    # buildkit's own provenance and SBOM attestations carry wall-clock times
-    # and change the published index digest on every build, so they are off.
-    # The release workflow attaches GitHub's build provenance instead.
-    sbom: false
-    build_args:
-      SOURCE_DATE_EPOCH: "{{ .CommitTimestamp }}"
-    flags:
-      - "{{ if not .IsSnapshot }}--output=type=image,rewrite-timestamp=true,push=true{{ end }}"
-      - "{{ if not .IsSnapshot }}--provenance=false{{ end }}"
-    labels: *oci_metadata
-    annotations: *oci_metadata
-
 scoops:
-    # only the static build, like every other publisher; the cgo nvml flavor
-    # must never leak into the scoop manifest
   - ids:
       - nvidia_gpu_exporter-archive
     repository:
@@ -326,7 +302,7 @@ scoops:
       email: utkuozdemir@gmail.com
     commit_msg_template: "Scoop update for {{ .ProjectName }} version {{ .Tag }}"
     homepage: https://github.com/utkuozdemir/nvidia_gpu_exporter
-    description: Nvidia GPU exporter for prometheus using nvidia-smi binary
+    description: Prometheus exporter for NVIDIA GPUs
     license: MIT
 
 winget:
@@ -334,10 +310,11 @@ winget:
     publisher: utkuozdemir
     package_identifier: utkuozdemir.nvidia_gpu_exporter
     package_name: Nvidia GPU Exporter
-    short_description: Nvidia GPU exporter for prometheus using nvidia-smi binary
+    short_description: Prometheus exporter for NVIDIA GPUs
     description: >-
-      Nvidia GPU exporter for prometheus, using the nvidia-smi binary to collect,
-      parse and export GPU metrics. Supports running as a native Windows service.
+      Prometheus exporter for NVIDIA GPUs. Collects GPU metrics natively via NVML
+      (or via nvidia-smi with --collect.backend=exec). Supports running as a native
+      Windows service.
     license: MIT
     license_url: https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/LICENSE
     homepage: https://github.com/utkuozdemir/nvidia_gpu_exporter

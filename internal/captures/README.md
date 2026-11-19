@@ -151,7 +151,7 @@ uncommitted capture file):
 
 ```bash
 go build -o fake-nvidia-smi ./cmd/fake-nvidia-smi
-go run ./cmd/nvidia_gpu_exporter --nvidia-smi-command \
+go run ./cmd/nvidia_gpu_exporter --collect.backend=exec --nvidia-smi-command \
   "./fake-nvidia-smi --capture linux-x86_64__nvidia-h200__590.48.01 --state load"
 ```
 

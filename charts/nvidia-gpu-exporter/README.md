@@ -12,17 +12,17 @@ and make sure that RuntimeClass exists. On clusters that use
 of an `nvidia` `RuntimeClass`, leave `runtimeClassName` empty and pass
 `resourceClaims` and `resources.claims`.
 
-We recommend the native NVML image variant (`X.Y.Z-nvml`), which reads
+The default container image uses the native NVML backend, which reads
 `libnvidia-ml.so.1` in-process instead of spawning `nvidia-smi` on every
-scrape. It exports the same core metrics as the default image, plus NVML-only
-families: the GPU energy counter, per-MIG-instance metrics, hardware GPM
-activity, XID and MIG XID error counters, PCIe replay counters, NVLink byte
-counters, per-fan speeds and RPM, BAR1 memory usage, thermal thresholds, power
+scrape. It exports the shared core metrics plus NVML-only families: the GPU
+energy counter, per-MIG-instance metrics, hardware GPM activity, XID and MIG
+XID error counters, PCIe replay and AER error counters, NVLink and C2C link
+metrics, per-fan speeds and RPM, BAR1 memory usage, thermal thresholds, power
 source state, and PCIe throughput (default on non-MIG GPM GPUs, opt-in
 elsewhere, see the
 [metrics reference](https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/docs/METRICS.md#nvml-only-metrics)).
-When `image.tag` is left empty, the chart defaults to the `exec`
-(`nvidia-smi`) image for 1.x compatibility.
+Pass `--collect.backend=exec` in `extraArgs` if you need the `nvidia-smi`
+subprocess backend instead.
 
 The exporter deliberately requests no `nvidia.com/gpu` resource. The device
 plugin allocates whole GPUs exclusively, so a monitoring pod that requested
@@ -44,11 +44,6 @@ helm repo add nvidia-gpu-exporter https://utkuozdemir.github.io/nvidia_gpu_expor
 helm install nvidia-gpu-exporter nvidia-gpu-exporter/nvidia-gpu-exporter \
   --set runtimeClassName=nvidia
 ```
-
-To run the recommended native NVML backend, set `image.tag` to the release's
-`-nvml` tag (`--set image.tag=X.Y.Z-nvml`). Because setting `image.tag`
-overrides the chart's default `appVersion`, update `image.tag` when upgrading
-the chart.
 
 ### Verifying the chart signature
 
@@ -141,10 +136,10 @@ default. Add `--collect.compute-apps-mig` to `extraArgs` (along with the
 ## Scheduling on GPU nodes
 
 By default the DaemonSet runs on every Linux node. On nodes without a GPU, the
-default `exec` image comes up and reports `nvidia_smi_last_collect_success 0`,
-while the `-nvml` image exits at startup because `libnvidia-ml.so.1` is not
-injected. On mixed clusters, restrict the DaemonSet to GPU nodes via
-`nodeSelector` using whatever GPU label your cluster has:
+default `nvml` backend exits at startup because `libnvidia-ml.so.1` is not
+injected (whereas `--collect.backend=exec` stays up and reports
+`nvidia_smi_last_collect_success 0`). On mixed clusters, restrict the DaemonSet
+to GPU nodes via `nodeSelector` using whatever GPU label your cluster has:
 
 - `nvidia.com/gpu.present: "true"` with GPU Feature Discovery (installed by
   the NVIDIA GPU Operator, among others)
@@ -253,6 +248,29 @@ requires an explicit numeric uid rather than `runAsNonRoot` needs
 
 ## Upgrading
 
+### From chart 2.x (app 2.0)
+
+Starting with chart 3.x (app version 2.0.0), the exporter ships as a single
+container image and defaults to the native `nvml` backend:
+
+- **Clear any `-nvml` `image.tag` override.** The `-nvml` and `latest-nvml`
+  image tags are removed. Leaving `image.tag` set to `1.19.0-nvml` or
+  `latest-nvml` keeps the old 1.x image running across chart upgrades. Unset
+  `image.tag` (to follow the chart's `appVersion`) or pin an unsuffixed `2.x`
+  tag.
+- **Custom `nvidiaSmiCommand` needs `--collect.backend=exec`.** If you override
+  `nvidiaSmiCommand`, add `--collect.backend=exec` to `extraArgs`, otherwise
+  the pod exits at startup.
+- **Explicit `queryFieldNames` outside the NVML catalog.** If you set a custom
+  `queryFieldNames` list containing a field deferred from the NVML catalog (for
+  example `pcie.link.gen.hostmax`), either remove that field or pass
+  `--collect.backend=exec` in `extraArgs`.
+- **Mixed clusters without `nodeSelector`.** On nodes where `libnvidia-ml.so.1`
+  is not injected, the default `nvml` backend exits at startup instead of
+  staying up with `nvidia_smi_last_collect_success 0`. Restrict the DaemonSet
+  to GPU nodes via `nodeSelector` (see
+  [Scheduling on GPU nodes](#scheduling-on-gpu-nodes)).
+
 ### Non-root images (1.15.0+)
 
 Starting with app version 1.15.0, the container images run as uid 65534
@@ -353,7 +371,7 @@ grafanaDashboard:
 | hostPort.port | int | `9835` | The host port to expose the metrics on |
 | image.pullPolicy | string | `"IfNotPresent"` | Image pull policy |
 | image.repository | string | `"docker.io/utkuozdemir/nvidia_gpu_exporter"` | Image repository |
-| image.tag | string | `""` | Image tag (if not specified, defaults to the chart's appVersion). Set to a `-nvml` variant (for example `X.Y.Z-nvml`) for the recommended native NVML backend. |
+| image.tag | string | `""` | Image tag (if not specified, defaults to the chart's appVersion). |
 | imagePullSecrets | list | `[]` | Image pull secrets, used by both the exporter and the `helm test` pods |
 | livenessProbe | object | `{"httpGet":{"path":"/-/healthy","port":"http"}}` | Liveness probe for the exporter container. The default checks that the process serves HTTP at all. It deliberately does not depend on collection success, so a failing collection keeps the pod scrapeable and the failure visible in the metrics. Set to `null` to disable the probe. |
 | log.format | string | `"logfmt"` | Log format: logfmt, json |
@@ -361,7 +379,7 @@ grafanaDashboard:
 | nameOverride | string | `""` | Override the chart name |
 | nodeSelector | object | `{"kubernetes.io/os":"linux"}` | Node selector for the pods. The images are Linux-only, hence the default. Add a GPU node label to keep the DaemonSet off non-GPU nodes, e.g. `nvidia.com/gpu.present: "true"` on clusters with GPU Feature Discovery (see the README section on scheduling). Helm merges maps key by key, so overriding with `{}` does not clear the default. Set the whole value to `null` to remove it. |
 | nvidiaDriverCapabilities | string | `"utility"` | NVIDIA driver capability tier to request. `utility` is the nvidia-smi/NVML tier, which is all the exporter needs. |
-| nvidiaSmiCommand | string | `"nvidia-smi"` | The command to run to get `nvidia-smi` compatible output. Can be a custom path and/or args. Note the official image contains only the exporter binary (no shell or ssh), so a wrapper command needs a custom image. |
+| nvidiaSmiCommand | string | `"nvidia-smi"` | The command to run to get `nvidia-smi` compatible output (requires `--collect.backend=exec` in `extraArgs` when changed from the default). Can be a custom path and/or args. Note the official image contains only the exporter binary (no shell or ssh), so a wrapper command needs a custom image. |
 | nvidiaVisibleDevices | string | `"all"` | Which GPUs to make visible to the exporter. `all` monitors every GPU on the node. |
 | podAnnotations | object | `{}` | Annotations to add to the pods |
 | podLabels | object | `{}` | Extra labels to add to the pods |
@@ -386,7 +404,7 @@ grafanaDashboard:
 | prometheusRule.collectionStale.thresholdSeconds | int | `300` | Seconds since the last successful collection before the alert fires |
 | prometheusRule.computeAppsInvisible.enabled | bool | `true` | Alert when a GPU has more than 1 GiB of memory in use for 30 minutes while `nvidia_smi_compute_apps` reports zero processes, which catches `computeApps.enabled: true` without `hostPID: true`. Silently inactive when `computeApps.enabled` is false. |
 | prometheusRule.enabled | bool | `false` | Create a Prometheus Operator PrometheusRule with default alerts (requires the Prometheus Operator CRDs). In clusters where the exporter also runs on nodes without GPUs, restrict the DaemonSet to GPU nodes via nodeSelector or affinity before enabling this, otherwise the alerts fire for nodes that cannot collect GPU metrics by design. |
-| prometheusRule.gpuMissing.enabled | bool | `false` | Alert when a machine reports fewer GPUs than its recent maximum while collection stays healthy, which catches GPUs that silently fall off the bus on the default backend. Off by default: it also fires for up to 6 hours after deliberately removing a GPU and needs a stable instance label across exporter restarts. |
+| prometheusRule.gpuMissing.enabled | bool | `false` | Alert when a machine reports fewer GPUs than its recent maximum while collection stays healthy, which catches GPUs that silently fall off the bus even on the exec backend. Off by default: it also fires for up to 6 hours after deliberately removing a GPU and needs a stable instance label across exporter restarts. |
 | prometheusRule.idleVramAllocated.enabled | bool | `false` | Informational alert when a GPU holds more than 50% of its VRAM allocated while its peak compute utilization over the last hour stays below 5%. Off by default: idle inference servers keeping weights loaded in VRAM are often intentional. |
 | prometheusRule.pcieLinkGenDegraded.enabled | bool | `true` | Alert when a GPU runs at a lower PCIe link generation than its maximum while above 50% compute utilization for 10 minutes. Idle GPUs downshift PCIe generation to save power, which is normal. |
 | prometheusRule.pcieLinkWidthDegraded.enabled | bool | `false` | Alert when a GPU negotiates fewer PCIe lanes than its maximum width while above 50% compute utilization for 10 minutes. Off by default: cards intentionally installed in narrower PCIe slots report a lower current width permanently. |
@@ -413,7 +431,7 @@ grafanaDashboard:
 | resourceClaims | list | `[]` | Resource claims for the pods, referenced from `resources.claims` |
 | resources | object | `{}` | Resources for the exporter container |
 | revisionHistoryLimit | string | `""` | How many old DaemonSet history revisions to retain for rollbacks. Empty means the Kubernetes default (10). |
-| runtimeClassName | string | `""` | Name of the RuntimeClass to run the pods with. GPU access is injected by the NVIDIA container runtime or by Dynamic Resource Allocation (DRA, via `resourceClaims`). Set this to the name of your NVIDIA RuntimeClass (usually `nvidia`), or leave it empty when the NVIDIA runtime is the default runtime of your nodes or when using DRA. If none of those holds, the exporter will come up but serve no GPU metrics, reporting `nvidia_smi_last_collect_success 0`. |
+| runtimeClassName | string | `""` | Name of the RuntimeClass to run the pods with. GPU access is injected by the NVIDIA container runtime or by Dynamic Resource Allocation (DRA, via `resourceClaims`). Set this to the name of your NVIDIA RuntimeClass (usually `nvidia`), or leave it empty when the NVIDIA runtime is the default runtime of your nodes or when using DRA. If none of those holds, the exporter exits at startup because `libnvidia-ml.so.1` is not injected (or reports `nvidia_smi_last_collect_success 0` with `--collect.backend=exec`). |
 | securityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true}` | Security context for the exporter container. Unprivileged: GPU access comes from the NVIDIA runtime, which needs no privileges or capabilities. The exporter writes no files, so the root filesystem is read-only. A custom image with a wrapper command that writes files (e.g., ssh's known_hosts) needs `readOnlyRootFilesystem: false`. |
 | service.annotations | object | `{}` | Annotations to add to the Service |
 | service.enabled | bool | `true` | Create a Service for the exporter |

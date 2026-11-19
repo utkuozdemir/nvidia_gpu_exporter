@@ -4667,7 +4667,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "Total XID errors observed on this GPU since the exporter started (earlier history cannot be replayed, so a restart resets the count). Any value above zero deserves a look at the per-code panel next to this one. Served only by the nvml and demo backends; absent under the default exec backend.",
+          "description": "Total XID errors observed on this GPU since the exporter started (earlier history cannot be replayed, so a restart resets the count). Any value above zero deserves a look at the per-code panel next to this one. Served only by the nvml and demo backends; absent under the exec backend.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -4750,7 +4750,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "Seconds since the most recent XID error on this GPU. 'Never' means none were observed since the exporter started. This is the signal to alert on: unlike increase() on the error counter, it also sees each series' first event (see METRICS.md). Served only by the nvml and demo backends, absent under the default exec backend.",
+          "description": "Seconds since the most recent XID error on this GPU. 'Never' means none were observed since the exporter started. This is the signal to alert on: unlike increase() on the error counter, it also sees each series' first event (see METRICS.md). Served only by the nvml and demo backends, absent under the exec backend.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -4837,7 +4837,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "Cumulative count per XID code since the exporter started. A series appears when its first event arrives, so an empty panel means no errors were observed yet. Do not alert on increase() of this counter: a series' first event is invisible to it, alert on the last-timestamp metric instead (see METRICS.md). Served only by the nvml and demo backends; absent under the default exec backend.",
+          "description": "Cumulative count per XID code since the exporter started. A series appears when its first event arrives, so an empty panel means no errors were observed yet. Do not alert on increase() of this counter: a series' first event is invisible to it, alert on the last-timestamp metric instead (see METRICS.md). Served only by the nvml and demo backends; absent under the exec backend.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -4933,7 +4933,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "PCIe throughput per direction. Exported by default on non-MIG GPUs with GPM support, and over 20ms driver counter windows elsewhere when --collect.pcie-throughput is enabled. Served only by the nvml and demo backends, absent under the default exec backend.",
+          "description": "PCIe throughput per direction. Exported by default on non-MIG GPUs with GPM support, and over 20ms driver counter windows elsewhere when --collect.pcie-throughput is enabled. Served only by the nvml and demo backends, absent under the exec backend.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -5039,7 +5039,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "Compares power integrated from the energy counter against the sampled power draw. The energy counter is NVML-only, so the default backend draws only the sampled line.",
+          "description": "Compares power integrated from the energy counter against the sampled power draw. The energy counter is NVML-only, so the exec backend draws only the sampled line.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -5144,7 +5144,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "Energy the GPU consumed over the trailing 24 hours, from the driver's cumulative counter (consumption actually measured, not a projection of the current rate). Served only by the nvml and demo backends; absent under the default exec backend.",
+          "description": "Energy the GPU consumed over the trailing 24 hours, from the driver's cumulative counter (consumption actually measured, not a projection of the current rate). Served only by the nvml and demo backends; absent under the exec backend.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -5212,7 +5212,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "Framebuffer memory used per MIG GPU instance (memory is a GPU-instance-level resource, shared by its compute instances). Served only by the nvml and demo backends; absent under the default exec backend.",
+          "description": "Framebuffer memory used per MIG GPU instance (memory is a GPU-instance-level resource, shared by its compute instances). Served only by the nvml and demo backends; absent under the exec backend.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -5307,7 +5307,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "SM activity per MIG GPU instance, or for the whole GPU when MIG is not enabled. Empty on GPUs without GPM support, and the first collection serves nothing because sampling needs a pair of collections. Served only by the nvml and demo backends, absent under the default exec backend.",
+          "description": "SM activity per MIG GPU instance, or for the whole GPU when MIG is not enabled. Empty on GPUs without GPM support, and the first collection serves nothing because sampling needs a pair of collections. Served only by the nvml and demo backends, absent under the exec backend.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -5413,7 +5413,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "Tensor pipe activity per MIG GPU instance, or for the whole GPU when MIG is not enabled, the signal that shows whether an inference workload actually exercises the tensor cores. Served only by the nvml and demo backends, absent under the default exec backend.",
+          "description": "Tensor pipe activity per MIG GPU instance, or for the whole GPU when MIG is not enabled, the signal that shows whether an inference workload actually exercises the tensor cores. Served only by the nvml and demo backends, absent under the exec backend.",
           "fieldConfig": {
             "defaults": {
               "color": {
