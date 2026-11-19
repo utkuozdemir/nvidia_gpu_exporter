@@ -75,10 +75,10 @@ func fillConsolidatedExtraFields(values []nvml.FieldValue) nvml.Return {
 			default:
 				putUint64Field(fv, 0)
 			}
-		case fv.FieldId == nvml.FI_DEV_NVLINK_COUNT_LINK_RECOVERY_EVENTS && fv.ScopeId == math.MaxUint32:
-			putUint64Field(fv, 6)
-		case fv.FieldId == nvml.FI_DEV_NVLINK_COUNT_LINK_RECOVERY_FAILED_EVENTS && fv.ScopeId == math.MaxUint32:
-			putUint64Field(fv, 3)
+		case fv.FieldId == nvml.FI_DEV_NVLINK_COUNT_LINK_RECOVERY_EVENTS && fv.ScopeId < 3:
+			putUint64Field(fv, uint64(fv.ScopeId+1)) // 1 + 2 + 3 = 6
+		case fv.FieldId == nvml.FI_DEV_NVLINK_COUNT_LINK_RECOVERY_FAILED_EVENTS && fv.ScopeId < 3:
+			putUint64Field(fv, 1) // 1 + 1 + 1 = 3
 		case fv.FieldId == nvml.FI_DEV_C2C_LINK_COUNT:
 			putUint64Field(fv, 2)
 		case fv.FieldId == nvml.FI_DEV_C2C_LINK_GET_STATUS:
@@ -135,6 +135,39 @@ func TestCollectFieldValueExtrasConsolidated(t *testing.T) {
 	assert.Equal(t, uint64(2), reading.Extras.C2CLinks[0].Links)
 	require.NotNil(t, reading.Extras.C2CLinks[0].ActiveLinks)
 	assert.Equal(t, uint64(2), *reading.Extras.C2CLinks[0].ActiveLinks)
+}
+
+func TestCollectNVLinkRecoveryPartialLinkOmitted(t *testing.T) {
+	t.Parallel()
+
+	dev := identityDevice()
+	dev.GetPowerUsageFunc = func() (uint32, nvml.Return) { return 100000, nvml.SUCCESS }
+	dev.GetFieldValuesFunc = func(values []nvml.FieldValue) nvml.Return {
+		for i := range values {
+			fv := &values[i]
+			switch {
+			case fv.FieldId == nvml.FI_DEV_NVLINK_LINK_COUNT:
+				putUint64Field(fv, 2)
+			case fv.FieldId == nvml.FI_DEV_NVLINK_COUNT_LINK_RECOVERY_EVENTS && fv.ScopeId < 2:
+				putUint64Field(fv, 4)
+			case fv.FieldId == nvml.FI_DEV_NVLINK_COUNT_LINK_RECOVERY_FAILED_EVENTS && fv.ScopeId == 0:
+				// Only link 0 reports, while link 1 stays NOT_SUPPORTED so the failed total must be omitted.
+				putUint64Field(fv, 1)
+			default:
+				fv.NvmlReturn = uint32(nvml.ERROR_NOT_SUPPORTED)
+			}
+		}
+
+		return nvml.SUCCESS
+	}
+
+	backend := newTestBackend(t, &fakeAPI{devices: []nvml.Device{dev}})
+	reading, _, err := backend.QueryFunc(resolveFields(t, "power.draw"), CollectOptions{NVLink: true})(t.Context())
+	require.NoError(t, err)
+	require.Len(t, reading.Extras.NVLink, 1)
+	require.NotNil(t, reading.Extras.NVLink[0].RecoveryEvents)
+	assert.Equal(t, uint64(8), *reading.Extras.NVLink[0].RecoveryEvents)
+	assert.Nil(t, reading.Extras.NVLink[0].RecoveryFailedEvents)
 }
 
 //nolint:funlen // exercises four related extras getters in one backend lifecycle

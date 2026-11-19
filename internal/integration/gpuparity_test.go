@@ -713,7 +713,7 @@ func compareFamiliesNVMLToExec(t *testing.T, execFamilies, nativeFamilies map[st
 }
 
 // nvmlOnlyFamilyPrefixes lists the metric family prefixes only the nvml
-// backend serves (the extras families, plus the five query fields nvidia-smi
+// backend serves (the extras families, plus the query fields nvidia-smi
 // marks deprecated on R590+ while the NVML library still serves them). They
 // are exempt from the family parity requirement in the nvml direction, nothing
 // more: presence is asserted per scenario (always-on families in the default
@@ -783,6 +783,8 @@ var nvmlOnlyFamilyPrefixes = []string{
 	"nvidia_smi_power_management",
 	"nvidia_smi_clocks_applications_graphics_clock_hz",
 	"nvidia_smi_clocks_applications_memory_clock_hz",
+	"nvidia_smi_clocks_default_applications_graphics_clock_hz",
+	"nvidia_smi_clocks_default_applications_memory_clock_hz",
 	"nvidia_smi_reset_status_",
 }
 

@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"log/slog"
+	"math"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -694,7 +695,7 @@ func TestCloseSkipsWhenCollectionHoldsTheDriver(t *testing.T) {
 	close(release)
 }
 
-func TestFunctionNotFoundIsLoggedOnce(t *testing.T) {
+func TestFunctionNotFoundIsAbsentWithoutWarn(t *testing.T) {
 	t.Parallel()
 
 	dev := identityDevice()
@@ -711,13 +712,51 @@ func TestFunctionNotFoundIsLoggedOnce(t *testing.T) {
 	require.NoError(t, err, "a missing optional function must not fail the collection")
 	assert.Equal(t, "[Function Not Found]", cellValue(t, reading.Table, "power.draw"))
 
-	// the second cycle must not log again
 	_, _, err = query(t.Context())
 	require.NoError(t, err)
 
-	handler.AssertMessage("required NVML functions are unavailable in this driver; " +
-		"the affected fields will be absent - please report this on the project's issue tracker")
 	handler.AssertEmpty()
+}
+
+func TestCollectPlatformInfo(t *testing.T) {
+	t.Parallel()
+
+	dev := identityDevice()
+	dev.GetPlatformInfoFunc = func() (nvml.PlatformInfo, nvml.Return) {
+		// Raw B200 bytes for nvidia-smi's "0x4ac9da0003666d3c" (little-endian uint64),
+		// with 0xFF N/A sentinels on slot_number and tray_index.
+		return nvml.PlatformInfo{
+			IbGuid:     [16]uint8{0x3c, 0x6d, 0x66, 0x03, 0x00, 0xda, 0xc9, 0x4a},
+			SlotNumber: math.MaxUint8,
+			TrayIndex:  math.MaxUint8,
+			HostId:     1,
+			PeerType:   1,
+			ModuleId:   5,
+		}, nvml.SUCCESS
+	}
+
+	backend := newTestBackend(t, &fakeAPI{devices: []nvml.Device{dev}})
+	fields := resolveFields(t,
+		"platform.gpu_fabric_guid,platform.slot_number,platform.tray_index,platform.host_id,platform.module_id")
+
+	reading, _, err := backend.QueryFunc(fields, CollectOptions{})(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "0x4ac9da0003666d3c", cellValue(t, reading.Table, "platform.gpu_fabric_guid"))
+	assert.Equal(t, tokenNotAvailable, cellValue(t, reading.Table, "platform.slot_number"))
+	assert.Equal(t, tokenNotAvailable, cellValue(t, reading.Table, "platform.tray_index"))
+	assert.Equal(t, "1", cellValue(t, reading.Table, "platform.host_id"))
+	assert.Equal(t, "5", cellValue(t, reading.Table, "platform.module_id"))
+
+	// Zero values remain real readings, not N/A.
+	dev.GetPlatformInfoFunc = func() (nvml.PlatformInfo, nvml.Return) {
+		return nvml.PlatformInfo{}, nvml.SUCCESS
+	}
+
+	reading, _, err = backend.QueryFunc(fields, CollectOptions{})(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "0x0000000000000000", cellValue(t, reading.Table, "platform.gpu_fabric_guid"))
+	assert.Equal(t, "0", cellValue(t, reading.Table, "platform.slot_number"))
+	assert.Equal(t, "0", cellValue(t, reading.Table, "platform.tray_index"))
 }
 
 func TestExtrasCudaVersionRetainedAcrossTransientFailure(t *testing.T) {

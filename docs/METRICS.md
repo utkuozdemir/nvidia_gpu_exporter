@@ -57,9 +57,11 @@ These families come from the NVIDIA driver library (`libnvidia-ml` / `nvml.dll`)
   active NVLink counts (`FI_DEV_NVLINK_LINK_COUNT` with NVSwitch fallback to
   `FI_DEV_NVSWITCH_CONNECTED_LINK_COUNT`, and per-link `FI_DEV_NVLINK_GET_STATE`
   counting `ACTIVE` links with fallback to `nvmlDeviceGetNvLinkState`), and
-  GPU-wide NVLink 5 recovery event counts (`FI_DEV_NVLINK_COUNT_LINK_RECOVERY_EVENTS` and
+  GPU-wide NVLink 5 recovery event counts (summed across all links from
+  `FI_DEV_NVLINK_COUNT_LINK_RECOVERY_EVENTS` and
   `FI_DEV_NVLINK_COUNT_LINK_RECOVERY_FAILED_EVENTS`). Always on in the NVML
-  backend when `FI_DEV_NVLINK_LINK_COUNT > 0` and omitted on GPUs without
+  backend when `FI_DEV_NVLINK_LINK_COUNT > 0` or
+  `FI_DEV_NVSWITCH_CONNECTED_LINK_COUNT > 0`, and omitted on GPUs without
   NVLink or when unsupported. Unbridged cards can report `nvlink_links > 0`
   with zero active links, and idle links can enter NVML's sleep state and drop
   out of `nvlink_active_links`, so alert on

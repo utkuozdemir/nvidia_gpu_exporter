@@ -32,8 +32,6 @@ type extraFieldSlots struct {
 	nvswitchCount int
 	nvlinkTX      int
 	nvlinkRX      int
-	nvlinkRec     int
-	nvlinkRecFail int
 	c2cCount      int
 	perfThermal   int
 	perfBoard     int
@@ -49,7 +47,7 @@ func newExtraFieldSlots() extraFieldSlots {
 	return extraFieldSlots{
 		pcieReplay: -1, pcieRollover: -1,
 		pcieCorr: -1, pcieNonFatal: -1, pcieFatal: -1, pcieL0Recov: -1,
-		nvlinkCount: -1, nvswitchCount: -1, nvlinkTX: -1, nvlinkRX: -1, nvlinkRec: -1, nvlinkRecFail: -1,
+		nvlinkCount: -1, nvswitchCount: -1, nvlinkTX: -1, nvlinkRX: -1,
 		c2cCount:    -1,
 		perfThermal: -1, perfBoard: -1, perfReliab: -1, perfBase: -1,
 		tlimShut: -1, tlimSlow: -1, tlimMemMax: -1, tlimGPUMax: -1,
@@ -58,7 +56,7 @@ func newExtraFieldSlots() extraFieldSlots {
 
 func buildExtraFieldBatch(opts CollectOptions) ([]nvml.FieldValue, extraFieldSlots) {
 	slots := newExtraFieldSlots()
-	values := make([]nvml.FieldValue, 0, 21)
+	values := make([]nvml.FieldValue, 0, 19)
 
 	add := func(id, scope uint32) int {
 		idx := len(values)
@@ -84,8 +82,6 @@ func buildExtraFieldBatch(opts CollectOptions) ([]nvml.FieldValue, extraFieldSlo
 		slots.nvswitchCount = add(nvml.FI_DEV_NVSWITCH_CONNECTED_LINK_COUNT, 0)
 		slots.nvlinkTX = add(nvml.FI_DEV_NVLINK_THROUGHPUT_DATA_TX, math.MaxUint32)
 		slots.nvlinkRX = add(nvml.FI_DEV_NVLINK_THROUGHPUT_DATA_RX, math.MaxUint32)
-		slots.nvlinkRec = add(nvml.FI_DEV_NVLINK_COUNT_LINK_RECOVERY_EVENTS, math.MaxUint32)
-		slots.nvlinkRecFail = add(nvml.FI_DEV_NVLINK_COUNT_LINK_RECOVERY_FAILED_EVENTS, math.MaxUint32)
 	}
 
 	if opts.C2CLinks {
@@ -376,6 +372,14 @@ func (b *Backend) collectNVLinkSection(
 
 	extras.NVLink[idx].ActiveLinks = activeLinks
 
+	recovery, recoveryFailed, ok := b.collectNVLinkRecoveryCounters(dev, nvLinks)
+	if !ok {
+		return false
+	}
+
+	extras.NVLink[idx].RecoveryEvents = recovery
+	extras.NVLink[idx].RecoveryFailedEvents = recoveryFailed
+
 	return true
 }
 
@@ -440,23 +444,11 @@ func (b *Backend) appendNVLinkExtras(
 		return false
 	}
 
-	recovery, ok := b.decodeExtraFieldCounter("nvlink", values[slots.nvlinkRec])
-	if !ok {
-		return false
-	}
-
-	recoveryFailed, ok := b.decodeExtraFieldCounter("nvlink", values[slots.nvlinkRecFail])
-	if !ok {
-		return false
-	}
-
 	extras.NVLink = append(extras.NVLink, collect.NVLinkThroughput{
-		UUID:                 uuid,
-		TXBytes:              scaleCounterKiB(txKiB),
-		RXBytes:              scaleCounterKiB(rxKiB),
-		Links:                nvlinkCount,
-		RecoveryEvents:       recovery,
-		RecoveryFailedEvents: recoveryFailed,
+		UUID:    uuid,
+		TXBytes: scaleCounterKiB(txKiB),
+		RXBytes: scaleCounterKiB(rxKiB),
+		Links:   nvlinkCount,
 	})
 
 	return true
@@ -550,6 +542,65 @@ func (b *Backend) collectNVLinkActiveStateDirect(dev device, nvLinks uint32) (*u
 	}
 
 	return &activeSum, true
+}
+
+// collectNVLinkRecoveryCounters queries the NVLink 5 recovery-event counters
+// per link (ScopeId 0..nvLinks-1, matching nvml.h for field IDs 201..225) and
+// sums each family when every link reports a reading.
+func (b *Backend) collectNVLinkRecoveryCounters(dev device, nvLinks uint32) (*uint64, *uint64, bool) {
+	values := make([]nvml.FieldValue, 2*nvLinks)
+	for link := range nvLinks {
+		values[link] = nvml.FieldValue{
+			FieldId: nvml.FI_DEV_NVLINK_COUNT_LINK_RECOVERY_EVENTS,
+			ScopeId: link,
+		}
+		values[nvLinks+link] = nvml.FieldValue{
+			FieldId: nvml.FI_DEV_NVLINK_COUNT_LINK_RECOVERY_FAILED_EVENTS,
+			ScopeId: link,
+		}
+	}
+
+	ok, supported := b.queryExtraFieldValues(dev, "nvlink-recovery", "cannot read NVLink recovery counters", values)
+	if !ok || !supported {
+		return nil, nil, ok
+	}
+
+	recovery, ok := b.sumPerLinkCounters("nvlink", values[:nvLinks])
+	if !ok {
+		return nil, nil, false
+	}
+
+	recoveryFailed, ok := b.sumPerLinkCounters("nvlink", values[nvLinks:])
+	if !ok {
+		return nil, nil, false
+	}
+
+	return recovery, recoveryFailed, true
+}
+
+func (b *Backend) sumPerLinkCounters(family string, values []nvml.FieldValue) (*uint64, bool) {
+	var (
+		sum   uint64
+		count int
+	)
+
+	for _, fv := range values {
+		val, ok := b.decodeExtraFieldCounter(family, fv)
+		if !ok {
+			return nil, false
+		}
+
+		if val != nil {
+			count++
+			sum += *val
+		}
+	}
+
+	if count != len(values) {
+		return nil, true
+	}
+
+	return &sum, true
 }
 
 func (b *Backend) decodePerfPolicySec(fieldValue nvml.FieldValue) (*float64, bool) {
