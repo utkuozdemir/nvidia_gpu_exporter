@@ -3928,7 +3928,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "Power averaged from the driver's cumulative energy counter, smoother and more complete than the sampled power draw. Served only by the nvml and demo backends; absent under the default exec backend.",
+          "description": "Power averaged from the driver's cumulative energy counter, smoother and more complete than the sampled power draw. Served only by the nvml and demo backends; absent under the exec backend.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -4023,7 +4023,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "PCIe transmit throughput per GPU. Exported by default on non-MIG GPUs with GPM support, and over 20ms driver counter windows elsewhere when --collect.pcie-throughput is enabled. Served only by the nvml and demo backends, absent under the default exec backend.",
+          "description": "PCIe transmit throughput per GPU. Exported by default on non-MIG GPUs with GPM support, and over 20ms driver counter windows elsewhere when --collect.pcie-throughput is enabled. Served only by the nvml and demo backends, absent under the exec backend.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -4118,7 +4118,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "PCIe receive throughput per GPU. Exported by default on non-MIG GPUs with GPM support, and over 20ms driver counter windows elsewhere when --collect.pcie-throughput is enabled. Served only by the nvml and demo backends, absent under the default exec backend.",
+          "description": "PCIe receive throughput per GPU. Exported by default on non-MIG GPUs with GPM support, and over 20ms driver counter windows elsewhere when --collect.pcie-throughput is enabled. Served only by the nvml and demo backends, absent under the exec backend.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -4213,7 +4213,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "Cumulative XID errors per GPU since the exporter started (earlier history cannot be replayed, so a restart resets the counts). Flat zero is healthy. Do not alert on increase() of this counter: a series' first event is invisible to it, alert on the last-timestamp metric instead (see METRICS.md). Served only by the nvml and demo backends; absent under the default exec backend.",
+          "description": "Cumulative XID errors per GPU since the exporter started (earlier history cannot be replayed, so a restart resets the counts). Flat zero is healthy. Do not alert on increase() of this counter: a series' first event is invisible to it, alert on the last-timestamp metric instead (see METRICS.md). Served only by the nvml and demo backends; absent under the exec backend.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -4416,7 +4416,7 @@
           "type": "table",
           "id": 28,
           "title": "Last XID per GPU",
-          "description": "Seconds since each GPU last raised each XID code. 'Never' means no errors since the exporter started. This is the signal to alert on: unlike increase() on the error counter, it also sees each series' first event (see METRICS.md). Served only by the nvml and demo backends, absent under the default exec backend.",
+          "description": "Seconds since each GPU last raised each XID code. 'Never' means no errors since the exporter started. This is the signal to alert on: unlike increase() on the error counter, it also sees each series' first event (see METRICS.md). Served only by the nvml and demo backends, absent under the exec backend.",
           "gridPos": {
             "h": 8,
             "w": 8,
@@ -4643,7 +4643,7 @@
           "type": "table",
           "id": 29,
           "title": "MIG Instances",
-          "description": "The node's MIG partitions: one row per GPU instance (compute instances sharing it are collapsed, like the per-instance metrics), with cumulative XID errors attributed to that GPU instance since exporter start. Empty when no GPU on the node is partitioned. Served only by the nvml and demo backends, absent under the default exec backend.",
+          "description": "The node's MIG partitions: one row per GPU instance (compute instances sharing it are collapsed, like the per-instance metrics), with cumulative XID errors attributed to that GPU instance since exporter start. Empty when no GPU on the node is partitioned. Served only by the nvml and demo backends, absent under the exec backend.",
           "gridPos": {
             "h": 8,
             "w": 8,
@@ -4706,7 +4706,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "SM activity per MIG GPU instance across partitioned GPUs, and per whole GPU across unpartitioned GPUs. Empty when no GPU supports GPM, and the first collection serves nothing because sampling needs a pair of collections. Served only by the nvml and demo backends, absent under the default exec backend.",
+          "description": "SM activity per MIG GPU instance across partitioned GPUs, and per whole GPU across unpartitioned GPUs. Empty when no GPU supports GPM, and the first collection serves nothing because sampling needs a pair of collections. Served only by the nvml and demo backends, absent under the exec backend.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -4815,7 +4815,7 @@
           },
           "id": 30,
           "title": "MIG Memory Used",
-          "description": "Framebuffer memory used per MIG GPU instance (memory is a GPU-instance-level resource, shared by its compute instances). Served only by the nvml and demo backends; absent under the default exec backend.",
+          "description": "Framebuffer memory used per MIG GPU instance (memory is a GPU-instance-level resource, shared by its compute instances). Served only by the nvml and demo backends; absent under the exec backend.",
           "gridPos": {
             "h": 8,
             "w": 12,

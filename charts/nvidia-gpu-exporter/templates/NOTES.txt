@@ -21,8 +21,8 @@ NVIDIA runtime:
   runtimeClassName is NOT set, so the exporter relies on the NVIDIA runtime
   being the default runtime of your nodes. If it is not, set
   runtimeClassName=nvidia (and create the RuntimeClass if needed), otherwise
-  the exporter will serve no GPU metrics and report
-  nvidia_smi_last_collect_success 0.
+  the exporter will exit at startup because libnvidia-ml.so.1 is not injected
+  (or report nvidia_smi_last_collect_success 0 with --collect.backend=exec).
 {{- end }}
 {{- end }}
 

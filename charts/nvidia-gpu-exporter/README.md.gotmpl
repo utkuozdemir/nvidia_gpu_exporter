@@ -12,17 +12,17 @@ and make sure that RuntimeClass exists. On clusters that use
 of an `nvidia` `RuntimeClass`, leave `runtimeClassName` empty and pass
 `resourceClaims` and `resources.claims`.
 
-We recommend the native NVML image variant (`X.Y.Z-nvml`), which reads
+The default container image uses the native NVML backend, which reads
 `libnvidia-ml.so.1` in-process instead of spawning `nvidia-smi` on every
-scrape. It exports the same core metrics as the default image, plus NVML-only
-families: the GPU energy counter, per-MIG-instance metrics, hardware GPM
-activity, XID and MIG XID error counters, PCIe replay counters, NVLink byte
-counters, per-fan speeds and RPM, BAR1 memory usage, thermal thresholds, power
+scrape. It exports the shared core metrics plus NVML-only families: the GPU
+energy counter, per-MIG-instance metrics, hardware GPM activity, XID and MIG
+XID error counters, PCIe replay and AER error counters, NVLink and C2C link
+metrics, per-fan speeds and RPM, BAR1 memory usage, thermal thresholds, power
 source state, and PCIe throughput (default on non-MIG GPM GPUs, opt-in
 elsewhere, see the
 [metrics reference](https://github.com/utkuozdemir/nvidia_gpu_exporter/blob/main/docs/METRICS.md#nvml-only-metrics)).
-When `image.tag` is left empty, the chart defaults to the `exec`
-(`nvidia-smi`) image for 1.x compatibility.
+Pass `--collect.backend=exec` in `extraArgs` if you need the `nvidia-smi`
+subprocess backend instead.
 
 The exporter deliberately requests no `nvidia.com/gpu` resource. The device
 plugin allocates whole GPUs exclusively, so a monitoring pod that requested
@@ -44,11 +44,6 @@ helm repo add nvidia-gpu-exporter https://utkuozdemir.github.io/nvidia_gpu_expor
 helm install nvidia-gpu-exporter nvidia-gpu-exporter/nvidia-gpu-exporter \
   --set runtimeClassName=nvidia
 ```
-
-To run the recommended native NVML backend, set `image.tag` to the release's
-`-nvml` tag (`--set image.tag=X.Y.Z-nvml`). Because setting `image.tag`
-overrides the chart's default `appVersion`, update `image.tag` when upgrading
-the chart.
 
 ### Verifying the chart signature
 
@@ -141,10 +136,10 @@ default. Add `--collect.compute-apps-mig` to `extraArgs` (along with the
 ## Scheduling on GPU nodes
 
 By default the DaemonSet runs on every Linux node. On nodes without a GPU, the
-default `exec` image comes up and reports `nvidia_smi_last_collect_success 0`,
-while the `-nvml` image exits at startup because `libnvidia-ml.so.1` is not
-injected. On mixed clusters, restrict the DaemonSet to GPU nodes via
-`nodeSelector` using whatever GPU label your cluster has:
+default `nvml` backend exits at startup because `libnvidia-ml.so.1` is not
+injected (whereas `--collect.backend=exec` stays up and reports
+`nvidia_smi_last_collect_success 0`). On mixed clusters, restrict the DaemonSet
+to GPU nodes via `nodeSelector` using whatever GPU label your cluster has:
 
 - `nvidia.com/gpu.present: "true"` with GPU Feature Discovery (installed by
   the NVIDIA GPU Operator, among others)
@@ -252,6 +247,29 @@ requires an explicit numeric uid rather than `runAsNonRoot` needs
 `runAsUser` unset lets the `restricted-v2` SCC assign one.
 
 ## Upgrading
+
+### From chart 2.x (app 2.0)
+
+Starting with chart 3.x (app version 2.0.0), the exporter ships as a single
+container image and defaults to the native `nvml` backend:
+
+- **Clear any `-nvml` `image.tag` override.** The `-nvml` and `latest-nvml`
+  image tags are removed. Leaving `image.tag` set to `1.19.0-nvml` or
+  `latest-nvml` keeps the old 1.x image running across chart upgrades. Unset
+  `image.tag` (to follow the chart's `appVersion`) or pin an unsuffixed `2.x`
+  tag.
+- **Custom `nvidiaSmiCommand` needs `--collect.backend=exec`.** If you override
+  `nvidiaSmiCommand`, add `--collect.backend=exec` to `extraArgs`, otherwise
+  the pod exits at startup.
+- **Explicit `queryFieldNames` outside the NVML catalog.** If you set a custom
+  `queryFieldNames` list containing a field deferred from the NVML catalog (for
+  example `pcie.link.gen.hostmax`), either remove that field or pass
+  `--collect.backend=exec` in `extraArgs`.
+- **Mixed clusters without `nodeSelector`.** On nodes where `libnvidia-ml.so.1`
+  is not injected, the default `nvml` backend exits at startup instead of
+  staying up with `nvidia_smi_last_collect_success 0`. Restrict the DaemonSet
+  to GPU nodes via `nodeSelector` (see
+  [Scheduling on GPU nodes](#scheduling-on-gpu-nodes)).
 
 ### Non-root images (1.15.0+)
 

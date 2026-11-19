@@ -255,7 +255,7 @@ Both backends stamp the CUDA version the installed driver supports onto
 `nvidia_smi_gpu_info` as the `cuda_version` label. This is the version of
 the CUDA API the driver carries, not an installed CUDA toolkit.
 
-The default backend reads it from `nvidia-smi --version` and refreshes it if
+The `exec` backend reads it from `nvidia-smi --version` and refreshes it if
 `driver_version` changes across collections (falling back to `nvidia-smi -q`
 on pre-550 drivers that do not recognize `--version`). The NVML backend asks
 the library directly. When it cannot be read, the label value is empty.

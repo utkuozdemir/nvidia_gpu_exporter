@@ -54,10 +54,9 @@ jobs:
       # the chart's default runAsNonRoot relies on the images carrying a
       # numeric non-root user. A refactor that drops the directive would pass
       # every other check and then break every pod at container start.
-      - name: Check that the images keep their non-root user
+      - name: Check that the image keeps its non-root user
         run: |
           grep -q '^USER 65534:65534$' Dockerfile
-          grep -q '^USER 65534:65534$' Dockerfile.nvml
       - name: Run tests
         run: go test -v -race -coverpkg=./... -coverprofile ./coverage.out -covermode=atomic -timeout 20m ./...
       - name: Print coverage results
@@ -106,6 +105,32 @@ jobs:
           args: release --snapshot --clean --skip=publish,sign,sbom
         env:
           PRIVATE_ACCESS_TOKEN: placeholder
+      # keep the Linux cgo binaries dynamically linked against glibc <= 2.34
+      # (RHEL 9, Ubuntu 22.04+, Debian 12/13) and in sync with the deb/rpm floor
+      - name: Check glibc symbol floor on Linux cgo binaries
+        run: |
+          shopt -s nullglob
+          bins=(dist/nvidia_gpu_exporter_linux_*/nvidia_gpu_exporter)
+          if [ "${#bins[@]}" -eq 0 ]; then
+            echo "no Linux cgo binaries found under dist/" >&2
+            exit 1
+          fi
+          for bin in "${bins[@]}"; do
+            max_ver="$(readelf -V --wide "${bin}" \
+              | grep -oE 'GLIBC_[0-9]+\.[0-9]+(\.[0-9]+)?' \
+              | sed 's/^GLIBC_//' \
+              | sort -V \
+              | tail -n 1 || true)"
+            if [ -z "${max_ver}" ]; then
+              echo "${bin} has no GLIBC_ symbols (expected a cgo build)" >&2
+              exit 1
+            fi
+            echo "${bin}: max GLIBC symbol = ${max_ver}"
+            if [ "$(printf '%s\n2.34\n' "${max_ver}" | sort -V | tail -n 1)" != "2.34" ]; then
+              echo "${bin} requires GLIBC_${max_ver}, exceeding the 2.34 floor" >&2
+              exit 1
+            fi
+          done
       - name: Check for dirty files
         run: git diff --exit-code
 

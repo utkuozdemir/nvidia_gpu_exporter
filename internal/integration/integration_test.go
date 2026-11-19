@@ -97,7 +97,14 @@ func startExporter(t *testing.T, args ...string) string {
 	listenCh := make(chan []net.Addr, 1)
 	doneCh := make(chan error, 1)
 
-	args = append([]string{"--web.listen-address=127.0.0.1:0", "--log.level=warn"}, args...)
+	baseArgs := []string{"--web.listen-address=127.0.0.1:0", "--log.level=warn"}
+	if !hasBackendArg(args) {
+		// The default backend is nvml on cgo Linux builds, while most
+		// integration tests drive fake-nvidia-smi via --nvidia-smi-command.
+		baseArgs = append(baseArgs, "--collect.backend=exec")
+	}
+
+	args = append(baseArgs, args...)
 
 	go func() {
 		doneCh <- app.Run(ctx, args, app.Options{
@@ -124,6 +131,16 @@ func startExporter(t *testing.T, args ...string) string {
 	}
 
 	return ""
+}
+
+func hasBackendArg(args []string) bool {
+	for _, arg := range args {
+		if arg == "--collect.backend" || strings.HasPrefix(arg, "--collect.backend=") {
+			return true
+		}
+	}
+
+	return false
 }
 
 // httpGet fetches a URL and returns the status code and body, with optional
@@ -622,6 +639,7 @@ func TestTelemetryPathValidation(t *testing.T) {
 			err := app.Run(t.Context(), []string{
 				"--web.listen-address=127.0.0.1:0",
 				"--log.level=error",
+				"--collect.backend=exec",
 				"--nvidia-smi-command=" + fakeCommand(defaultCapture(t)),
 				"--web.telemetry-path=" + path,
 			}, app.Options{})
@@ -774,6 +792,7 @@ func TestShutdownDuringInFlightScrape(t *testing.T) {
 		doneCh <- app.Run(ctx, []string{
 			"--web.listen-address=127.0.0.1:0",
 			"--log.level=error",
+			"--collect.backend=exec",
 			"--nvidia-smi-command=" + fakeCommand(defaultCapture(t), "--delay", delay.String()),
 		}, app.Options{
 			OnListen: func(addrs []net.Addr) { listenCh <- addrs },
@@ -888,6 +907,7 @@ func TestExplicitUnknownFieldFailsStartup(t *testing.T) {
 	err := app.Run(t.Context(), []string{
 		"--web.listen-address=127.0.0.1:0",
 		"--log.level=error",
+		"--collect.backend=exec",
 		"--nvidia-smi-command=" + fakeCommand(defaultCapture(t)),
 		"--query-field-names=temperature.gpu,bogus_field",
 	}, app.Options{})
@@ -922,6 +942,7 @@ func TestShutdownOnError(t *testing.T) {
 		doneCh <- app.Run(t.Context(), []string{
 			"--web.listen-address=127.0.0.1:0",
 			"--log.level=error",
+			"--collect.backend=exec",
 			"--nvidia-smi-command='" + fakeBin + "' --exit 7",
 			"--shutdown-on-error",
 		}, app.Options{
@@ -1049,6 +1070,7 @@ func TestExecBackendRejectsPcieThroughput(t *testing.T) {
 	err := app.Run(t.Context(), []string{
 		"--web.listen-address=127.0.0.1:0",
 		"--log.level=error",
+		"--collect.backend=exec",
 		"--collect.pcie-throughput",
 		"--nvidia-smi-command=" + fakeCommand(defaultCapture(t)),
 	}, app.Options{})
@@ -1194,6 +1216,7 @@ func TestDemoConfigRequiresDemoBackend(t *testing.T) {
 	err := app.Run(t.Context(), []string{
 		"--web.listen-address=127.0.0.1:0",
 		"--log.level=error",
+		"--collect.backend=exec",
 		"--nvidia-smi-command=" + fakeCommand(defaultCapture(t)),
 		"--demo-config=" + filepath.Join("testdata", "demo-config.yaml"),
 	}, app.Options{})

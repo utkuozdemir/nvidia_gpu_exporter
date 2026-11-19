@@ -24,6 +24,7 @@ import (
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/collect"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/exporter"
 	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvidiasmi"
+	"github.com/utkuozdemir/nvidia_gpu_exporter/internal/nvmlnative"
 )
 
 func TestRunHelpUsageWriter(t *testing.T) {
@@ -213,7 +214,7 @@ func TestValidateBackendFlags(t *testing.T) {
 		{
 			name:    "nvml rejects custom command",
 			flags:   backendFlagSet{backend: backendNVML, nvidiaSmiCommand: "sudo nvidia-smi"},
-			wantErr: "--nvidia-smi-command cannot be combined",
+			wantErr: "pass --collect.backend=exec",
 		},
 		{
 			name:    "exec rejects pcie throughput",
@@ -750,6 +751,26 @@ func TestLiveScrapeSlotPropagatesPerRequestContext(t *testing.T) {
 	}
 
 	assert.Equal(t, []string{"req-1", "req-2"}, src.seen)
+}
+
+func TestDefaultBackendMatchesNVMLAvailability(t *testing.T) {
+	t.Parallel()
+
+	want := backendExec
+	if nvmlnative.Available {
+		want = backendNVML
+	}
+
+	assert.Equal(t, want, defaultBackend())
+
+	var buf strings.Builder
+
+	err := Run(t.Context(), []string{"--help"}, Options{
+		UsageWriter: &buf,
+		Terminate:   func(int) {},
+	})
+	require.NoError(t, err)
+	assert.Contains(t, buf.String(), "--collect.backend="+want)
 }
 
 func filterPrefixLines(body, prefix string) string {

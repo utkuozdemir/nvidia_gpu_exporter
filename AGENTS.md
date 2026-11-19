@@ -18,8 +18,8 @@ Keep one sentence per line and the first line as the single top-level heading.
 
 ## What this repo is
 
-A Prometheus exporter for NVIDIA GPUs, distributed as a single static Go binary.
-By default it runs `nvidia-smi`, parses its CSV output and exports the result, which is why it works anywhere that binary works (Linux, Windows, macOS, containers, WSL2) with no C bindings and no NVIDIA userspace of its own.
+A Prometheus exporter for NVIDIA GPUs, distributed as a single Go binary.
+On Linux and Windows it reads the NVIDIA driver library (NVML) directly by default, and it also supports running `nvidia-smi` and parsing its CSV output (`--collect.backend=exec`), which works anywhere that binary works (Linux, Windows, macOS, containers, WSL2) with no C bindings and no NVIDIA userspace of its own.
 
 The distribution surface is wide for a project this size: archives, native packages, container images on more than one registry, a Helm chart, Windows package manifests, a systemd unit, a native Windows service, and the Grafana dashboards.
 `.goreleaser.yml` and `.github/workflows/release.yml` are the authority on what is published and where.
@@ -38,14 +38,15 @@ When a driver renames a field, changes a header line, adds a unit suffix or intr
 
 Everything about the exporter's shape follows from there being three ways to obtain a reading.
 
-`exec` is the default and the only one available on every platform.
+`exec` is the only backend available on every platform, and is the default on macOS and in the Linux `-static` build.
 It runs `nvidia-smi` as a subprocess and parses the CSV.
 It is the only backend that can honor a custom command, which is what makes remote scraping over ssh and privilege wrappers like `sudo` work.
 It is also the strongest isolation against a misbehaving driver, because a wedged subprocess can be killed and an in-process driver call cannot.
 
-`nvml` reads the driver library directly (`libnvidia-ml.so.1` through go-nvml on Linux, `nvml.dll` through pure-Go lazy DLL calls on Windows).
+`nvml` is the default wherever `nvmlnative.Available` is true (Linux cgo builds and Windows).
+It reads the driver library directly (`libnvidia-ml.so.1` through go-nvml on Linux, `nvml.dll` through pure-Go lazy DLL calls on Windows).
 On Windows it needs no cgo and ships inside the regular static binary.
-On Linux it requires cgo, so it exists as a separate release flavor whose default backend is flipped at link time.
+On Linux it requires cgo and ships in the default release archive, `deb`/`rpm` packages, and the single container image (requiring glibc 2.34+ at runtime), while a separate `-static` Linux archive (`CGO_ENABLED=0`, `exec` default) covers musl and older glibc hosts.
 On top of the query-field metrics it shares with the exec backend, it serves families only the driver library can provide.
 Its query-field vocabulary is a compiled catalog, not runtime discovery, so it is not automatically a superset of what exec can reach.
 The catalog explicitly defers fields it has no verified mapping for, and a field a new driver adds appears under exec's discovery first.
@@ -254,13 +255,13 @@ The release job cannot be re-run after goreleaser publishes, and a deleted relea
 So a failure in the release job after publishing (e.g., an expired package manager token) is recovered by fixing the cause and cutting the next patch release.
 The jobs after it do not write to the release, so they can still be re-run on their own.
 
-The pipeline builds two binary flavors from the same source: the fully static default build, and the cgo nvml flavor.
-Both flavors build with an explicit `GOFIPS140` version in `.goreleaser.yml`, not the moving `certified` alias.
+The pipeline builds three binary targets from the same source: the default Linux cgo build (`nvml` default, shipped in the main Linux archive, `deb`/`rpm`, and the single container image), the Windows/macOS static build (Windows `nvml` default via lazy `nvml.dll`, macOS `exec` default), and the Linux `-static` build (`CGO_ENABLED=0`, `exec` default, shipped as its own archive for musl and older glibc hosts).
+All builds use an explicit `GOFIPS140` version in `.goreleaser.yml`, not the moving `certified` alias.
 `docs/SECURITY_MODEL.md` cites the CMVP certificate of that exact module version, so a Go toolchain bump must not change it silently.
 `GOFIPS140` links a frozen snapshot of Go's cryptographic module and turns FIPS mode on by default (`DefaultGODEBUG=fips140=on`).
 With TLS enabled, this limits the handshake to Go's FIPS-approved algorithms, and `GODEBUG=fips140=off` turns it off at runtime.
 The release builds are reproducible on purpose: no build paths in the binaries, the commit time as every timestamp, and a fixed owner and mode on every archive entry.
-The same commit yields the same bytes for every static artifact on any machine, and for the cgo flavor on a builder with the same C toolchain.
+The same commit yields the same bytes for every static artifact on any machine, and for the Linux cgo build on a builder with the same C toolchain.
 The owner matters because an archive entry records the builder's uid, gid and user name.
 This is what made the first release with this setup reproduce only under the release runner's user.
 The mode is fixed too, because the checkout's file mode follows the builder's umask and would have been the next difference.
@@ -270,10 +271,7 @@ That workflow and the post-release rebuild run without the Go cache on purpose.
 The cache key is only the `go.sum` hash, so the rebuild would otherwise restore a cached build's compiled packages and compare only the packaging.
 Neither of them can catch a dependence on the user or the umask, because every runner builds as the same user.
 That class is covered only by the fixed owner and mode above, so do not drop them as redundant.
-The container images are reproducible too: the commit time goes in as a build argument for the image timestamps, and the release build rewrites the layer timestamps to it, because the copy of the binary would otherwise stamp its layer with the build time. buildkit's own provenance and SBOM attestations are switched off for the images: both carry wall-clock timestamps and change the published index digest on every build, and the release workflow attaches GitHub's build provenance instead. Snapshot builds cannot carry the exporter option (a multi-platform build loaded into the daemon), so image reproducibility is checked by hand: two cold builds pushed to a scratch registry must give the same index digest, not just the same local image ID.
-Keeping the two apart is a real invariant.
-The packages and the primary container image explicitly pin themselves to the static build, because a cgo binary silently reaching the deb, the rpm or the main image would ship something that cannot run where those artifacts are expected to run.
-The nvml flavor is published as its own archive and as a suffixed image tag.
+The container image is reproducible too: the commit time goes in as a build argument for the image timestamps, and the release build rewrites the layer timestamps to it, because the copy of the binary would otherwise stamp its layer with the build time. buildkit's own provenance and SBOM attestations are switched off for the image: both carry wall-clock timestamps and change the published index digest on every build, and the release workflow attaches GitHub's build provenance instead. Snapshot builds cannot carry the exporter option (a multi-platform build loaded into the daemon), so image reproducibility is checked by hand: two cold builds pushed to a scratch registry must give the same index digest, not just the same local image ID.
 
 Release artifacts are signed two ways.
 Cosign signs the checksums file (which transitively covers every binary, archive and package), the container images and the OCI chart keyless, tied to the release workflow's identity, so no key is involved there.
@@ -285,18 +283,15 @@ The chart is packaged and signed there for another reason too: the chart job the
 The chart is published twice: to GHCR as an OCI artifact, and to a Helm repository on the `gh-pages` branch.
 Both are expected to stay available; dropping either breaks existing users.
 
-The container images sit on a distroless glibc base, the smallest base worth maintaining.
-They cannot be libc-less: the NVIDIA container runtime injects `nvidia-smi` and the driver library from the host, both dynamically linked against glibc, so the image must provide a libc and its loader even though the exporter binary itself may be static.
+The container image sits on a distroless glibc base, the smallest base worth maintaining.
+It cannot be libc-less: the cgo binary and the host-injected `libnvidia-ml.so.1` / `nvidia-smi` are dynamically linked against glibc, so the image must provide a libc and its loader.
 This was verified empirically on real hardware through both injection mechanisms (CDI and the legacy nvidia runtime), and on a libc-less base the injected `nvidia-smi` fails to exec.
 A hand-assembled libc-only rootfs would shave a few more megabytes but means owning the libc copy and its security tracking forever, so that option is deliberately written off.
-The cgo nvml flavor links against the glibc of the release build runner, so the base's glibc must be at least as new as the runner's, an invariant to re-check on any base swap or runner upgrade.
-The base carries no version tags, so it is pinned by digest and Renovate keeps the digest fresh, gated by CI building the images.
-There is no shell in the image: derived images cannot use shell-form `RUN`, and wrapper commands need an image that copies the exporter binary onto a fuller base (documented in the install guide).
-The images run as uid 65534, and the `USER` directive has to stay numeric: the kubelet cannot verify a `runAsNonRoot` guarantee against a name-based image user and refuses to start the container, which is also why the base stays the plain digest-pinned image rather than a `nonroot` tag variant whose form is not ours to control.
+The Linux cgo binary's highest required `GLIBC_` symbol is `GLIBC_2.34` (pinned in CI via `readelf` and declared in `nfpm` as `libc6 (>= 2.34)` / `glibc >= 2.34`), so the container base and target hosts must provide at least glibc 2.34, an invariant to re-check on any base swap or runner upgrade.
+The base carries no version tags, so it is pinned by digest and Renovate keeps the digest fresh, gated by CI building the image.
+There is no shell in the image: derived images cannot use shell-form `RUN`, and wrapper commands need an image that copies the exporter binary onto a fuller glibc 2.34+ base (or uses the `-static` Linux release archive, documented in the install guide).
+The image runs as uid 65534, and the `USER` directive has to stay numeric: the kubelet cannot verify a `runAsNonRoot` guarantee against a name-based image user and refuses to start the container, which is also why the base stays the plain digest-pinned image rather than a `nonroot` tag variant whose form is not ours to control.
 Executing a binary that exists in the image still works, e.g., `docker exec <container> nvidia-smi`, and fuller live debugging uses ephemeral debug containers (`kubectl debug`, or a `--pid=container:...` helper container under plain Docker).
-
-One packaging footgun: the nvml image tag suffix parses as a semver pre-release.
-Strict semver therefore sorts the flavored tag *below* the plain one of the same version, while tooling that sorts lexically or by push time may pick it instead, so automation consuming these tags needs an explicit filter either way.
 
 ## Developing without a GPU
 

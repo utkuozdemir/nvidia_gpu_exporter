@@ -12,7 +12,7 @@ The last section, [Verifying what you downloaded](#verifying-what-you-downloaded
 
 ## Before you start
 
-The exporter requires the NVIDIA driver on the monitored machine. We recommend the native `nvml` backend (`nvidia_gpu_exporter-nvml_*` archives and `:X.Y.Z-nvml` container images on Linux, or `--collect.backend=nvml` on Windows), while the plain (non-`-nvml`) archives, `deb`/`rpm` packages, and `:X.Y.Z` images default to the `exec` (`nvidia-smi` subprocess) backend for 1.x compatibility (see [CONFIGURE.md](CONFIGURE.md#native-nvml-backend)).
+The exporter requires the NVIDIA driver on the monitored machine. On Linux and Windows, it defaults to the native `nvml` backend (reading `libnvidia-ml.so.1` or `nvml.dll` in-process). On macOS and in the Linux `-static` archive, it defaults to the `exec` (`nvidia-smi` subprocess) backend (see [CONFIGURE.md](CONFIGURE.md#native-nvml-backend)).
 
 Once running, the exporter listens on port `9835` and serves metrics at `/metrics`:
 
@@ -26,8 +26,8 @@ The examples below use `latest` and `X.Y.Z` placeholders. Pin a specific release
 
 Builds are published for `x86_64` and `arm64`:
 
-- **Binary archive**: available in both the `-nvml` flavor (`nvidia_gpu_exporter-nvml_*`, recommended on glibc systems) and the static `exec` flavor (`nvidia_gpu_exporter_*`).
-- **`deb` or `rpm` package**: ships the static `exec` binary and sets up the `systemd` unit automatically.
+- **Binary archive**: the default archive (`nvidia_gpu_exporter_*`, requires glibc 2.34+, includes both `nvml` and `exec` backends and defaults to `nvml`) and a fully static archive (`nvidia_gpu_exporter-static_*`, `exec` backend only, for musl/Alpine or hosts with glibc older than 2.34 such as RHEL 8 or Ubuntu 20.04).
+- **`deb` or `rpm` package**: ships the default binary (glibc 2.34+, `nvml` default) and sets up the `systemd` unit automatically.
 
 ### deb and rpm packages
 
@@ -49,22 +49,22 @@ systemctl status nvidia_gpu_exporter
 
 ### Binary
 
-Download either the `-nvml` archive (recommended, defaults to `--collect.backend=nvml` on glibc systems) or the static archive from the [releases page](https://github.com/utkuozdemir/nvidia_gpu_exporter/releases) and move `nvidia_gpu_exporter` into `/usr/bin`:
+Download the archive from the [releases page](https://github.com/utkuozdemir/nvidia_gpu_exporter/releases) and move `nvidia_gpu_exporter` into `/usr/bin`:
 
 ```bash
 VERSION=X.Y.Z
-# NVML flavor (x86_64, use linux_arm64 on ARM):
-wget https://github.com/utkuozdemir/nvidia_gpu_exporter/releases/download/v${VERSION}/nvidia_gpu_exporter-nvml_${VERSION}_linux_x86_64.tar.gz
-tar -xvzf nvidia_gpu_exporter-nvml_${VERSION}_linux_x86_64.tar.gz
+# Default build (glibc 2.34+, NVML default, use linux_arm64 on ARM):
+wget https://github.com/utkuozdemir/nvidia_gpu_exporter/releases/download/v${VERSION}/nvidia_gpu_exporter_${VERSION}_linux_x86_64.tar.gz
+tar -xvzf nvidia_gpu_exporter_${VERSION}_linux_x86_64.tar.gz
 sudo mv nvidia_gpu_exporter /usr/bin
 nvidia_gpu_exporter --help
 ```
 
-For the static `exec` build, omit `-nvml` from the archive name (`nvidia_gpu_exporter_${VERSION}_linux_x86_64.tar.gz`).
+For musl/Alpine or older glibc (< 2.34) hosts, download the `-static` archive (`nvidia_gpu_exporter-static_${VERSION}_linux_x86_64.tar.gz`, `exec` backend only).
 
 ### Systemd service without the package
 
-To run the downloaded binary (such as the `-nvml` build) as a `systemd` service:
+To run the downloaded binary as a `systemd` service:
 
 1. Place `/usr/bin/nvidia_gpu_exporter` as shown [above](#binary).
 2. Create the system user:
@@ -115,7 +115,7 @@ LockPersonality=yes
 
 The container image does not bundle NVIDIA driver files. Instead, the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) injects the host's GPU device nodes, driver libraries and `nvidia-smi` when the container starts.
 
-With the NVIDIA driver and the NVIDIA Container Toolkit installed on the host, run the recommended `-nvml` image tag:
+With the NVIDIA driver and the NVIDIA Container Toolkit installed on the host:
 
 ```bash
 docker run -d \
@@ -124,10 +124,10 @@ docker run -d \
   --gpus all \
   -e NVIDIA_DRIVER_CAPABILITIES=utility \
   -p 9835:9835 \
-  utkuozdemir/nvidia_gpu_exporter:latest-nvml
+  utkuozdemir/nvidia_gpu_exporter:latest
 ```
 
-Use `utkuozdemir/nvidia_gpu_exporter:latest` instead for the static `exec` backend.
+Pass `--collect.backend=exec` after the image name if you prefer the `nvidia-smi` subprocess backend.
 
 Images are published to [Docker Hub](https://hub.docker.com/r/utkuozdemir/nvidia_gpu_exporter) (`utkuozdemir/nvidia_gpu_exporter`) and [GHCR](https://github.com/utkuozdemir/nvidia_gpu_exporter/pkgs/container/nvidia_gpu_exporter) (`ghcr.io/utkuozdemir/nvidia_gpu_exporter`), and run as uid `65534` (`nobody`).
 
@@ -136,7 +136,7 @@ Images are published to [Docker Hub](https://hub.docker.com/r/utkuozdemir/nvidia
 ```yaml
 services:
   nvidia_gpu_exporter:
-    image: utkuozdemir/nvidia_gpu_exporter:latest-nvml
+    image: utkuozdemir/nvidia_gpu_exporter:latest
     restart: unless-stopped
     environment:
       - NVIDIA_DRIVER_CAPABILITIES=utility
@@ -154,13 +154,13 @@ services:
 If your Compose version does not support device reservations, set `runtime: nvidia` on the service and add `NVIDIA_VISIBLE_DEVICES=all` to `environment`.
 
 > [!IMPORTANT]
-> The `NVIDIA_*` environment variables configure the NVIDIA runtime, they do not select it. Without `--gpus`, a device reservation or `runtime: nvidia`, the container runs on the default runtime without GPU access: the default `exec` image comes up and reports `nvidia_smi_last_collect_success 0`, while the `-nvml` image exits at startup because `libnvidia-ml.so.1` is not injected.
+> The `NVIDIA_*` environment variables configure the NVIDIA runtime, they do not select it. Without `--gpus`, a device reservation or `runtime: nvidia`, the container runs on the default runtime without GPU access and exits at startup because `libnvidia-ml.so.1` is not injected (or stays up and reports `nvidia_smi_last_collect_success 0` when running with `--collect.backend=exec`).
 
 ### No shell in the image
 
 The image is distroless and contains only the exporter binary and minimal runtime files, with no shell or package manager.
 
-If you need extra tools alongside the exporter (such as `ssh` or `sudo` for `--nvidia-smi-command`), copy the binary into a fuller base image:
+If you need extra tools alongside the exporter (such as `ssh` or `sudo` for `--nvidia-smi-command`), copy the binary into a fuller glibc 2.34+ base image (or use the `-static` Linux release archive on musl/Alpine or older bases):
 
 ```dockerfile
 FROM debian:stable-slim
@@ -168,7 +168,7 @@ COPY --from=utkuozdemir/nvidia_gpu_exporter:latest /usr/bin/nvidia_gpu_exporter 
 ENTRYPOINT ["/usr/bin/nvidia_gpu_exporter"]
 ```
 
-When deriving from a fuller base image, configure a numeric non-root `USER` if your Kubernetes cluster enforces `runAsNonRoot`. When copying the `-nvml` binary, also set `NVIDIA_VISIBLE_DEVICES=all` and `NVIDIA_DRIVER_CAPABILITIES=utility` so the container runtime injects `libnvidia-ml.so.1`.
+When deriving from a fuller base image, configure a numeric non-root `USER` if your Kubernetes cluster enforces `runAsNonRoot`, and set `NVIDIA_VISIBLE_DEVICES=all` and `NVIDIA_DRIVER_CAPABILITIES=utility` when using the default `nvml` backend so the container runtime injects `libnvidia-ml.so.1`.
 
 ### Without the NVIDIA Container Toolkit
 
@@ -185,7 +185,7 @@ The exporter runs as a DaemonSet with the NVIDIA container runtime injecting GPU
 
 ### Helm chart
 
-Install the [Helm chart](../charts/nvidia-gpu-exporter) (pass `--set image.tag=X.Y.Z-nvml` to run the recommended NVML image variant):
+Install the [Helm chart](../charts/nvidia-gpu-exporter):
 
 ```bash
 helm install nvidia-gpu-exporter oci://ghcr.io/utkuozdemir/charts/nvidia-gpu-exporter \
@@ -215,7 +215,7 @@ spec:
       runtimeClassName: nvidia # omit if the NVIDIA runtime is the cluster default
       containers:
         - name: exporter
-          image: utkuozdemir/nvidia_gpu_exporter:latest-nvml # pin a release tag in production
+          image: utkuozdemir/nvidia_gpu_exporter:latest # pin a release tag in production
           env:
             - name: NVIDIA_VISIBLE_DEVICES
               value: all
@@ -247,7 +247,7 @@ If you do not have Prometheus and Grafana installed yet, the PowerShell script i
 
 3. Open [http://localhost:9090](http://localhost:9090) for Prometheus and [http://localhost:3000](http://localhost:3000) for Grafana (initial login `admin` / `admin`).
 
-Re-running the script updates the exporter in place while keeping existing Prometheus data and Grafana state. The script registers the service with the default flags (`exec` backend), and re-running it resets the service flags. To switch the service to the recommended `nvml` backend afterwards, run `& "$env:ProgramFiles\nvidia_gpu_exporter\nvidia_gpu_exporter.exe" install --collect.backend=nvml` and `Restart-Service nvidia_gpu_exporter` from an elevated PowerShell prompt. To uninstall the stack while preserving collected data, run [windows-all-in-one-uninstall.ps1](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/install/windows-all-in-one-uninstall.ps1).
+Re-running the script updates the exporter in place while keeping existing Prometheus data and Grafana state. The script registers the service with the default flags (`nvml` backend), and re-running it resets the service flags. To switch the service to the `exec` backend afterwards, run `& "$env:ProgramFiles\nvidia_gpu_exporter\nvidia_gpu_exporter.exe" install --collect.backend=exec` and `Restart-Service nvidia_gpu_exporter` from an elevated PowerShell prompt. To uninstall the stack while preserving collected data, run [windows-all-in-one-uninstall.ps1](https://raw.githubusercontent.com/utkuozdemir/nvidia_gpu_exporter/main/install/windows-all-in-one-uninstall.ps1).
 
 ### winget
 
@@ -257,11 +257,11 @@ To install for interactive use:
 winget install utkuozdemir.nvidia_gpu_exporter
 ```
 
-To run as a Windows service, install machine-wide so the service account can access the binary across upgrades, and register the service (passing `--collect.backend=nvml` to use the NVML backend):
+To run as a Windows service, install machine-wide so the service account can access the binary across upgrades, and register the service:
 
 ```PowerShell
 winget install --scope machine utkuozdemir.nvidia_gpu_exporter
-nvidia_gpu_exporter install --collect.backend=nvml
+nvidia_gpu_exporter install
 ```
 
 ### Scoop
@@ -283,8 +283,8 @@ The binary is installed at `C:\ProgramData\scoop\apps\nvidia_gpu_exporter\curren
 From an elevated PowerShell prompt:
 
 ```PowerShell
-# Register the service with the NVML backend (omit --collect.backend=nvml for the nvidia-smi backend)
-nvidia_gpu_exporter install --collect.backend=nvml
+# Register the service (defaults to the NVML backend, pass --collect.backend=exec for nvidia-smi)
+nvidia_gpu_exporter install
 
 # Allow port 9835 from the local subnet if Prometheus scrapes from another machine
 New-NetFirewallRule -DisplayName "Nvidia GPU Exporter" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 9835 -Profile Private,Domain -RemoteAddress LocalSubnet
@@ -328,7 +328,7 @@ On macOS, replace `sha256sum` with `shasum -a 256`. For releases `v1.10.0` to `v
 
 ### Container images and Helm chart
 
-Verify a container image tag (`X.Y.Z` or `X.Y.Z-nvml`) with `cosign`:
+Verify a container image tag (`X.Y.Z`) with `cosign`:
 
 ```bash
 cosign verify \
@@ -364,7 +364,7 @@ gh release verify-asset vX.Y.Z nvidia_gpu_exporter_X.Y.Z_linux_x86_64.tar.gz \
 
 ### Reproducing a release
 
-From `v1.15.1` on, static release artifacts are reproducible across machines from the tagged commit. The `-nvml` cgo archive reproduces on builders with the same C toolchain (the default GCC on the Ubuntu runner image in `.github/workflows/release.yml` for that tag).
+From `v1.15.1` to `v1.19.x`, the plain archives and `deb`/`rpm` packages were static and reproducible across machines from the tagged commit, while the `-nvml` cgo archive reproduced on builders with a matching C toolchain. From `v2.0.0` on, static release artifacts (Windows, macOS, and the Linux `-static` archive) reproduce across machines, while the default Linux cgo build (archive, `deb`, and `rpm`) reproduces on builders with the same C toolchain (the default GCC on the Ubuntu runner image in `.github/workflows/release.yml` for that tag).
 
 To rebuild locally and compare against the published `checksums.txt`, check out the release tag and build with the Go version in `go.mod` and the `GORELEASER_VERSION` pinned in `hack/dev.Dockerfile`:
 

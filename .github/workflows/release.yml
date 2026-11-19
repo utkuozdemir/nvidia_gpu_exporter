@@ -27,9 +27,7 @@ jobs:
       id-token: write # cosign keyless signing (OIDC)
     outputs:
       docker_io_: ${{ steps.images.outputs.docker_io_ }}
-      docker_io__nvml: ${{ steps.images.outputs.docker_io__nvml }}
       ghcr_io_: ${{ steps.images.outputs.ghcr_io_ }}
-      ghcr_io__nvml: ${{ steps.images.outputs.ghcr_io__nvml }}
     steps:
       # the release tag must carry a signature GitHub verifies against the
       # pusher's registered keys (any type: SSH, GPG or S/MIME). Checked before
@@ -223,26 +221,23 @@ jobs:
           for repo in \
             docker.io/utkuozdemir/nvidia_gpu_exporter \
             ghcr.io/utkuozdemir/nvidia_gpu_exporter; do
-            # sign every published tag variant of this release
-            for tag in "${version}" "${version}-nvml"; do
-              # the tag was just pushed, so the registry read is retried to avoid a race
-              digest=""
-              for _ in 1 2 3 4 5; do
-                if digest="$(docker buildx imagetools inspect "${repo}:${tag}" \
-                  --format '{{ .Manifest.Digest }}')"; then
-                  break
-                fi
-                sleep 5
-              done
-              if [ -z "${digest}" ]; then
-                echo "could not resolve a digest for ${repo}:${tag}" >&2
-                exit 1
+            # the tag was just pushed, so the registry read is retried to avoid a race
+            digest=""
+            for _ in 1 2 3 4 5; do
+              if digest="$(docker buildx imagetools inspect "${repo}:${version}" \
+                --format '{{ .Manifest.Digest }}')"; then
+                break
               fi
-              cosign sign --yes "${repo}@${digest}"
-              # hand the digest to the attestation steps below
-              key="$(printf '%s_%s' "${repo%%/*}" "${tag#"${version}"}" | tr -c 'a-zA-Z0-9_\n' '_')"
-              echo "${key}=${digest}" >>"${GITHUB_OUTPUT}"
+              sleep 5
             done
+            if [ -z "${digest}" ]; then
+              echo "could not resolve a digest for ${repo}:${version}" >&2
+              exit 1
+            fi
+            cosign sign --yes "${repo}@${digest}"
+            # hand the digest to the attestation steps below
+            key="$(printf '%s_' "${repo%%/*}" | tr -c 'a-zA-Z0-9_\n' '_')"
+            echo "${key}=${digest}" >>"${GITHUB_OUTPUT}"
           done
       # the checksums list feeds the attestation job, which must be able to
       # run again on its own if the attestation service has a bad moment
@@ -254,7 +249,7 @@ jobs:
           path: dist/checksums.txt
           if-no-files-found: error
 
-  # build provenance for every archive and package and for the four image
+  # build provenance for every archive and package and for both image
   # digests: a signed statement tying each digest to this repository, commit,
   # workflow and run. A separate job, after publishing and signing, so that
   # a failure here never leaves a published release unsigned and can be
@@ -284,21 +279,11 @@ jobs:
         with:
           subject-name: docker.io/utkuozdemir/nvidia_gpu_exporter
           subject-digest: ${{ needs.release.outputs.docker_io_ }}
-      - name: Attest the Docker Hub nvml image
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        with:
-          subject-name: docker.io/utkuozdemir/nvidia_gpu_exporter
-          subject-digest: ${{ needs.release.outputs.docker_io__nvml }}
       - name: Attest the GHCR image
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ghcr.io/utkuozdemir/nvidia_gpu_exporter
           subject-digest: ${{ needs.release.outputs.ghcr_io_ }}
-      - name: Attest the GHCR nvml image
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        with:
-          subject-name: ghcr.io/utkuozdemir/nvidia_gpu_exporter
-          subject-digest: ${{ needs.release.outputs.ghcr_io__nvml }}
 
   # rebuild the release files from the tag on a second runner and compare
   # them with what was just published. Identical means this release is

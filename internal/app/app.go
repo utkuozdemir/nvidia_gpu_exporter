@@ -138,14 +138,13 @@ func Run(ctx context.Context, args []string, opts Options) error {
 				"or unsupported on a given setup.").
 			Default("").String()
 		collectBackend = app.Flag("collect.backend",
-			"How to collect GPU metrics. `nvml` (recommended) reads the driver library "+
-				"(libnvidia-ml on Linux, nvml.dll on Windows) directly without nvidia-smi, "+
-				"exposing the core metrics plus NVML-only extras (see the docs). On Windows "+
-				"it is included in the standard build. On Linux it ships in the `-nvml` "+
-				"release artifact, where it is the default. `exec` runs nvidia-smi (the "+
-				"default in the standard build). `demo` serves synthetic data mimicking the "+
+			"How to collect GPU metrics. `nvml` reads the driver library "+
+				"(libnvidia-ml.so.1 on Linux, nvml.dll on Windows) directly without nvidia-smi, "+
+				"exposing the core metrics plus NVML-only extras (see the docs). It is the default "+
+				"on Linux and Windows. `exec` runs nvidia-smi (the default on macOS and in the "+
+				"Linux `-static` build). `demo` serves synthetic data mimicking the "+
 				"nvml surface, with no GPU or driver needed, on any platform.").
-			Default(DefaultBackend).Enum("exec", "nvml", "demo")
+			Default(defaultBackend()).Enum("exec", "nvml", "demo")
 		collectInterval = app.Flag("collect.interval",
 			"Interval at which the collection runs in the background, with scrapes serving "+
 				"the most recent result. When 0, the collection runs synchronously on each "+
@@ -377,7 +376,11 @@ func validateBackendFlags(flags backendFlagSet) error {
 	if flags.backend != backendExec && flags.nvidiaSmiCommand != nvidiasmi.DefaultCommand {
 		// a custom command signals intent (ssh wrappers, sudo) only the
 		// exec backend can honor
-		return fmt.Errorf("--nvidia-smi-command cannot be combined with --collect.backend=%s", flags.backend)
+		return fmt.Errorf(
+			"--nvidia-smi-command cannot be combined with --collect.backend=%s "+
+				"(pass --collect.backend=exec to use a custom command)",
+			flags.backend,
+		)
 	}
 
 	if flags.backend == backendExec && flags.pcieThroughput {
@@ -532,11 +535,16 @@ const (
 	backendDemo = "demo"
 )
 
-// DefaultBackend is the default value of --collect.backend. The regular
-// builds default to exec; the nvml release flavor overrides this to nvml at
-// build time, so the artifact whose whole point is the nvml backend uses it
-// out of the box (the flag still switches either build both ways).
-var DefaultBackend = backendExec
+// defaultBackend returns the default value of --collect.backend for this build:
+// nvml wherever the native NVML backend is compiled in (Linux with cgo and
+// Windows), and exec everywhere else (macOS, FreeBSD, and static Linux builds).
+func defaultBackend() string {
+	if nvmlnative.Available {
+		return backendNVML
+	}
+
+	return backendExec
+}
 
 // collectConfig carries the collection-related settings from the flags to the
 // exporter setup.

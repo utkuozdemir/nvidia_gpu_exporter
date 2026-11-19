@@ -1,7 +1,8 @@
-# Values used by chart-testing installs in CI. The CI cluster has no GPU, so
-# the exporter serves only its health metrics there, which is enough for the
-# install and the connection test to pass. The image tag is pinned because the
-# in-repo appVersion is a placeholder.
+# Values used by chart-testing installs in CI. The CI cluster has no GPU, and
+# the image tag is pinned to 1.11.0 (which defaults to exec and serves health
+# metrics without a GPU) because the in-repo appVersion is a placeholder. When
+# bumping this tag to a v2.x release, also add extraArgs: ["--collect.backend=demo"]
+# so the pod stays up in kind without libnvidia-ml.so.1.
 image:
   tag: "1.11.0"
 # The pinned image above still runs as root, which the chart's default
