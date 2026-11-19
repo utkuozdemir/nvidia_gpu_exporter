@@ -517,7 +517,7 @@ var deferredFields = map[nvidiasmi.QField]bool{
 // Blackwell power smoothing, GB200 module power, fabric health...).
 var deferredFieldPrefixes = []string{
 	"vgpu_", "module.power.", "module.enforced.", "gpu.base.", "power_smoothing.",
-	"fabric.health.", "remapped_banks.",
+	"fabric.cliques.", "fabric.health.", "remapped_banks.",
 }
 
 // IsDeferredField reports whether an unknown field is a recorded, conscious
