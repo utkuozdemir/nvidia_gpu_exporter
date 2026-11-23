@@ -160,7 +160,7 @@ RUN git init -q . \
 # the stage, and an accepted one carries its reason, in .github/zizmor.yml or
 # in an ignore comment on the line. Its own image rather than the tools stage:
 # the binary is built against glibc and does not run on alpine.
-FROM ghcr.io/zizmorcore/zizmor:1.32.0@sha256:3014cc8f68f663935f69b3c3e0e41f5ce102b268d97db13db0f62208747f860d AS lint-workflows
+FROM ghcr.io/zizmorcore/zizmor:1.33.1@sha256:ecd3ffe6158de1322e05a044ed43749bee12b1dccb7e1a7859bc6ac4b2a1c516 AS lint-workflows
 WORKDIR /src
 COPY .github ./.github
 RUN zizmor --offline --config .github/zizmor.yml .github

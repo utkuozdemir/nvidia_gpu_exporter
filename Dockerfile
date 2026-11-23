@@ -1,7 +1,7 @@
 # minimal glibc base: the cgo binary and the injected driver library (or
 # nvidia-smi when running with --collect.backend=exec) need a libc and its
 # loader inside the container, so scratch/static bases cannot work here
-FROM gcr.io/distroless/base-nossl-debian13:latest@sha256:3a2dbf10c2fdafe5865e2b03a4a3b9b23f2e280229a81730415379b76dc70592
+FROM gcr.io/distroless/base-nossl-debian13:latest@sha256:f21fdfe4ede467d9ea8a6caaec1f8381ea4502243a3e8bb1c43df80c6fbaaeae
 
 ARG TARGETPLATFORM
 COPY ${TARGETPLATFORM}/nvidia_gpu_exporter /usr/bin/nvidia_gpu_exporter
