@@ -99,7 +99,7 @@ jobs:
         uses: sigstore/cosign-installer@881c63bd87e38389154debd8331404ce7ca8a3ab # v4.1.4
         with:
           # renovate: depName=sigstore/cosign datasource=github-releases
-          cosign-release: v3.1.5
+          cosign-release: v3.1.6
       # The chart is packaged and signed here, before anything is published,
       # so a packaging failure aborts a clean run, and so that the chart job
       # below needs no secret: this is the only job that reads the GPG key,
@@ -391,7 +391,7 @@ jobs:
         uses: sigstore/cosign-installer@881c63bd87e38389154debd8331404ce7ca8a3ab # v4.1.4
         with:
           # renovate: depName=sigstore/cosign datasource=github-releases
-          cosign-release: v3.1.5
+          cosign-release: v3.1.6
       - name: Log in to GHCR
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
